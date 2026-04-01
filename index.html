@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monie — Budget intelligent</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="auth-screen">
+  <div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+  <div class="auth-left">
+    <div class="auth-brand"><div class="brand-logo"><svg viewBox="0 0 40 40"><defs><linearGradient id="lg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop stop-color="#FF6B9D"/><stop offset="1" stop-color="#C44FD6"/></linearGradient></defs><rect width="40" height="40" rx="12" fill="url(#lg)"/><text x="20" y="27" font-family="Georgia" font-size="22" font-weight="bold" fill="white" text-anchor="middle">M</text></svg></div><span>Monie</span></div>
+    <h1 class="auth-headline">Votre argent,<br><span class="gtext">sous contrôle.</span></h1>
+    <p class="auth-sub">Suivez vos dépenses, atteignez vos objectifs d'épargne et prenez de meilleures décisions financières.</p>
+    <div class="auth-feats">
+      <div class="feat"><span>✦</span> Dashboard temps réel</div>
+      <div class="feat"><span>✦</span> Suivi des transactions</div>
+      <div class="feat"><span>✦</span> Objectifs d'épargne</div>
+      <div class="feat"><span>✦</span> Multi-comptes sécurisé</div>
+    </div>
+  </div>
+  <div class="auth-right">
+    <div class="auth-card">
+      <div class="auth-tabs"><button class="atab active" id="atab-login" onclick="switchAuthTab('login')">Connexion</button><button class="atab" id="atab-signup" onclick="switchAuthTab('signup')">Inscription</button></div>
+      <div id="aform-login">
+        <div class="fg"><label>Email</label><input class="ainp" type="email" id="login-email" placeholder="vous@email.com" onkeydown="if(event.key==='Enter')login()"></div>
+        <div class="fg"><label>Mot de passe</label><input class="ainp" type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()"></div>
+        <div id="login-error" class="form-err"></div>
+        <button class="btn-auth" id="login-btn" onclick="login()">Se connecter <span>→</span></button>
+      </div>
+      <div id="aform-signup" style="display:none">
+        <div class="fg"><label>Email</label><input class="ainp" type="email" id="signup-email" placeholder="vous@email.com"></div>
+        <div class="fg"><label>Mot de passe</label><input class="ainp" type="password" id="signup-password" placeholder="Min. 6 caractères"></div>
+        <div class="fg"><label>Confirmer</label><input class="ainp" type="password" id="signup-confirm" placeholder="••••••••"></div>
+        <div id="signup-error" class="form-err"></div>
+        <button class="btn-auth" onclick="signup()">Créer mon compte <span>→</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-top">
+      <div class="sb-brand"><div class="brand-logo-sm"><svg viewBox="0 0 32 32"><defs><linearGradient id="lg2" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse"><stop stop-color="#FF6B9D"/><stop offset="1" stop-color="#C44FD6"/></linearGradient></defs><rect width="32" height="32" rx="10" fill="url(#lg2)"/><text x="16" y="22" font-family="Georgia" font-size="18" font-weight="bold" fill="white" text-anchor="middle">M</text></svg></div><span class="sb-name">Monie</span></div>
+      <nav>
+        <button class="nb active" onclick="showTab('dashboard')" data-tab="dashboard"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="7" height="7" rx="1.5"/><rect x="11" y="2" width="7" height="7" rx="1.5"/><rect x="2" y="11" width="7" height="7" rx="1.5"/><rect x="11" y="11" width="7" height="7" rx="1.5"/></svg>Dashboard</button>
+        <button class="nb" onclick="showTab('transactions')" data-tab="transactions"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h14M3 10h10M3 15h6"/><path d="M15 12l3 3-3 3"/></svg>Transactions</button>
+        <button class="nb" onclick="showTab('patrimoine')" data-tab="patrimoine"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10l8-6 8 6v7a1 1 0 01-1 1H3a1 1 0 01-1-1v-7z"/><path d="M8 17v-5h4v5"/></svg>Patrimoine</button>
+        <button class="nb" onclick="showTab('budget')" data-tab="budget"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6h14a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V7a1 1 0 011-1z"/><path d="M3 10h14"/></svg>Budget</button>
+        <button class="nb" onclick="showTab('revenus')" data-tab="revenus"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="10" y1="2" x2="10" y2="18"/><path d="M14 6H8a2 2 0 000 4h4a2 2 0 010 4H6"/></svg>Revenus</button>
+        <button class="nb" onclick="showTab('epargne')" data-tab="epargne"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l3 2"/></svg>Épargne</button>
+      </nav>
+    </div>
+    <div class="sb-bottom">
+      <div class="user-pill"><div class="u-avatar" id="u-avatar">?</div><span id="u-email" class="u-email-txt">—</span></div>
+      <div class="sb-acts">
+        <button class="sb-btn" onclick="exportData()" title="Exporter"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13V3"/><path d="M6 9l4 4 4-4"/><path d="M3 17h14"/></svg></button>
+        <button class="sb-btn" onclick="document.getElementById('imp-file').click()" title="Importer"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 7v10"/><path d="M6 11l4-4 4 4"/><path d="M3 17h14"/></svg></button>
+        <button class="sb-btn danger" onclick="logout()" title="Déconnexion"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 3h4v14h-4M8 13l4-3-4-3M3 10h9"/></svg></button>
+      </div>
+      <input type="file" id="imp-file" accept=".json" style="display:none" onchange="importData(this)">
+    </div>
+  </aside>
+
+  <div class="main-wrap">
+    <header class="topbar">
+      <button class="menu-btn" onclick="toggleSidebar()"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 5h14M3 10h14M3 15h14"/></svg></button>
+      <span class="topbar-title" id="topbar-title">Dashboard</span>
+      <div class="topbar-right">
+        <div class="mnav"><button onclick="changeMonth(-1)">&#8249;</button><span id="mnav-label">—</span><button onclick="changeMonth(1)">&#8250;</button></div>
+        <div class="save-dot" id="save-dot"></div>
+      </div>
+    </header>
+    <main class="main-content">
+
+      <!-- DASHBOARD -->
+      <div id="tab-dashboard" class="tp active">
+        <div class="kpi-grid">
+          <div class="kc green"><div class="kc-ico">↑</div><div class="kc-label">Revenus</div><div class="kc-val" id="kpi-rev">—</div><div class="kc-sub" id="kpi-rev-sub">—</div></div>
+          <div class="kc red"><div class="kc-ico">↓</div><div class="kc-label">Dépenses</div><div class="kc-val" id="kpi-dep">—</div><div class="kc-sub" id="kpi-dep-sub">—</div></div>
+          <div class="kc purple"><div class="kc-ico">◎</div><div class="kc-label">Épargne</div><div class="kc-val" id="kpi-save">—</div><div class="kc-sub" id="kpi-save-sub">—</div></div>
+          <div class="kc" id="kc-solde"><div class="kc-ico">=</div><div class="kc-label">Solde</div><div class="kc-val" id="kpi-solde">—</div><div class="kc-sub" id="kpi-solde-sub">—</div></div>
+        </div>
+        <div class="dg">
+          <div class="gc span2"><div class="gc-head"><span class="gc-title">Flux financiers</span><span class="gc-badge" id="dash-badge">—</span></div><div style="height:230px;position:relative"><canvas id="chart-bars"></canvas></div></div>
+          <div class="gc"><div class="gc-head"><span class="gc-title">Répartition dépenses</span></div><div style="position:relative;width:150px;height:150px;margin:0 auto 8px"><canvas id="chart-donut"></canvas></div><div id="donut-legend" class="leg-list"></div></div>
+        </div>
+        <div class="dg">
+          <div class="gc span2"><div class="gc-head"><span class="gc-title">Dernières transactions</span><button class="gbtn" onclick="showTab('transactions')">Voir tout →</button></div><div id="dash-recent"></div></div>
+          <div class="gc"><div class="gc-head"><span class="gc-title">Santé budgétaire</span></div><div id="health-list"></div></div>
+        </div>
+      </div>
+
+      <!-- TRANSACTIONS -->
+      <div id="tab-transactions" class="tp">
+        <div class="kpi-grid">
+          <div class="kc green"><div class="kc-ico">↑</div><div class="kc-label">Entrées</div><div class="kc-val" id="tx-in">—</div></div>
+          <div class="kc red"><div class="kc-ico">↓</div><div class="kc-label">Sorties</div><div class="kc-val" id="tx-out">—</div></div>
+          <div class="kc blue"><div class="kc-ico">=</div><div class="kc-label">Disponible</div><div class="kc-val" id="tx-bal">—</div></div>
+          <div class="kc purple"><div class="kc-ico">#</div><div class="kc-label">Total</div><div class="kc-val" id="tx-nb">—</div></div>
+        </div>
+        <div class="filter-bar">
+          <select class="chip-sel" id="f-type" onchange="renderTransactions()"><option value="all">Toutes</option><option value="entree">Entrées</option><option value="sortie">Sorties</option></select>
+          <select class="chip-sel" id="f-cat" onchange="renderTransactions()"><option value="all">Toutes catégories</option></select>
+          <select class="chip-sel" id="f-source" onchange="renderTransactions()"><option value="all">Toutes sources</option><option value="manual">Saisie manuelle</option><option value="import">Importées</option></select>
+          <select class="chip-sel" id="f-view" onchange="renderTransactions()"><option value="list">Liste</option><option value="calendar">Calendrier</option></select>
+          <button class="btn-add-tx" onclick="toggleAddTx()">+ Ajouter</button>
+        </div>
+        <div id="add-tx-panel" class="add-panel" style="display:none">
+          <div class="add-grid">
+            <div class="fg"><label>Description</label><input class="ainp" type="text" id="tx-lbl" placeholder="Ex : Courses Carrefour"></div>
+            <div class="fg"><label>Montant €</label><input class="ainp" type="number" id="tx-amt" placeholder="0.00"></div>
+            <div class="fg"><label>Type</label><select class="ainp" id="tx-type"><option value="sortie">Sortie</option><option value="entree">Entrée</option></select></div>
+            <div class="fg"><label>Catégorie</label><select class="ainp" id="tx-cat"><option>Alimentation</option><option>Loyer &amp; charges</option><option>Transport</option><option>Santé</option><option>Loisirs</option><option>Vêtements</option><option>Épargne</option><option>Salaire</option><option>Dîme</option><option>Tickets restaurant</option><option>Autre</option></select></div>
+            <div class="fg"><label>Date</label><input class="ainp" type="date" id="tx-date"></div>
+            <div class="fg fg-btns"><button class="btn-primary-sm" onclick="addTransaction()">Ajouter</button><button class="btn-ghost-sm" onclick="toggleAddTx()">Annuler</button></div>
+          </div>
+        </div>
+        <div class="gc"><div class="gc-head"><span class="gc-title">Transactions</span><span class="gc-sub" id="tx-count-lbl">—</span></div><div id="tx-calendar"></div><div id="tx-list"></div></div>
+      </div>
+
+      <!-- PATRIMOINE -->
+      <div id="tab-patrimoine" class="tp">
+        <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+          <div class="kc green"><div class="kc-label">Total comptes</div><div class="kc-val" id="pat-total">—</div></div>
+          <div class="kc purple"><div class="kc-label">Libre</div><div class="kc-val" id="pat-libre">—</div></div>
+          <div class="kc blue"><div class="kc-label">Réservé / Bloqué</div><div class="kc-val" id="pat-locked">—</div></div>
+        </div>
+        <div class="dg">
+          <div class="gc span2"><div class="gc-head"><span class="gc-title">Mes comptes</span><button class="gbtn" onclick="openAddCompte()">+ Ajouter</button></div><div class="pat-hd"><span>Compte</span><span>Montant</span><span>Statut</span><span></span></div><div id="pat-list"></div>
+            <div id="add-compte-panel" class="add-panel" style="display:none"><div class="add-grid" style="grid-template-columns:1fr 130px 130px auto"><div class="fg"><label>Nom</label><input class="ainp" type="text" id="new-pat-label" placeholder="Ex : Livret A"></div><div class="fg"><label>Montant €</label><input class="ainp" type="number" id="new-pat-amt" placeholder="0"></div><div class="fg"><label>Statut</label><select class="ainp" id="new-pat-type"><option value="free">Libre</option><option value="res">Réservé</option><option value="lock">Intouchable</option></select></div><div class="fg fg-btns"><button class="btn-primary-sm" onclick="addCompte()">Ajouter</button></div></div></div>
+          </div>
+          <div class="gc"><div class="gc-head"><span class="gc-title">Distribution</span></div><div style="position:relative;width:160px;height:160px;margin:0 auto 8px"><canvas id="chart-pat"></canvas></div><div id="pat-legend" class="leg-list"></div></div>
+        </div>
+      </div>
+
+      <!-- BUDGET -->
+      <div id="tab-budget" class="tp">
+        <div id="budget-banner" class="banner banner-green"><div><div class="banner-t" id="bb-title">—</div><div class="banner-s" id="bb-sub">—</div></div><div class="banner-v" id="bb-val">—</div></div>
+        <div class="dg">
+          <div class="gc span2"><div class="gc-head"><span class="gc-title">Charges &amp; vie courante</span></div>
+            <div class="bsections">
+              <div><div class="bsec-title">Charges fixes</div>
+                <div class="brow"><label><span class="dot" style="background:#6366F1"></span>Loyer et charges</label><input class="binp" type="number" id="inp-loyer" value="590" oninput="updateAll()"></div>
+                <div class="brow"><label><span class="dot" style="background:#22D3EE"></span>Transports</label><input class="binp" type="number" id="inp-transport" value="90" oninput="updateAll()"></div>
+                <div id="abo-list"></div>
+                <button class="gbtn-sm" onclick="openAddAbo()">+ Abonnement</button>
+              </div>
+              <div><div class="bsec-title">Vie courante</div>
+                <div class="brow"><label><span class="dot" style="background:#F59E0B"></span>Alimentation</label><input class="binp" type="number" id="inp-alim" value="200" oninput="updateAll()"></div>
+                <div class="brow"><label><span class="dot" style="background:#F97316"></span>Restaurants &amp; loisirs</label><input class="binp" type="number" id="inp-loisirs" value="80" oninput="updateAll()"></div>
+                <div class="brow"><label><span class="dot" style="background:#10B981"></span>Vêtements</label><input class="binp" type="number" id="inp-shopping" value="40" oninput="updateAll()"></div>
+                <div class="brow"><label><span class="dot" style="background:#94A3B8"></span>Divers</label><input class="binp" type="number" id="inp-divers" value="30" oninput="updateAll()"></div>
+              </div>
+            </div>
+            <div class="btotals"><div class="btrow"><span>Charges fixes</span><strong id="fixed-total">—</strong></div><div class="btrow"><span>Vie courante</span><strong id="var-total">—</strong></div><div class="btrow accent"><span>Total budget</span><strong id="budget-total">—</strong></div></div>
+            <div id="add-abo-panel" class="add-panel" style="display:none"><div class="add-grid" style="grid-template-columns:1fr 130px auto"><div class="fg"><label>Nom</label><input class="ainp" type="text" id="new-abo-label" placeholder="Ex : Netflix…"></div><div class="fg"><label>€/mois</label><input class="ainp" type="number" id="new-abo-amt" placeholder="0"></div><div class="fg fg-btns"><button class="btn-primary-sm" onclick="addAbonnement()">Ajouter</button></div></div></div>
+          </div>
+          <div class="gc"><div class="gc-head"><span class="gc-title">Répartition cible</span></div><div id="rpart-list"></div><div class="btrow" style="border-top:1px solid var(--bdr);padding-top:10px;margin-top:4px"><span style="font-size:12px;color:var(--muted)">Total</span><span id="rpart-total" style="font-weight:600;font-size:13px">—</span></div></div>
+        </div>
+        <div class="gc"><div class="gc-head"><span class="gc-title">Répartition visuelle</span></div><div id="budget-bars"></div></div>
+      </div>
+
+      <!-- REVENUS -->
+      <div id="tab-revenus" class="tp">
+        <div class="gc"><div class="gc-head"><span class="gc-title">Salaire &amp; revenus fixes</span></div>
+          <div class="brow"><label>Salaire net CDI</label><input class="binp" type="number" id="inp-salaire" value="2295.77" oninput="updateAll()"></div>
+          <div class="brow"><label>Tickets restaurant</label><input class="binp" type="number" id="inp-tr" value="216.14" oninput="updateAll()"></div>
+          <div class="brow info"><label>Dîme (10%)</label><span class="chip chip-purple" id="dime-display">—</span></div>
+          <div class="brow info"><label>Provision impôts</label><span class="chip chip-amber">120 €</span></div>
+        </div>
+        <div class="gc"><div class="gc-head"><span class="gc-title">Revenus complémentaires</span><button class="gbtn" onclick="openAddRev()">+ Ajouter</button></div><div id="rev-list"></div>
+          <div id="add-rev-panel" class="add-panel" style="display:none"><div class="add-grid" style="grid-template-columns:1fr 130px auto"><div class="fg"><label>Description</label><input class="ainp" type="text" id="new-rev-label" placeholder="Ex : prime…"></div><div class="fg"><label>Montant €</label><input class="ainp" type="number" id="new-rev-amt" placeholder="0"></div><div class="fg fg-btns"><button class="btn-primary-sm" onclick="addRevenu()">Ajouter</button></div></div></div>
+        </div>
+        <div class="kc green" style="margin-top:0"><div class="kc-label">Disponible après dîme + provision impôts</div><div class="kc-val" id="rev-dispo">—</div></div>
+      </div>
+
+      <!-- ÉPARGNE -->
+      <div id="tab-epargne" class="tp">
+        <div id="save-banner" class="banner banner-green"><div><div class="banner-t" id="sb-title">Budget disponible après épargne</div><div class="banner-s" id="sb-sub">—</div></div><div class="banner-v" id="sb-val">—</div></div>
+        <div class="dg">
+          <div class="gc"><div class="gc-head"><span class="gc-title">Épargnes mensuelles</span><button class="gbtn" onclick="openAddSave()">+ Ajouter</button></div>
+            <div class="brow"><label><span class="dot" style="background:#10B981"></span>Matelas sécurité</label><input class="binp" type="number" id="inp-matelas" value="150" oninput="updateAll()"></div>
+            <div class="brow"><label><span class="dot" style="background:#6366F1"></span>Investissement (PEA)</label><input class="binp" type="number" id="inp-invest" value="50" oninput="updateAll()"></div>
+            <div class="brow"><label><span class="dot" style="background:#F43F5E"></span>Épargne frère</label><input class="binp" type="number" id="inp-frere" value="100" oninput="updateAll()"></div>
+            <div class="brow"><label><span class="dot" style="background:#EC4899"></span>Épargne voyage</label><input class="binp" type="number" id="inp-voyage" value="60" oninput="updateAll()"></div>
+            <div id="custom-save-list"></div>
+            <div id="add-save-panel" class="add-panel" style="display:none"><div class="add-grid" style="grid-template-columns:1fr 110px auto"><div class="fg"><label>Nom</label><input class="ainp" type="text" id="new-save-label" placeholder="Ex : voiture…"></div><div class="fg"><label>€/mois</label><input class="ainp" type="number" id="new-save-amt" placeholder="0"></div><div class="fg fg-btns"><button class="btn-primary-sm" onclick="addCustomSave()">Ajouter</button></div></div></div>
+            <div class="btotals"><div class="btrow accent"><span>Total épargne</span><strong id="save-total">—</strong></div></div>
+          </div>
+          <div class="gc"><div class="gc-head"><span class="gc-title">Projection matelas</span></div>
+            <div class="brow"><label>Objectif (€)</label><input class="binp" type="number" id="cushion-goal" value="3000" oninput="updateCushion()"></div>
+            <div class="brow"><label>Déjà épargné (€)</label><input class="binp" type="number" id="cushion-current" value="0" oninput="updateCushion()"></div>
+            <div class="proj-kpis">
+              <div class="pk"><div class="pk-l">Objectif</div><div class="pk-v" id="c-target">—</div></div>
+              <div class="pk"><div class="pk-l">/ mois</div><div class="pk-v" id="c-monthly">—</div></div>
+              <div class="pk accent-pk"><div class="pk-l">Atteint en</div><div class="pk-v" id="c-date">—</div></div>
+            </div>
+            <div class="prog-track"><div class="prog-fill" id="c-prog" style="background:linear-gradient(90deg,#10B981,#6366F1)"></div></div>
+            <div class="prog-lbls"><span id="c-pct">0%</span><span id="c-lbl">—</span></div>
+          </div>
+        </div>
+        <div class="gc" id="goals-card" style="display:none"><div class="gc-head"><span class="gc-title">Objectifs personnalisés</span></div><div id="goals-list"></div></div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
