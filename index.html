@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Monie — Gérez votre budget avec intelligence">
+<meta name="theme-color" content="#0F0F13">
+<title>Monie — Budget</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="style.css">
+<style>
+/* Critical CSS inline — prevents flash of unstyled content */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0F0F13;color:#F0EFF6;font-family:'Plus Jakarta Sans',sans-serif;overflow-x:hidden;width:100%;min-height:100vh}
+#auth-screen{min-height:100vh;display:flex;position:relative;overflow:hidden}
+.auth-left{flex:1;display:flex;flex-direction:column;justify-content:center;padding:60px 80px;position:relative;z-index:1}
+.auth-right{width:420px;display:flex;align-items:center;justify-content:center;padding:40px;position:relative;z-index:1}
+.auth-card{width:100%;background:#17171D;border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:32px}
+.app-layout{display:flex;min-height:100vh;width:100%;overflow-x:hidden}
+.sidebar{width:220px;background:#17171D;border-right:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:200}
+.main-content{margin-left:220px;flex:1;padding:32px 36px;min-width:0;overflow-x:hidden}
+.tab{display:none}.tab.active{display:block}
+.mobile-nav{display:none}
+.mobile-header{display:none}
+@media(max-width:768px){
+  .auth-left{display:none}
+  .auth-right{width:100%;min-height:100vh;padding:0;align-items:stretch}
+  .auth-card{border-radius:0;border:none;background:#0F0F13;padding:56px 24px 40px;min-height:100vh}
+  .sidebar{transform:translateX(-100%)}
+  .main-content{margin-left:0!important;padding:14px 14px 78px;max-width:100%;width:100%}
+  .mobile-nav{display:flex!important;position:fixed;bottom:0;left:0;right:0;background:#17171D;border-top:1px solid rgba(255,255,255,.07);z-index:100;padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
+  .mobile-header{display:flex!important;align-items:center;justify-content:space-between;padding:14px 16px;background:#17171D;border-bottom:1px solid rgba(255,255,255,.07);position:sticky;top:0;z-index:100}
+  .mnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 1px;border:none;background:transparent;color:#7B7A8E;font-size:8px;font-family:inherit;font-weight:600;cursor:pointer;text-transform:uppercase}
+  .mnav-btn.active{color:#FF8E53}
+  .mnav-btn svg{width:20px;height:20px;stroke:currentColor;fill:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ══ AUTH ══ -->
+<div id="auth-screen">
+  <div class="auth-bg">
+    <div class="auth-orb auth-orb-1"></div>
+    <div class="auth-orb auth-orb-2"></div>
+    <div class="auth-orb auth-orb-3"></div>
+  </div>
+  <div class="auth-left">
+    <div class="auth-brand">
+      <div class="brand-logo">M</div>
+      <span class="brand-name">Monie</span>
+    </div>
+    <div class="auth-hero">
+      <h1>Votre argent,<br><span class="gradient-text">sous contrôle.</span></h1>
+      <p>Suivez vos revenus, dépenses et objectifs d'épargne en un seul endroit.</p>
+      <div class="auth-feat"><span class="feat-dot"></span>Dashboard temps réel</div>
+      <div class="auth-feat"><span class="feat-dot"></span>Objectifs d'épargne avec projection</div>
+      <div class="auth-feat"><span class="feat-dot"></span>Sauvegarde automatique</div>
+    </div>
+  </div>
+  <div class="auth-right">
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab active" onclick="switchAuthTab('login')">Connexion</button>
+        <button class="auth-tab" onclick="switchAuthTab('signup')">Inscription</button>
+      </div>
+      <div id="auth-login">
+        <div class="auth-field"><label for="login-email">Email</label><input class="inp" type="email" id="login-email" placeholder="vous@email.com" autocomplete="email" onkeydown="if(event.key==='Enter')login()"></div>
+        <div class="auth-field"><label for="login-password">Mot de passe</label><input class="inp" type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"></div>
+        <div id="login-error" class="auth-msg auth-msg-error"></div>
+        <button class="btn-auth" id="btn-login" onclick="login()"><span>Se connecter</span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+      <div id="auth-signup" style="display:none">
+        <div class="auth-field"><label for="signup-email">Email</label><input class="inp" type="email" id="signup-email" placeholder="vous@email.com" autocomplete="email"></div>
+        <div class="auth-field"><label for="signup-password">Mot de passe</label><input class="inp" type="password" id="signup-password" placeholder="Minimum 6 caractères" autocomplete="new-password"></div>
+        <div class="auth-field"><label for="signup-confirm">Confirmer le mot de passe</label><input class="inp" type="password" id="signup-confirm" placeholder="Répéter votre mot de passe" autocomplete="new-password"></div>
+        <div id="signup-error" class="auth-msg auth-msg-error"></div>
+        <button class="btn-auth" id="btn-signup" onclick="signup()"><span>Créer mon compte</span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ APP ══ -->
+<div id="app" style="display:none" class="app-layout">
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <header class="mobile-header">
+    <div class="mobile-header-brand">
+      <div class="brand-logo-sm">M</div>
+      <span class="brand-name-sm">Monie</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span id="save-indicator-m" style="font-size:10px;color:#2ECBA1"></span>
+      <button class="mobile-burger" onclick="toggleSidebar()" aria-label="Menu">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <div class="sidebar-brand" onclick="showTab('dashboard')">
+        <div class="brand-logo-sm">M</div>
+        <span class="brand-name-sm">Monie</span>
+      </div>
+      <nav class="nav">
+        <button class="nav-btn active" onclick="showTab('dashboard')" data-tab="dashboard"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</button>
+        <button class="nav-btn" onclick="showTab('patrimoine')" data-tab="patrimoine"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>Patrimoine</button>
+        <button class="nav-btn" onclick="showTab('revenus')" data-tab="revenus"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Revenus</button>
+        <button class="nav-btn" onclick="showTab('charges')" data-tab="charges"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>Charges</button>
+        <button class="nav-btn" onclick="showTab('transactions')" data-tab="transactions"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>Transactions</button>
+        <button class="nav-btn" onclick="showTab('epargne')" data-tab="epargne"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Épargne</button>
+        <button class="nav-btn" onclick="showTab('imports')" data-tab="imports"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Imports</button>
+      </nav>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="user-pill"><div class="user-avatar" id="user-avatar">?</div><span class="user-email-short" id="user-email-short">—</span></div>
+      <div style="display:flex;align-items:center;gap:6px;padding:0 2px"><span id="save-indicator" style="font-size:10px;color:#2ECBA1;flex:1"></span></div>
+      <div class="sidebar-actions">
+        <button class="action-btn" onclick="exportData()">↓ Export</button>
+        <button class="action-btn" onclick="document.getElementById('import-file').click()">↑ Import</button>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this)">
+      </div>
+      <button class="logout-btn" onclick="confirmLogout()">Déconnexion</button>
+    </div>
+  </aside>
+
+  <main class="main-content">
+
+    <!-- DASHBOARD -->
+    <div id="tab-dashboard" class="tab active">
+      <div class="page-hd">
+        <div>
+          <h1 class="page-title">Dashboard</h1>
+          <p class="page-sub" id="dash-greeting">Bonjour !</p>
+          <div style="margin-top:6px">
+            <span id="dash-mode-badge" style="font-size:10px;padding:3px 10px;border-radius:100px;font-weight:600">Prévisionnel — aucune transaction ce mois</span>
+          </div>
+        </div>
+        <div class="month-nav"><button onclick="changeMonth(-1)" aria-label="Mois précédent">‹</button><span id="dash-month-label">—</span><button onclick="changeMonth(1)" aria-label="Mois suivant">›</button></div>
+      </div>
+      <!-- Onboarding -->
+      <div id="onboarding-banner" class="onboarding-banner" style="display:none">
+        <div class="onboarding-icon">&#127919;</div>
+        <div class="onboarding-body">
+          <div class="onboarding-title">Bienvenue sur Monie !</div>
+          <p class="onboarding-text">Pour commencer, renseigne tes revenus. On s'occupe du reste.</p>
+          <div class="onboarding-steps">
+            <button class="onboarding-step" onclick="showTab('revenus')"><span class="step-num">1</span> Revenus</button>
+            <button class="onboarding-step" onclick="showTab('charges')"><span class="step-num">2</span> Charges</button>
+            <button class="onboarding-step" onclick="showTab('epargne')"><span class="step-num">3</span> Epargne</button>
+          </div>
+        </div>
+      </div>
+      <!-- Bloc prévisionnel -->
+      <div style="font-size:10px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+        <span style="width:6px;height:6px;border-radius:50%;background:#FFC107;display:inline-block"></span>
+        Budget prévisionnel
+      </div>
+      <div class="kpi-row">
+        <div class="kpi kpi-grad-green"><div class="kpi-icon">↑</div><div class="kpi-body"><div class="kpi-label">Revenus nets</div><div class="kpi-val" id="kpi-rev">—</div><div class="kpi-hint" id="kpi-rev-hint">—</div></div></div>
+        <div class="kpi kpi-grad-red"><div class="kpi-icon">↓</div><div class="kpi-body"><div class="kpi-label">Charges fixes</div><div class="kpi-val" id="kpi-dep">—</div><div class="kpi-hint" id="kpi-dep-hint">hors épargne</div></div></div>
+        <div class="kpi kpi-grad-blue"><div class="kpi-icon">◎</div><div class="kpi-body"><div class="kpi-label">Épargne prévue</div><div class="kpi-val" id="kpi-save">—</div><div class="kpi-hint" id="kpi-save-hint">—</div></div></div>
+        <div class="kpi" id="kpi-solde-card"><div class="kpi-icon">◆</div><div class="kpi-body"><div class="kpi-label">Solde prévu</div><div class="kpi-val" id="kpi-solde">—</div><div class="kpi-hint" id="kpi-solde-hint">—</div></div></div>
+      </div>
+      <div class="grid-2-1">
+        <div class="card"><div class="card-hd">Budget prévisionnel <span class="badge-month" id="badge-month-overview">—</span></div><div style="height:180px"><canvas id="chart-overview"></canvas></div></div>
+        <div class="card"><div class="card-hd">Répartition des sorties</div><div style="height:130px;display:flex;align-items:center;justify-content:center"><canvas id="chart-pie-dash"></canvas></div><div id="dash-pie-legend" class="legend-list" style="margin-top:8px"></div></div>
+      </div>
+      <div class="grid-2-1">
+        <div class="card"><div class="card-hd">Dernières transactions <span class="badge-month" id="badge-month-tx">—</span></div><div id="dash-tx-list"></div></div>
+        <div class="card"><div class="card-hd">Santé budgétaire</div><div id="health-list"></div></div>
+      </div>
+    </div>
+
+    <!-- PATRIMOINE -->
+    <div id="tab-patrimoine" class="tab">
+      <div class="page-hd"><h1 class="page-title">Patrimoine</h1></div>
+      <div class="kpi-row kpi-row-3">
+        <div class="kpi kpi-grad-green"><div class="kpi-body"><div class="kpi-label">Total</div><div class="kpi-val" id="pat-total">—</div></div></div>
+        <div class="kpi kpi-grad-blue"><div class="kpi-body"><div class="kpi-label">Libre</div><div class="kpi-val" id="pat-libre">—</div></div></div>
+        <div class="kpi"><div class="kpi-body"><div class="kpi-label">Réservé + Intouchable</div><div class="kpi-val" id="pat-locked">—</div><div style="display:flex;gap:8px;margin-top:3px;flex-wrap:wrap"><span style="font-size:9px;color:#FFC107">Rés. <b id="pat-reserved">—</b></span><span style="font-size:9px;color:#8E54E9">Int. <b id="pat-intouchable">—</b></span></div></div></div>
+      </div>
+      <div class="grid-1-1">
+        <div class="card">
+          <div class="card-hd">Mes comptes</div>
+          <div class="table-head pat-cols"><span>Compte</span><span>Montant</span><span>Statut</span><span></span></div>
+          <div id="pat-list"></div>
+          <div class="pat-add-row">
+            <input class="inp" type="text" id="pat-new-label" placeholder="Nom du compte…" aria-label="Nom">
+            <input class="inp" type="number" id="pat-new-amount" placeholder="Montant" min="0" step="0.01" aria-label="Montant">
+            <select class="sel" id="pat-new-type"><option value="free">Libre</option><option value="res">Réservé</option><option value="lock">Intouchable</option></select>
+            <button class="btn-primary" onclick="addCompte()">+ Ajouter</button>
+          </div>
+        </div>
+        <div class="card"><div class="card-hd">Distribution</div><div style="height:150px;display:flex;align-items:center;justify-content:center"><canvas id="chart-patrimoine"></canvas></div><div id="pat-legend" class="legend-list" style="margin-top:10px"></div></div>
+      </div>
+    </div>
+
+    <!-- REVENUS -->
+    <div id="tab-revenus" class="tab">
+      <div class="page-hd"><h1 class="page-title">Revenus</h1></div>
+      <div class="card">
+        <div class="card-hd">Salaire mensuel</div>
+        <div class="field-row"><label for="inp-salaire">Salaire net versé</label><input class="inp inp-r" type="number" id="inp-salaire" placeholder="0" min="0" step="0.01" oninput="updateAll()"></div>
+        <div class="field-row"><label for="inp-tr">Tickets restaurant <span class="label-hint">valeur faciale</span></label><input class="inp inp-r" type="number" id="inp-tr" placeholder="0" min="0" step="0.01" oninput="updateAll()"></div>
+        <div class="field-row"><label for="inp-dime-pct">Dîme / don <span class="label-hint">% du salaire net</span></label><input class="inp inp-r" type="number" id="inp-dime-pct" value="10" min="0" max="100" step="1" oninput="updateAll()"></div>
+        <div class="field-row"><label for="inp-prov">Provision impôts <span class="label-hint">mensuelle</span></label><input class="inp inp-r" type="number" id="inp-prov" placeholder="0" min="0" step="1" oninput="updateAll()"></div>
+        <div class="field-row info-row"><label>Dîme calculée <span class="label-hint">sur salaire net</span></label><span class="badge-val badge-purple" id="dime-calc">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">Revenus complémentaires</div>
+        <div class="inline-add inline-add-4" style="margin-bottom:12px">
+          <input class="inp" type="text" id="rev-label" placeholder="Prime, freelance, allocation…">
+          <input class="inp" type="number" id="rev-amount" placeholder="Montant" min="0" step="0.01">
+          <input class="inp" type="date" id="rev-date" style="color-scheme:dark">
+          <button class="btn-primary" onclick="addRevenu()">+ Ajouter</button>
+        </div>
+        <div id="rev-list"></div>
+      </div>
+      <div class="kpi kpi-grad-green" style="margin-bottom:0"><div class="kpi-body"><div class="kpi-label">Disponible après dîme + provision</div><div class="kpi-val" id="rev-dispo">—</div></div></div>
+    </div>
+
+    <!-- CHARGES -->
+    <div id="tab-charges" class="tab">
+      <div class="page-hd"><h1 class="page-title">Charges</h1></div>
+      <div id="charges-banner" class="banner banner-ok"><div><div class="banner-title" id="charges-banner-title">Reste disponible après charges fixes</div><div class="banner-sub" id="charges-banner-sub">—</div></div><div class="banner-val" id="charges-banner-val">—</div></div>
+      <div class="grid-1-1">
+        <div class="card"><div class="card-hd">Répartition</div><div style="height:140px;display:flex;align-items:center;justify-content:center"><canvas id="chart-charges"></canvas></div><div id="charges-legend" class="legend-list" style="margin-top:10px"></div></div>
+        <div class="card"><div class="card-hd">Répartition cible <span class="label-hint">total = 100%</span></div><div id="rpart-list"></div><div class="subtotal"><span>Total</span><span id="rpart-total" class="mono">—</span></div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">Charges fixes mensuelles</div>
+        <div class="field-row"><label><span class="dot-col" style="background:#4F8EF7"></span>Loyer et charges</label><input class="inp inp-r" type="number" id="inp-loyer" placeholder="0" min="0" step="1" oninput="updateAll()"></div>
+        <div class="field-row"><label><span class="dot-col" style="background:#2ECBA1"></span>Transports</label><input class="inp inp-r" type="number" id="inp-transport" placeholder="0" min="0" step="1" oninput="updateAll()"></div>
+        <div class="field-row"><label><span class="dot-col" style="background:#FF6B9D"></span>Santé</label><input class="inp inp-r" type="number" id="inp-sante" placeholder="0" min="0" step="1" oninput="updateAll()"></div>
+        <div id="abo-list"></div>
+        <div class="subtotal"><span>Total charges fixes</span><span id="fixed-total" class="mono">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">Ajouter un abonnement</div>
+        <div class="inline-add inline-add-4"><input class="inp" type="text" id="abo-new-label" placeholder="Netflix, Spotify…"><input class="inp" type="number" id="abo-new-amount" placeholder="€/mois" min="0" step="0.01"><input class="inp" type="date" id="abo-new-date" style="color-scheme:dark"><button class="btn-primary" onclick="addAbonnement()">+ Ajouter</button></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">Vie courante</div>
+        <div class="field-row"><label><span class="dot-col" style="background:#FF8C42"></span>Alimentation</label><input class="inp inp-r" type="number" id="inp-alim" placeholder="0" min="0" step="1" oninput="updateAll()"></div>
+        <div class="field-row"><label><span class="dot-col" style="background:#FF6B6B"></span>Restaurants & loisirs</label><input class="inp inp-r" type="number" id="inp-loisirs" placeholder="0" min="0" step="1" oninput="updateAll()"></div>
+        <div class="field-row"><label><span class="dot-col" style="background:#63D68D"></span>Vêtements & achats</label><input class="inp inp-r" type="number" id="inp-shopping" placeholder="0" min="0" step="1" oninput="updateAll()"></div>
+        <div class="field-row"><label><span class="dot-col" style="background:#7B7A8E"></span>Divers & imprévus</label><input class="inp inp-r" type="number" id="inp-divers" placeholder="0" min="0" step="1" oninput="updateAll()"></div>
+        <div class="subtotal"><span>Total vie courante</span><span id="var-total" class="mono">—</span></div>
+      </div>
+    </div>
+
+    <!-- TRANSACTIONS -->
+    <div id="tab-transactions" class="tab">
+      <div class="page-hd"><h1 class="page-title">Transactions</h1><div class="month-nav"><button onclick="changeMonth(-1)" aria-label="Mois précédent">‹</button><span id="tx-month-label">—</span><button onclick="changeMonth(1)" aria-label="Mois suivant">›</button></div></div>
+      <div class="kpi-row">
+        <div class="kpi kpi-grad-green"><div class="kpi-body"><div class="kpi-label">Entrées</div><div class="kpi-val" id="tx-entrees">—</div></div></div>
+        <div class="kpi kpi-grad-red"><div class="kpi-body"><div class="kpi-label">Sorties</div><div class="kpi-val" id="tx-sorties">—</div></div></div>
+        <div class="kpi"><div class="kpi-body"><div class="kpi-label">Solde réel</div><div class="kpi-val" id="tx-solde">—</div></div></div>
+        <div class="kpi"><div class="kpi-body"><div class="kpi-label">Nb transactions</div><div class="kpi-val" id="tx-count">—</div></div></div>
+      </div>
+      <div class="grid-2-1">
+        <div class="card"><div class="card-hd">Par catégorie</div><div id="distrib-bars"></div></div>
+        <div class="card"><div class="card-hd">Répartition</div><div style="height:130px;display:flex;align-items:center;justify-content:center"><canvas id="chart-tx-pie"></canvas></div><div id="tx-pie-legend" class="legend-list" style="margin-top:8px"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">Ajouter une transaction</div>
+        <div class="tx-form">
+          <input class="inp" type="text" id="tx-label-inp" placeholder="Description">
+          <input class="inp" type="number" id="tx-amount-inp" placeholder="Montant" min="0" step="0.01">
+          <select class="sel" id="tx-type-inp" onchange="updateTxCategories()"><option value="sortie">Sortie</option><option value="entree">Entrée</option></select>
+          <select class="sel" id="tx-cat-inp"></select>
+          <input class="inp" type="date" id="tx-date-inp" style="color-scheme:dark">
+          <div style="display:flex;gap:6px">
+            <button class="btn-primary" id="tx-submit-btn" onclick="submitTransaction()">+ Ajouter</button>
+            <button class="btn-ghost btn-cancel-edit" id="tx-cancel-btn" onclick="cancelEditTx()" style="display:none">Annuler</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div class="card-hd" style="margin:0">Liste des transactions</div>
+          <div style="display:flex;gap:8px">
+            <select class="sel" id="filter-type" onchange="renderTransactions()" style="width:auto"><option value="all">Toutes</option><option value="entree">Entrées</option><option value="sortie">Sorties</option></select>
+            <select class="sel" id="filter-cat" onchange="renderTransactions()" style="width:auto"><option value="all">Toutes catégories</option></select>
+          </div>
+        </div>
+        <div id="tx-list"><div class="empty">Aucune transaction ce mois — commence à saisir !</div></div>
+      </div>
+    </div>
+
+    <!-- IMPORTS -->
+    <div id="tab-imports" class="tab">
+      <div class="page-hd">
+        <h1 class="page-title">Mes Imports</h1>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn-primary" onclick="document.getElementById('import-file-page').click()" style="width:auto;padding:9px 18px">&#8593; Importer un fichier JSON</button>
+          <input type="file" id="import-file-page" accept=".json" style="display:none" onchange="importDataPage(this)">
+        </div>
+      </div>
+      <div id="import-empty" class="card" style="border-style:dashed;opacity:.6">
+        <div class="empty" style="padding:20px 0">
+          <div style="font-size:28px;margin-bottom:8px">&#128196;</div>
+          Aucun import pour le moment.<br>
+          <span style="font-size:11px;opacity:.7">Importe un fichier JSON pour voir tes statistiques ici.</span>
+        </div>
+      </div>
+      <div id="import-content" style="display:none">
+        <div class="kpi-row">
+          <div class="kpi kpi-grad-green"><div class="kpi-body"><div class="kpi-label">Total entr&#233;es</div><div class="kpi-val" id="imp-entrees">&#8212;</div></div></div>
+          <div class="kpi kpi-grad-red"><div class="kpi-body"><div class="kpi-label">Total sorties</div><div class="kpi-val" id="imp-sorties">&#8212;</div></div></div>
+          <div class="kpi"><div class="kpi-body"><div class="kpi-label">Solde net</div><div class="kpi-val" id="imp-solde">&#8212;</div></div></div>
+          <div class="kpi"><div class="kpi-body"><div class="kpi-label">Transactions</div><div class="kpi-val" id="imp-count">&#8212;</div></div></div>
+        </div>
+        <div class="grid-2-1">
+          <div class="card">
+            <div class="card-hd">R&#233;partition des d&#233;penses import&#233;es</div>
+            <div id="imp-distrib-bars"></div>
+          </div>
+          <div class="card">
+            <div class="card-hd">Par cat&#233;gorie</div>
+            <div style="height:150px;display:flex;align-items:center;justify-content:center"><canvas id="chart-imp-pie"></canvas></div>
+            <div id="imp-pie-legend" class="legend-list" style="margin-top:8px"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd">D&#233;penses par mois</div>
+          <div style="height:200px"><canvas id="chart-imp-monthly"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hd">Historique des imports <span class="badge-month" id="imp-date-badge">&#8212;</span></div>
+          <div id="imp-tx-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ÉPARGNE -->
+    <div id="tab-epargne" class="tab">
+      <div class="page-hd"><h1 class="page-title">Épargne</h1></div>
+      <div id="save-banner" class="banner banner-ok"><div><div class="banner-title" id="save-banner-title">Argent libre après toutes les épargnes</div><div class="banner-sub" id="save-banner-sub">—</div></div><div class="banner-val" id="save-banner-val">—</div></div>
+      <div class="card">
+        <div class="card-hd">Épargnes mensuelles</div>
+        <div class="field-row"><label><span class="dot-col" style="background:#2ECBA1"></span>Matelas de sécurité <span class="label-hint">Livret A</span></label><input class="inp inp-r" type="number" id="inp-matelas" placeholder="0" min="0" step="1" oninput="updateAll()"></div>
+        <div class="field-row"><label><span class="dot-col" style="background:#4F8EF7"></span>Investissement <span class="label-hint">PEA…</span></label><input class="inp inp-r" type="number" id="inp-invest" placeholder="0" min="0" step="1" oninput="updateAll()"></div>
+        <div id="custom-save-list"></div>
+        <div class="subtotal"><span>Total épargne</span><span id="save-total" class="mono">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">Ajouter un poste d'épargne</div>
+        <div class="inline-add inline-add-4"><input class="inp" type="text" id="csave-label" placeholder="Voyage, voiture, projet…"><input class="inp" type="number" id="csave-amount" placeholder="€/mois" min="0" step="1"><input class="inp" type="date" id="csave-date" style="color-scheme:dark"><button class="btn-primary" onclick="addCustomSave()">+ Ajouter</button></div>
+      </div>
+      <div class="section-title">Objectifs d'épargne</div>
+      <div id="goals-list"></div>
+      <div class="card" id="goals-empty" style="border-style:dashed;opacity:.5"><div class="empty" style="padding:12px 0;font-size:12px">Ajoute un poste d'épargne ci-dessus<br>pour créer un objectif avec projection</div></div>
+    </div>
+
+  </main>
+
+  <!-- Mobile bottom nav -->
+  <nav class="mobile-nav" aria-label="Navigation">
+    <button class="mnav-btn active" onclick="showTab('dashboard');mnavActive(this)" data-tab="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Board</button>
+    <button class="mnav-btn" onclick="showTab('revenus');mnavActive(this)" data-tab="revenus"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Revenus</button>
+    <button class="mnav-btn" onclick="showTab('charges');mnavActive(this)" data-tab="charges"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>Charges</button>
+    <button class="mnav-btn" onclick="showTab('transactions');mnavActive(this)" data-tab="transactions"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>Transac.</button>
+    <button class="mnav-btn" onclick="showTab('epargne');mnavActive(this)" data-tab="epargne"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Epargne</button>
+    <button class="mnav-btn" onclick="showTab('patrimoine');mnavActive(this)" data-tab="patrimoine"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>Patrim.</button>
+    <button class="mnav-btn" onclick="showTab('imports');mnavActive(this)" data-tab="imports"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Imports</button>
+  </nav>
+
+</div>
+
+<div id="toast" class="toast" role="alert"></div>
+<div id="modal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title" id="modal-title">Confirmation</div>
+    <div class="modal-msg" id="modal-msg"></div>
+    <div class="modal-btns"><button class="btn-ghost" onclick="closeModal()">Annuler</button><button class="btn-danger" id="modal-confirm-btn">Confirmer</button></div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
