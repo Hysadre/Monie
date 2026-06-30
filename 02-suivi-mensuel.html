@@ -1,0 +1,92 @@
+<!-- ════════════════════════════════════════════════
+     🌸 MONIE V2 — Page Suivi mensuel
+     À insérer dans index.html, avant <!-- ÉPARGNE -->
+═════════════════════════════════════════════════ -->
+<div id="tab-suivi" class="tab">
+  <div class="page-hd">
+    <div>
+      <h1 class="page-title">Suivi mensuel</h1>
+      <p class="page-sub">Patrimoine · Revenus · Épargne — mois par mois</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <select class="sel" id="suivi-year-filter" onchange="renderSuivi()" style="width:auto;min-width:110px"></select>
+      <button class="btn-ghost" onclick="resyncSuiviFromTransactions()" style="padding:8px 14px;font-size:12px;display:flex;align-items:center;gap:6px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 4v6h-6M1 20v-6h6"/>
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+        </svg>
+        Resync
+      </button>
+    </div>
+  </div>
+
+  <!-- KPI bar : récap année -->
+  <div class="kpi-row kpi-row-3">
+    <div class="kpi kpi-grad-blue">
+      <div class="kpi-body">
+        <div class="kpi-label">Patrimoine fin d'année</div>
+        <div class="kpi-val" id="suivi-pat-fin">—</div>
+        <div class="kpi-hint" id="suivi-pat-evol">—</div>
+      </div>
+    </div>
+    <div class="kpi kpi-grad-green">
+      <div class="kpi-body">
+        <div class="kpi-label">Revenus année</div>
+        <div class="kpi-val" id="suivi-rev-year">—</div>
+        <div class="kpi-hint" id="suivi-rev-hint">—</div>
+      </div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-body">
+        <div class="kpi-label">Épargne cumulée</div>
+        <div class="kpi-val" id="suivi-ep-year">—</div>
+        <div class="kpi-hint" id="suivi-ep-hint">— vs cible</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tableau desktop -->
+  <div class="card" id="suivi-table-card">
+    <div class="card-hd">
+      <span>Tableau de suivi</span>
+      <span class="label-hint" id="suivi-status" style="margin-left:auto">—</span>
+    </div>
+
+    <div class="suivi-table-wrap">
+      <table class="suivi-table">
+        <thead>
+          <tr class="suivi-supergroup">
+            <th rowspan="2" class="th-mois">MOIS</th>
+            <th colspan="9" class="th-pat">💎 PATRIMOINE</th>
+            <th colspan="5" class="th-rev">💰 REVENUS</th>
+            <th colspan="2" class="th-ep">🎯 ÉPARGNE</th>
+          </tr>
+          <tr class="suivi-cols">
+            <th>LCL</th>
+            <th>Bourso</th>
+            <th>Espèces</th>
+            <th>Esalia</th>
+            <th>B. Postale</th>
+            <th>Invest.</th>
+            <th>Autre</th>
+            <th class="th-total">TOTAL</th>
+            <th class="th-evol">ÉVOL</th>
+            <th>Salaire</th>
+            <th>Tickets</th>
+            <th>Rembours.</th>
+            <th>Autres</th>
+            <th class="th-total">TOTAL</th>
+            <th>Cible</th>
+            <th>Réel</th>
+          </tr>
+        </thead>
+        <tbody id="suivi-tbody">
+          <!-- Lignes générées par JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Vue mobile : cartes par mois -->
+  <div id="suivi-mobile-cards"></div>
+</div>
