@@ -2677,7 +2677,9 @@ function renderBudget() {
   const e = budgetData.pct_epargne;
   const total = c + p + e;
   $('bud-total-pct').textContent = total + '%';
-  $('bud-total-pct').style.color = total === 100 ? 'var(--sage)' : total > 100 ? 'var(--tender-rose)' : 'var(--peach)';
+  $('bud-total-pct').style.color = total === 100 ? 'var(--sage)' : '#E53935';
+  $('bud-total-pct').style.fontWeight = '900';
+  $('bud-total-pct').style.fontSize = total !== 100 ? '18px' : '';
 
   const revCharges = Math.round(rev * c / 100);
   const revPlaisir = Math.round(rev * p / 100);
@@ -2701,39 +2703,130 @@ function renderBudget() {
     </div>
   `;
 
-  // Suggestions par catégorie
-  const suggestions = [
-    { bloc: 'charges', cat: 'Loyer', pct: 30 },
-    { bloc: 'charges', cat: 'Alimentation', pct: 10 },
-    { bloc: 'charges', cat: 'Transport', pct: 5 },
-    { bloc: 'charges', cat: 'Santé', pct: 3 },
-    { bloc: 'charges', cat: 'Abonnements', pct: 2 },
-    { bloc: 'plaisir', cat: 'Vie quotidienne', pct: 10 },
-    { bloc: 'plaisir', cat: 'Mode', pct: 5 },
-    { bloc: 'plaisir', cat: 'Cosmétique', pct: 5 },
-    { bloc: 'plaisir', cat: 'Alimentation', pct: 5, note: '(restaurants)' },
-    { bloc: 'plaisir', cat: 'Dons', pct: 5 },
-    { bloc: 'epargne', cat: 'Dîme', pct: 10 },
-    { bloc: 'epargne', cat: 'Investissements', pct: 5 },
-    { bloc: 'epargne', cat: 'Épargne libre', pct: 5 }
-  ];
+  // ─── BLOCAGE si total ≠ 100% ──────────────
+  if (total !== 100) {
+    $('bud-suggestions').innerHTML = `
+      <div style="padding:24px;text-align:center;background:linear-gradient(135deg,#FFE5E5,#FFEDE5);border:2px dashed #E53935;border-radius:var(--radius);color:#C62828">
+        <div style="font-size:28px;margin-bottom:8px">⚠️</div>
+        <div style="font-weight:800;font-size:16px;margin-bottom:6px">Total = ${total}% (au lieu de 100%)</div>
+        <div style="font-size:13px">Ajuste tes 3 curseurs (Charges + Plaisir + Épargne) pour arriver exactement à <b>100%</b>.<br>Les sous-catégories apparaîtront ensuite pour que tu puisses répartir plus finement.</div>
+      </div>`;
+    return;
+  }
 
-  const bp = { charges: c, plaisir: p, epargne: e };
-  $('bud-suggestions').innerHTML = suggestions.map(s => {
-    // % de son bloc → % du revenu total
-    const globalPct = Math.round(s.pct);
-    const amt = Math.round(rev * globalPct / 100);
+  // ─── Sous-catégories ÉDITABLES ─────────────
+  // Structure par défaut (poids relatifs pour chaque sous-catégorie)
+  const DEFAULT_SUB_PCT = {
+    charges: [
+      { cat: 'Loyer',        pct: 30 },
+      { cat: 'Alimentation', pct: 10 },
+      { cat: 'Transport',    pct: 5 },
+      { cat: 'Santé',        pct: 3 },
+      { cat: 'Abonnements',  pct: 2 },
+      { cat: 'Maison & Logement', pct: 5 },
+      { cat: 'Administratif',pct: 2 }
+    ],
+    plaisir: [
+      { cat: 'Vie quotidienne', pct: 8 },
+      { cat: 'Mode',            pct: 5 },
+      { cat: 'Cosmétique',      pct: 5 },
+      { cat: 'Alimentation',    pct: 5, note: '(restos)' },
+      { cat: 'Dons',            pct: 2 },
+      { cat: 'Amis & Famille',  pct: 3 },
+      { cat: 'Divertissement',  pct: 2 }
+    ],
+    epargne: [
+      { cat: 'Dîme',           pct: 10 },
+      { cat: 'Investissements',pct: 5 },
+      { cat: 'Épargne libre',  pct: 5 }
+    ]
+  };
+
+  // Charge les valeurs éditées depuis localStorage si dispo
+  let userSubBudget;
+  try { userSubBudget = JSON.parse(localStorage.getItem('monie_sub_budget') || 'null'); } catch (e) {}
+  const subBudget = userSubBudget || DEFAULT_SUB_PCT;
+
+  // Rendu par bloc
+  const renderBloc = (blocKey, blocLabel, blocPct, blocColor) => {
+    const items = subBudget[blocKey] || [];
+    const blocAmt = Math.round(rev * blocPct / 100);
+    const totalBlocPct = items.reduce((s, it) => s + Number(it.pct || 0), 0);
+    const totalBlocAmt = Math.round(rev * totalBlocPct / 100);
+    const blocOK = totalBlocPct === blocPct;
     return `
-      <div class="bud-sugg-item">
-        <div class="bud-sugg-cat">
-          <span class="cat-dot" style="width:8px;height:8px;border-radius:50%;background:${catColor(s.cat)};display:inline-block"></span>
-          <span>${catIcon(s.cat)} ${s.cat}${s.note ? ' <span style="color:var(--muted);font-size:11px">' + s.note + '</span>' : ''}</span>
+      <div class="bud-sub-bloc" style="border-left:4px solid ${blocColor};padding-left:14px;margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-weight:800;color:${blocColor};font-size:14px">${blocLabel} — cible ${blocPct}% (${fmt(blocAmt)})</div>
+          <div style="font-size:12px;font-weight:700;color:${blocOK ? 'var(--sage)' : '#E53935'}">
+            Alloué : ${totalBlocPct}% ${blocOK ? '✓' : '⚠'}
+          </div>
         </div>
-        <div class="bud-sugg-amt">${fmt(amt)}</div>
-        <div class="bud-sugg-pct">${globalPct}%</div>
-      </div>
-    `;
-  }).join('');
+        ${items.map((it, i) => {
+          const amt = Math.round(rev * it.pct / 100);
+          return `
+            <div class="bud-sub-row">
+              <div class="bud-sub-cat">
+                <span style="width:8px;height:8px;border-radius:50%;background:${catColor(it.cat)};display:inline-block"></span>
+                ${catIcon(it.cat)} ${it.cat}${it.note ? ` <span style="color:var(--muted);font-size:11px">${it.note}</span>` : ''}
+              </div>
+              <input type="number" step="0.5" min="0" max="100" class="bud-sub-inp" value="${it.pct}"
+                     onchange="updateSubBudget('${blocKey}',${i},this.value)">
+              <span style="font-size:11px;color:var(--muted)">%</span>
+              <div class="bud-sub-amt">${fmt(amt)}</div>
+            </div>`;
+        }).join('')}
+        <div class="bud-sub-total">
+          <span>Total ${blocLabel}</span>
+          <b style="color:${blocOK ? 'var(--sage)' : '#E53935'}">${totalBlocPct}%</b>
+          <b>${fmt(totalBlocAmt)}</b>
+        </div>
+      </div>`;
+  };
+
+  const grandTotalPct = ['charges','plaisir','epargne'].reduce((s, k) =>
+    s + (subBudget[k] || []).reduce((ss, it) => ss + Number(it.pct || 0), 0), 0);
+  const grandTotalAmt = Math.round(rev * grandTotalPct / 100);
+
+  $('bud-suggestions').innerHTML = `
+    <div style="margin-bottom:14px;font-size:12px;color:var(--muted)">
+      Modifie chaque % ci-dessous pour ajuster ta répartition fine. Le total de chaque bloc doit correspondre à ta cible.
+    </div>
+    ${renderBloc('charges', '🏠 Charges', c, '#DD7B85')}
+    ${renderBloc('plaisir', '🌸 Plaisir', p, '#F4A993')}
+    ${renderBloc('epargne', '🌱 Épargne', e, '#7FB89E')}
+    <div class="bud-grand-total">
+      <span>TOTAL GÉNÉRAL</span>
+      <span style="color:${grandTotalPct === 100 ? 'var(--sage)' : '#E53935'};font-weight:900">${grandTotalPct}%</span>
+      <span style="font-weight:900">${fmt(grandTotalAmt)}</span>
+    </div>`;
+}
+
+function updateSubBudget(blocKey, index, newPct) {
+  try {
+    let subBudget = JSON.parse(localStorage.getItem('monie_sub_budget') || 'null');
+    if (!subBudget) {
+      // Copie les DEFAULT
+      subBudget = {
+        charges: [
+          { cat: 'Loyer', pct: 30 }, { cat: 'Alimentation', pct: 10 }, { cat: 'Transport', pct: 5 },
+          { cat: 'Santé', pct: 3 }, { cat: 'Abonnements', pct: 2 }, { cat: 'Maison & Logement', pct: 5 },
+          { cat: 'Administratif', pct: 2 }
+        ],
+        plaisir: [
+          { cat: 'Vie quotidienne', pct: 8 }, { cat: 'Mode', pct: 5 }, { cat: 'Cosmétique', pct: 5 },
+          { cat: 'Alimentation', pct: 5, note: '(restos)' }, { cat: 'Dons', pct: 2 },
+          { cat: 'Amis & Famille', pct: 3 }, { cat: 'Divertissement', pct: 2 }
+        ],
+        epargne: [
+          { cat: 'Dîme', pct: 10 }, { cat: 'Investissements', pct: 5 }, { cat: 'Épargne libre', pct: 5 }
+        ]
+      };
+    }
+    subBudget[blocKey][index].pct = Math.max(0, parseFloat(newPct) || 0);
+    localStorage.setItem('monie_sub_budget', JSON.stringify(subBudget));
+    renderBudget();
+  } catch (e) { console.error(e); }
 }
 
 // ═══ INVESTISSEMENTS ═══════════════════════════════════════════

@@ -1344,6 +1344,83 @@ body::after {
 .bud-sugg-amt { font-family: var(--fm); font-weight: 700; text-align: right; color: var(--ink); }
 .bud-sugg-pct { font-size: 11px; color: var(--muted); text-align: right; }
 
+/* ─── SOUS-BUDGET ÉDITABLE ─── */
+.bud-sub-bloc {
+  background: var(--bg);
+  padding: 12px 14px 8px 14px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+}
+.bud-sub-row {
+  display: grid;
+  grid-template-columns: 1fr 70px auto 90px;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+}
+.bud-sub-row:last-child { border-bottom: none; }
+.bud-sub-cat { display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bud-sub-inp {
+  padding: 6px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs);
+  font-family: var(--ff);
+  font-size: 13px;
+  font-weight: 700;
+  background: white;
+  text-align: right;
+  color: var(--ink);
+}
+.bud-sub-inp:focus { border-color: var(--rose); outline: none; }
+.bud-sub-amt {
+  font-family: var(--fm);
+  font-weight: 700;
+  text-align: right;
+  color: var(--ink);
+}
+.bud-sub-total {
+  display: grid;
+  grid-template-columns: 1fr auto 90px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0 4px 0;
+  margin-top: 6px;
+  border-top: 2px solid var(--border);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.bud-grand-total {
+  display: grid;
+  grid-template-columns: 1fr auto 90px;
+  gap: 10px;
+  align-items: center;
+  padding: 16px 20px;
+  margin-top: 12px;
+  background: linear-gradient(135deg, var(--rose-soft), var(--peach-soft));
+  border-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+@media (max-width: 900px) {
+  .bud-sub-row {
+    grid-template-columns: 1fr 60px auto 80px;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .bud-sub-inp { padding: 5px 8px; font-size: 12px; }
+  .bud-sub-total, .bud-grand-total {
+    grid-template-columns: 1fr auto 80px;
+    gap: 6px;
+    font-size: 13px;
+  }
+}
+
 /* ─── INVESTISSEMENTS ─── */
 .inv-card {
   background: var(--card);
