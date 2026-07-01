@@ -167,12 +167,19 @@ function restoreHelpBanners() {
 // ═══ HEADER AUTO-HIDE ══════════════════════════════════════════
 let _lastScrollY = 0;
 let _headerHidden = false;
+let _headerAutoHideWired = false;
 function initHeaderAutoHide() {
+  // Éviter de wire-up plusieurs fois (loadAllData peut être appelé plusieurs fois)
+  if (_headerAutoHideWired) return;
   const header = document.querySelector('.mobile-header') || document.querySelector('.header') || document.querySelector('header');
   if (!header) return;
-  const threshold = 8; // pixels de tolérance
+  _headerAutoHideWired = true;
+
+  const getY = () => window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+  const threshold = 6; // pixels de tolérance
+
   const onScroll = () => {
-    const y = window.scrollY;
+    const y = getY();
     // En haut de page → toujours visible
     if (y < 60) {
       if (_headerHidden) { header.classList.remove('header-hidden'); _headerHidden = false; }
@@ -189,17 +196,30 @@ function initHeaderAutoHide() {
     }
     _lastScrollY = y;
   };
+
   // Throttle via requestAnimationFrame
   let ticking = false;
-  window.addEventListener('scroll', () => {
+  const throttledScroll = () => {
     if (!ticking) {
       requestAnimationFrame(() => { onScroll(); ticking = false; });
       ticking = true;
     }
-  }, { passive: true });
-  // Show on hover (souris en haut d'écran)
+  };
+  window.addEventListener('scroll', throttledScroll, { passive: true });
+  document.addEventListener('scroll', throttledScroll, { passive: true });
+  document.body.addEventListener('scroll', throttledScroll, { passive: true });
+
+  // Show on hover (souris en haut d'écran) — desktop
   document.addEventListener('mousemove', (e) => {
     if (e.clientY < 60 && _headerHidden) {
+      header.classList.remove('header-hidden');
+      _headerHidden = false;
+    }
+  }, { passive: true });
+
+  // Tap en haut d'écran (mobile) → réafficher le header
+  document.addEventListener('touchstart', (e) => {
+    if (_headerHidden && e.touches[0] && e.touches[0].clientY < 40) {
       header.classList.remove('header-hidden');
       _headerHidden = false;
     }
