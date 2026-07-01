@@ -3469,9 +3469,16 @@ function renderBudget() {
       <span>TOTAL GÉNÉRAL</span>
       <span style="color:${grandTotalPct === 100 ? 'var(--sage)' : '#E53935'};font-weight:900">${grandTotalPct}%</span>
       <span style="font-weight:900">${fmt(grandTotalAmt)}</span>
-    </div>`;
+    </div>
+    <button class="btn-primary" onmousedown="event.preventDefault()" onclick="saveSubBudgetManual()" style="width:100%;margin-top:16px;padding:12px;font-size:15px">💾 Sauvegarder ma répartition</button>`;
 }
 
+// Bouton « Sauvegarder ma répartition » : valide la saisie en cours + confirme (les % sont déjà persistés à chaque modif)
+function saveSubBudgetManual() {
+  const el = document.activeElement;
+  if (el && el.classList && el.classList.contains('bud-sub-inp')) el.dispatchEvent(new Event('change'));
+  toast('✓ Répartition enregistrée', 'success');
+}
 function updateSubBudget(blocKey, index, newPct) {
   try {
     let subBudget = JSON.parse(localStorage.getItem('monie_sub_budget') || 'null');
