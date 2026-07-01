@@ -1172,12 +1172,18 @@ async function handleImportFile(file) {
     else if (name.endsWith('.json')) parsed = await parseJSON(file);
     else { toast('Format non supporté', 'error'); return; }
     if (!parsed.length) { toast('Aucune transaction détectée', 'error'); return; }
-    // Catégorise
+    // Catégorise SEULEMENT si la tx n'a pas déjà une catégorie du fichier source
+    // (le JSON v2 arrive déjà catégorisé, on préserve son travail)
     parsed.forEach(t => {
-      const c = categorize(t.label, t.amount);
-      t.category = c.category;
-      t.sub_category = c.sub_category;
       t.merchant_key = merchantKey(t.label);
+      if (!t.category || t.category === 'Autres') {
+        const c = categorize(t.label, t.amount);
+        // On n'écrase que si la catégorisation auto trouve mieux que "Autres"
+        if (c.category && c.category !== 'Autres') {
+          t.category = c.category;
+          t.sub_category = c.sub_category;
+        }
+      }
     });
     // Recherche doublons
     importPreviewData = parsed;
