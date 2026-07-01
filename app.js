@@ -384,6 +384,18 @@ async function confirmModal() {
   }
 }
 
+// Confirmation oui/non basée sur la modale : renvoie true si l'utilisateur confirme, false s'il annule/ferme.
+function confirmDialog(title, bodyHtml) {
+  return new Promise(resolve => {
+    let done = false;
+    const m = $('modal');
+    const obs = new MutationObserver(() => { if (m.style.display === 'none') finish(false); });
+    function finish(v) { if (!done) { done = true; obs.disconnect(); resolve(v); } }
+    openModal(title, '', () => finish(true), bodyHtml);
+    obs.observe(m, { attributes: true, attributeFilter: ['style', 'class'] });
+  });
+}
+
 // ═══ AUTH ══════════════════════════════════════════════════════
 function switchAuthTab(tab) {
   $('auth-login').style.display = tab === 'login' ? '' : 'none';
@@ -1044,6 +1056,21 @@ async function quickAddTx() {
   const category = $('qa-cat').value;
   const payMethod = $('qa-paymethod') ? $('qa-paymethod').value : null;
   if (!label || !amount || amount <= 0) { toast('Description et montant requis', 'error'); return; }
+  // ⚠️ Alerte doublon : une opération du même montant existe déjà à ±3 jours ?
+  const absAmt = Math.abs(amount);
+  const dup = transactions.find(t => {
+    const daysDiff = Math.abs((new Date(t.date_op) - new Date(selectedDay)) / 86400000);
+    return Math.abs(Number(t.amount)) === absAmt && daysDiff <= 3;
+  });
+  if (dup) {
+    const ok = await confirmDialog('⚠️ Doublon possible', `
+      <div style="font-size:14px;line-height:1.6">
+        Une opération de <b>${fmtD(absAmt)}</b> existe déjà le <b>${dup.date_op}</b> :<br>
+        <span style="color:var(--muted)">« ${esc(dup.label)} »</span><br><br>
+        Ajouter quand même cette nouvelle opération ?
+      </div>`);
+    if (!ok) { toast('Ajout annulé'); return; }
+  }
   const newTx = {
     user_id: currentUser.id,
     date_op: selectedDay,
@@ -1240,6 +1267,9 @@ function renderDashboard() {
     </div>
   `).join('') || '<div class="empty-sub">Aucune sortie ce mois</div>';
 
+  // ═══ Tendance des dépenses par catégorie (catégories choisies par l'utilisateur) ═══
+  renderCatTrend();
+
   // Top dépenses
   const topExp = $('top-expenses');
   const sortedTx = monthTx.filter(t => t.type === 'sortie').sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).slice(0, 8);
@@ -1261,6 +1291,86 @@ function updateChart(id, type, data, opts = {}) {
   if (!canvas) return;
   if (charts[id]) charts[id].destroy();
   charts[id] = new Chart(canvas, { type, data, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, ...opts.plugins }, ...opts } });
+}
+
+// ─── Graphe « Tendance des dépenses par catégorie » : sélection libre des catégories ───
+let catTrendSel = null; // Set des catégories choisies ; null = pas encore initialisé (→ top 5 auto)
+function renderCatTrend() {
+  const isGlobalYear = (typeof dashYear !== 'undefined') && dashYear === -1;
+  // Périodes = 12 mois de l'année, ou par année en mode Global (comme le graphe d'évolution)
+  const periods = [];
+  if (isGlobalYear) {
+    [...new Set(transactions.map(t => t.date_op.slice(0, 4)))].sort().forEach(y => periods.push({ label: y, match: t => t.date_op.startsWith(y) }));
+  } else {
+    for (let m = 0; m < 12; m++) {
+      const key = `${dashYear}-${String(m + 1).padStart(2, '0')}`;
+      periods.push({ label: MONTHS_SHORT[m], match: t => t.date_op.startsWith(key) });
+    }
+  }
+  const scope = isGlobalYear ? transactions : transactions.filter(t => t.date_op.startsWith(String(dashYear)));
+  const spend = scope.filter(t => t.type === 'sortie');
+
+  // Toutes les catégories de dépense (sur tout l'historique) → liste stable pour les puces
+  const allTotals = {};
+  transactions.filter(t => t.type === 'sortie').forEach(t => { allTotals[t.category] = (allTotals[t.category] || 0) + Math.abs(Number(t.amount)); });
+  const allSpendCats = Object.entries(allTotals).sort((a, b) => b[1] - a[1]).map(e => e[0]).filter(Boolean);
+
+  // Sélection : localStorage sinon top 5 par défaut
+  if (catTrendSel === null) {
+    try { const s = JSON.parse(localStorage.getItem('monie_cat_trend_sel') || 'null'); if (Array.isArray(s)) catTrendSel = new Set(s); } catch (e) {}
+    if (catTrendSel === null) catTrendSel = new Set(allSpendCats.slice(0, 5));
+  }
+  const selected = allSpendCats.filter(c => catTrendSel.has(c));
+
+  // Puces cliquables
+  const chipsEl = $('cat-trend-chips');
+  if (chipsEl) {
+    if (!chipsEl.dataset.wired) {
+      chipsEl.dataset.wired = '1';
+      chipsEl.addEventListener('click', e => {
+        const b = e.target.closest('button[data-cat]');
+        if (b) toggleCatTrend(b.dataset.cat);
+        else if (e.target.closest('#cat-trend-reset')) resetCatTrend();
+      });
+    }
+    const chips = allSpendCats.map(cat => {
+      const on = catTrendSel.has(cat);
+      const col = catColor(cat);
+      const style = on
+        ? `background:${col}22;border:1.5px solid ${col};color:${col}`
+        : `background:transparent;border:1.5px solid var(--border);color:var(--muted)`;
+      return `<button type="button" data-cat="${esc(cat)}" style="${style};padding:5px 10px;border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:4px;white-space:nowrap">${catIcon(cat)} ${esc(cat)}</button>`;
+    }).join('');
+    const reset = `<button type="button" id="cat-trend-reset" title="Revenir au top 5" style="background:transparent;border:1.5px dashed var(--border);color:var(--muted);padding:5px 10px;border-radius:100px;font-size:12px;font-weight:600;cursor:pointer">↺ Top 5</button>`;
+    chipsEl.innerHTML = chips + reset;
+  }
+
+  const datasets = selected.map(cat => ({
+    label: cat,
+    data: periods.map(p => spend.filter(t => t.category === cat && p.match(t)).reduce((s, t) => s + Math.abs(Number(t.amount)), 0)),
+    borderColor: catColor(cat), backgroundColor: 'transparent', borderWidth: 2, tension: 0.35, pointRadius: 2, pointHoverRadius: 4
+  }));
+  updateChart('chart-cat-trend', 'line', {
+    labels: periods.map(p => p.label),
+    datasets
+  }, {
+    plugins: { legend: { display: selected.length > 0 && selected.length <= 8, position: 'top', labels: { color: '#718096', font: { size: 11 }, boxWidth: 12, usePointStyle: true } } },
+    scales: {
+      x: { ticks: { color: '#A0AEC0' }, grid: { display: false } },
+      y: { ticks: { color: '#A0AEC0', callback: v => v.toLocaleString('fr-FR') + ' €' }, grid: { color: '#F5E7EA' } }
+    }
+  });
+}
+function toggleCatTrend(cat) {
+  if (catTrendSel === null) renderCatTrend(); // initialise si besoin
+  if (catTrendSel.has(cat)) catTrendSel.delete(cat); else catTrendSel.add(cat);
+  try { localStorage.setItem('monie_cat_trend_sel', JSON.stringify([...catTrendSel])); } catch (e) {}
+  renderCatTrend();
+}
+function resetCatTrend() {
+  catTrendSel = null;
+  try { localStorage.removeItem('monie_cat_trend_sel'); } catch (e) {}
+  renderCatTrend();
 }
 
 // ═══ TRANSACTIONS LIST ═════════════════════════════════════════
@@ -2172,12 +2282,20 @@ async function renderSuivi() {
   body.innerHTML = '';
   const now = new Date();
   let prevPatTot = null; // pour évolution vs N-1 (sur le solde de fin de mois)
+  const chartLabels = [], chartData = [];
   for (let m = 0; m < 12; m++) {
     if (new Date(year, m, 1) > new Date(now.getFullYear(), now.getMonth() + 1, 1)) break;
     const key = `${year}-${String(m + 1).padStart(2, '0')}`;
     const r = suiviData[key] || {};
     // Solde total des comptes en fin de mois = « ce qui te reste »
     const patTot = (r.lcl || 0) + (r.bourso || 0) + (r.especes || 0) + (r.esalia || 0) + (r.banque_postale || 0) + (r.investissements || 0) + (r.autre || 0);
+
+    // Mois précédent (pour le bouton « copier »)
+    const pd = new Date(year, m - 1, 1);
+    const prevKey = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
+    const prev = suiviData[prevKey];
+    const prevTot = prev ? (prev.lcl || 0) + (prev.bourso || 0) + (prev.especes || 0) + (prev.esalia || 0) + (prev.banque_postale || 0) + (prev.investissements || 0) + (prev.autre || 0) : 0;
+    const showCopy = prevTot > 0 && patTot === 0;
 
     // Évolution vs mois N-1 (sur le solde de fin de mois)
     let evoValStr = '—', evoPctStr = '—', evoColor = 'var(--muted)';
@@ -2190,8 +2308,12 @@ async function renderSuivi() {
       evoPctStr = `${sign}${pct.toFixed(1)}%`;
     }
 
+    const moisCell = `<div style="display:flex;align-items:center;gap:6px;justify-content:space-between">
+        <span>${MONTHS_SHORT[m]} ${year}</span>
+        ${showCopy ? `<button type="button" class="suivi-copy-btn" title="Recopier les soldes de ${prevKey}" onclick="copySuiviPrevMonth('${key}')">⧉ M-1</button>` : ''}
+      </div>`;
     body.innerHTML += `<tr data-month="${key}">
-      <td>${MONTHS_SHORT[m]} ${year}</td>
+      <td>${moisCell}</td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.lcl > 0 ? r.lcl : ''}" placeholder="0" oninput="saveSuivi('${key}','lcl',this.value)"></td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.bourso > 0 ? r.bourso : ''}" placeholder="0" oninput="saveSuivi('${key}','bourso',this.value)"></td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.especes > 0 ? r.especes : ''}" placeholder="0" oninput="saveSuivi('${key}','especes',this.value)"></td>
@@ -2203,8 +2325,47 @@ async function renderSuivi() {
       <td style="font-weight:700;color:${evoColor}">${evoValStr}</td>
       <td style="font-weight:700;color:${evoColor}">${evoPctStr}</td>
     </tr>`;
+    chartLabels.push(MONTHS_SHORT[m]);
+    chartData.push(patTot);
     if (patTot > 0) prevPatTot = patTot;
   }
+
+  // Courbe d'évolution du patrimoine (les mois vides = coupure, pas un 0)
+  const hasAny = chartData.some(v => v > 0);
+  const chartCard = $('suivi-chart-card');
+  if (chartCard) chartCard.style.display = hasAny ? '' : 'none';
+  const emptyHint = $('suivi-chart-empty');
+  if (emptyHint) emptyHint.style.display = hasAny ? 'none' : '';
+  if (hasAny) {
+    updateChart('suivi-chart', 'line', {
+      labels: chartLabels,
+      datasets: [{
+        label: 'Patrimoine', data: chartData.map(v => v > 0 ? v : null),
+        borderColor: '#E76F51', backgroundColor: 'rgba(231,111,81,0.12)',
+        borderWidth: 2.5, tension: 0.35, fill: true, pointRadius: 3, pointHoverRadius: 5, spanGaps: true
+      }]
+    }, {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#A0AEC0' }, grid: { display: false } },
+        y: { ticks: { color: '#A0AEC0', callback: v => v.toLocaleString('fr-FR') + ' €' }, grid: { color: '#F5E7EA' } }
+      }
+    });
+  }
+}
+// Recopie les soldes du mois précédent dans le mois courant (gain de temps de saisie)
+function copySuiviPrevMonth(key) {
+  const [y, m] = key.split('-').map(Number);
+  const pd = new Date(y, m - 2, 1); // m est 1-based → m-2 = index du mois précédent
+  const prevKey = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
+  const prev = suiviData[prevKey];
+  if (!prev) { toast('Aucune donnée le mois précédent', 'error'); return; }
+  const cols = ['lcl', 'bourso', 'especes', 'esalia', 'banque_postale', 'investissements', 'autre'];
+  if (!suiviData[key]) suiviData[key] = { month: key + '-01' };
+  cols.forEach(c => { if (prev[c] != null) suiviData[key][c] = prev[c]; });
+  saveSuivi(key, 'lcl', suiviData[key].lcl || 0); // déclenche l'enregistrement du payload complet
+  renderSuivi();
+  toast(`Soldes de ${prevKey} recopiés — ajuste si besoin`, 'success');
 }
 let suiviSaveTimers = {};
 async function saveSuivi(key, col, val) {
@@ -2820,9 +2981,9 @@ function renderVueAnnuelle() {
   });
   buildRow('Total Revenus', totalRev, { trClass: 'total-row' });
 
-  // Dépenses
+  // Dépenses (on exclut « Transactions » = virements internes, qui fausseraient le solde net)
   let totalExp = new Array(12).fill(0);
-  EXP_CATS.forEach(cat => {
+  EXP_CATS.filter(cat => cat !== 'Transactions').forEach(cat => {
     const vals = catByMonth[cat] || new Array(12).fill(0);
     vals.forEach((v, i) => totalExp[i] += v);
     if (vals.some(v => v > 0)) {
@@ -2834,6 +2995,26 @@ function renderVueAnnuelle() {
   // Solde net
   const solde = totalRev.map((r, i) => r - totalExp[i]);
   buildRow('Solde net', solde, { trClass: 'subtotal-row' });
+
+  // Graphe Revenus vs Dépenses par mois
+  const annuelleHasData = totalRev.some(v => v > 0) || totalExp.some(v => v > 0);
+  const aChartCard = $('annuelle-chart-card');
+  if (aChartCard) aChartCard.style.display = annuelleHasData ? '' : 'none';
+  if (annuelleHasData) {
+    updateChart('annuelle-chart', 'bar', {
+      labels: MONTHS_SHORT,
+      datasets: [
+        { label: 'Revenus', data: totalRev, backgroundColor: '#7FB89E', borderRadius: 4, maxBarThickness: 22 },
+        { label: 'Dépenses', data: totalExp, backgroundColor: '#DD7B85', borderRadius: 4, maxBarThickness: 22 }
+      ]
+    }, {
+      plugins: { legend: { display: true, position: 'top', labels: { color: '#718096', font: { size: 11 }, usePointStyle: true, boxWidth: 10 } } },
+      scales: {
+        x: { ticks: { color: '#A0AEC0' }, grid: { display: false } },
+        y: { ticks: { color: '#A0AEC0', callback: v => v.toLocaleString('fr-FR') + ' €' }, grid: { color: '#F5E7EA' } }
+      }
+    });
+  }
 
   // KPIs année
   const sumRev = totalRev.reduce((s, v) => s + v, 0);
