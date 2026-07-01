@@ -46,6 +46,8 @@ let goals = [];
 let suiviData = {};
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
+let dashYear = new Date().getFullYear();
+let dashMonth = new Date().getMonth();
 let selectedDay = null;
 let charts = {};
 let importPreviewData = [];
@@ -141,9 +143,12 @@ async function showApp(user) {
   const short = user.email.split('@')[0];
   set('user-avatar', short.charAt(0).toUpperCase());
   set('user-email', user.email);
+  set('mobile-email', user.email);
   const h = new Date().getHours();
   const greet = h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir';
-  set('dash-greeting', `${greet}, ${short} 🌸`);
+  const capitalized = short.charAt(0).toUpperCase() + short.slice(1);
+  set('dash-greeting', `${greet}, ${capitalized} 🌸`);
+  set('mobile-greeting', `${greet}, ${capitalized} 🌸`);
   await loadAllData();
   populateYearSelect();
   renderCalendar();
@@ -342,9 +347,21 @@ async function quickAddTx() {
 }
 
 // ═══ DASHBOARD ═════════════════════════════════════════════════
-function renderDashboard() {
+function changeDashMonth(dir) {
+  dashMonth += dir;
+  if (dashMonth > 11) { dashMonth = 0; dashYear++; }
+  if (dashMonth < 0) { dashMonth = 11; dashYear--; }
   const now = new Date();
-  const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  // Empêche futur
+  if (dashYear > now.getFullYear() || (dashYear === now.getFullYear() && dashMonth > now.getMonth())) {
+    dashMonth = now.getMonth();
+    dashYear = now.getFullYear();
+  }
+  renderDashboard();
+}
+function renderDashboard() {
+  set('dash-month-lbl', MONTHS[dashMonth] + ' ' + dashYear);
+  const monthPrefix = `${dashYear}-${String(dashMonth + 1).padStart(2, '0')}`;
   const monthTx = transactions.filter(t => t.date_op.startsWith(monthPrefix));
   const totalIn = monthTx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
   const totalOut = monthTx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
@@ -359,12 +376,12 @@ function renderDashboard() {
   set('dash-rev-hint', `${monthTx.filter(t => t.type === 'entree').length} entrées`);
   set('dash-dep-hint', `${monthTx.filter(t => t.type === 'sortie').length} sorties`);
 
-  // Évolution 12 mois
+  // Évolution 12 mois se termine au mois sélectionné
   const evoLabels = [];
   const evoIn = [];
   const evoOut = [];
   for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const d = new Date(dashYear, dashMonth - i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     evoLabels.push(MONTHS_SHORT[d.getMonth()] + ' ' + String(d.getFullYear()).slice(2));
     const mtx = transactions.filter(t => t.date_op.startsWith(key));
@@ -855,6 +872,7 @@ async function renderSuivi() {
     const autres = r.autres_revenus || 0;
     const patTot = (r.lcl || 0) + (r.bourso || 0) + (r.especes || 0) + (r.esalia || 0) + (r.banque_postale || 0) + (r.investissements || 0) + (r.autre || 0);
     const revTot = salaire + tickets + rembours + autres;
+    const autoStyle = 'style="color:var(--sage);background:var(--sage-soft);font-family:var(--fm);font-weight:600" title="Calculé auto depuis tes transactions"';
     body.innerHTML += `<tr data-month="${key}">
       <td>${MONTHS_SHORT[m]} ${year}</td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.lcl > 0 ? r.lcl : ''}" placeholder="0" oninput="saveSuivi('${key}','lcl',this.value)"></td>
@@ -864,12 +882,12 @@ async function renderSuivi() {
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.banque_postale > 0 ? r.banque_postale : ''}" placeholder="0" oninput="saveSuivi('${key}','banque_postale',this.value)"></td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.investissements > 0 ? r.investissements : ''}" placeholder="0" oninput="saveSuivi('${key}','investissements',this.value)"></td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.autre > 0 ? r.autre : ''}" placeholder="0" oninput="saveSuivi('${key}','autre',this.value)"></td>
-      <td style="font-weight:700;color:var(--rose)">${patTot > 0 ? fmt(patTot) : '—'}</td>
-      <td style="color:var(--sage)">${autoSal > 0 ? fmt(autoSal) : '—'}</td>
-      <td style="color:var(--sage)">${autoTic > 0 ? fmt(autoTic) : '—'}</td>
-      <td style="color:var(--sage)">${autoRem > 0 ? fmt(autoRem) : '—'}</td>
+      <td style="font-weight:700;color:var(--rose);background:var(--rose-soft)">${patTot > 0 ? fmt(patTot) : '—'}</td>
+      <td ${autoStyle}>${autoSal > 0 ? fmt(autoSal) : '—'}</td>
+      <td ${autoStyle}>${autoTic > 0 ? fmt(autoTic) : '—'}</td>
+      <td ${autoStyle}>${autoRem > 0 ? fmt(autoRem) : '—'}</td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${autres > 0 ? autres : ''}" placeholder="0" oninput="saveSuivi('${key}','autres_revenus',this.value)"></td>
-      <td style="font-weight:700;color:var(--sage)">${revTot > 0 ? fmt(revTot) : '—'}</td>
+      <td style="font-weight:700;color:var(--sage);background:var(--sage-soft)">${revTot > 0 ? fmt(revTot) : '—'}</td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.epargne_cible > 0 ? r.epargne_cible : ''}" placeholder="0" oninput="saveSuivi('${key}','epargne_cible',this.value)"></td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.epargne_reel > 0 ? r.epargne_reel : ''}" placeholder="0" oninput="saveSuivi('${key}','epargne_reel',this.value)"></td>
     </tr>`;
