@@ -2404,14 +2404,16 @@ async function renderSuivi() {
     if (new Date(year, m, 1) > new Date(now.getFullYear(), now.getMonth() + 1, 1)) break;
     const key = `${year}-${String(m + 1).padStart(2, '0')}`;
     const r = suiviData[key] || {};
-    // Solde total des comptes en fin de mois = « ce qui te reste »
-    const patTot = (r.lcl || 0) + (r.bourso || 0) + (r.especes || 0) + (r.esalia || 0) + (r.banque_postale || 0) + (r.investissements || 0) + (r.autre || 0);
+    // Épargne = Livret A + LDDS + Assurance vie + Esalia + Investissements
+    const epargneTot = (r.livret_a || 0) + (r.ldds || 0) + (r.assurance_vie || 0) + (r.esalia || 0) + (r.investissements || 0);
+    // Solde total en fin de mois = comptes courants + épargne = « ce qui te reste »
+    const patTot = (r.lcl || 0) + (r.bourso || 0) + (r.especes || 0) + (r.banque_postale || 0) + (r.autre || 0) + epargneTot;
 
     // Mois précédent (pour le bouton « copier »)
     const pd = new Date(year, m - 1, 1);
     const prevKey = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
     const prev = suiviData[prevKey];
-    const prevTot = prev ? (prev.lcl || 0) + (prev.bourso || 0) + (prev.especes || 0) + (prev.esalia || 0) + (prev.banque_postale || 0) + (prev.investissements || 0) + (prev.autre || 0) : 0;
+    const prevTot = prev ? (prev.lcl || 0) + (prev.bourso || 0) + (prev.especes || 0) + (prev.banque_postale || 0) + (prev.autre || 0) + (prev.livret_a || 0) + (prev.ldds || 0) + (prev.assurance_vie || 0) + (prev.esalia || 0) + (prev.investissements || 0) : 0;
     const showCopy = prevTot > 0 && patTot === 0;
 
     // Évolution vs mois N-1 (sur le solde de fin de mois)
@@ -2429,16 +2431,13 @@ async function renderSuivi() {
         <span>${MONTHS_SHORT[m]} ${year}</span>
         ${showCopy ? `<button type="button" class="suivi-copy-btn" title="Recopier les soldes de ${prevKey}" onclick="copySuiviPrevMonth('${key}')">⧉ M-1</button>` : ''}
       </div>`;
+    const inp = (col) => `<td><input class="suivi-inp" type="number" step="0.01" value="${r[col] > 0 ? r[col] : ''}" placeholder="0" oninput="saveSuivi('${key}','${col}',this.value)"></td>`;
     body.innerHTML += `<tr data-month="${key}">
       <td>${moisCell}</td>
-      <td><input class="suivi-inp" type="number" step="0.01" value="${r.lcl > 0 ? r.lcl : ''}" placeholder="0" oninput="saveSuivi('${key}','lcl',this.value)"></td>
-      <td><input class="suivi-inp" type="number" step="0.01" value="${r.bourso > 0 ? r.bourso : ''}" placeholder="0" oninput="saveSuivi('${key}','bourso',this.value)"></td>
-      <td><input class="suivi-inp" type="number" step="0.01" value="${r.especes > 0 ? r.especes : ''}" placeholder="0" oninput="saveSuivi('${key}','especes',this.value)"></td>
-      <td><input class="suivi-inp" type="number" step="0.01" value="${r.esalia > 0 ? r.esalia : ''}" placeholder="0" oninput="saveSuivi('${key}','esalia',this.value)"></td>
-      <td><input class="suivi-inp" type="number" step="0.01" value="${r.banque_postale > 0 ? r.banque_postale : ''}" placeholder="0" oninput="saveSuivi('${key}','banque_postale',this.value)"></td>
-      <td><input class="suivi-inp" type="number" step="0.01" value="${r.investissements > 0 ? r.investissements : ''}" placeholder="0" oninput="saveSuivi('${key}','investissements',this.value)"></td>
-      <td><input class="suivi-inp" type="number" step="0.01" value="${r.autre > 0 ? r.autre : ''}" placeholder="0" oninput="saveSuivi('${key}','autre',this.value)"></td>
-      <td style="font-weight:800;color:var(--ink);background:linear-gradient(135deg,#FFEDE5,#E7F3EC)" title="Solde total de tes comptes en fin de mois">${patTot > 0 ? fmt(patTot) : '—'}</td>
+      ${inp('lcl')}${inp('bourso')}${inp('especes')}${inp('banque_postale')}${inp('autre')}
+      ${inp('livret_a')}${inp('ldds')}${inp('assurance_vie')}${inp('esalia')}${inp('investissements')}
+      <td style="font-weight:700;color:var(--plum);background:var(--lavender-soft)" title="Livret A + LDDS + Assurance vie + Esalia + Investissements">${epargneTot > 0 ? fmt(epargneTot) : '—'}</td>
+      <td style="font-weight:800;color:var(--ink);background:linear-gradient(135deg,#FFEDE5,#E7F3EC)" title="Comptes courants + épargne">${patTot > 0 ? fmt(patTot) : '—'}</td>
       <td style="font-weight:700;color:${evoColor}">${evoValStr}</td>
       <td style="font-weight:700;color:${evoColor}">${evoPctStr}</td>
     </tr>`;
@@ -2477,7 +2476,7 @@ function copySuiviPrevMonth(key) {
   const prevKey = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
   const prev = suiviData[prevKey];
   if (!prev) { toast('Aucune donnée le mois précédent', 'error'); return; }
-  const cols = ['lcl', 'bourso', 'especes', 'esalia', 'banque_postale', 'investissements', 'autre'];
+  const cols = ['lcl', 'bourso', 'especes', 'esalia', 'banque_postale', 'investissements', 'autre', 'livret_a', 'ldds', 'assurance_vie'];
   if (!suiviData[key]) suiviData[key] = { month: key + '-01' };
   cols.forEach(c => { if (prev[c] != null) suiviData[key][c] = prev[c]; });
   saveSuivi(key, 'lcl', suiviData[key].lcl || 0); // déclenche l'enregistrement du payload complet
@@ -2491,7 +2490,7 @@ async function saveSuivi(key, col, val) {
   clearTimeout(suiviSaveTimers[key]);
   suiviSaveTimers[key] = setTimeout(async () => {
     const payload = { user_id: currentUser.id, month: key + '-01' };
-    ['lcl','bourso','especes','esalia','banque_postale','investissements','autre','salaire','tickets_resto','remboursements','autres_revenus','epargne_cible','epargne_reel'].forEach(c => {
+    ['lcl','bourso','especes','esalia','banque_postale','investissements','autre','livret_a','ldds','assurance_vie','salaire','tickets_resto','remboursements','autres_revenus','epargne_cible','epargne_reel'].forEach(c => {
       if (suiviData[key][c] !== undefined) payload[c] = suiviData[key][c];
     });
     const r = await dbGuard(
@@ -2995,17 +2994,11 @@ function renderPerfCards(currentKey, curIn, curOut, curBal) {
     plugins: { legend: { display: false }, tooltip: { enabled: false } }
   });
 
-  // ─── 2. Épargne du mois : transactions vers épargne + tracker_mensuel epargne_reel ───
-  // Sources d'épargne : Investissements + tracker_mensuel[month].epargne_reel
-  const invTx = transactions.filter(t => t.date_op.startsWith(currentKey) && t.category === 'Investissements');
-  const curInvest = invTx.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
-  const curTrackerEp = (suiviData[currentKey]?.epargne_reel) || 0;
-  const curSavings = Math.max(curInvest, curTrackerEp); // prend le plus grand (évite double compte)
-
-  const prevInvTx = transactions.filter(t => t.date_op.startsWith(prevKey) && t.category === 'Investissements');
-  const prevInvest = prevInvTx.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
-  const prevTrackerEp = (suiviData[prevKey]?.epargne_reel) || 0;
-  const prevSavings = Math.max(prevInvest, prevTrackerEp);
+  // ─── 2. Épargne : basée sur les comptes d'épargne du Suivi mensuel ───
+  // Épargne = Livret A + LDDS + Assurance vie + Esalia + Investissements (soldes saisis)
+  const suiviEpargne = (k) => { const r = suiviData[k] || {}; return (r.livret_a || 0) + (r.ldds || 0) + (r.assurance_vie || 0) + (r.esalia || 0) + (r.investissements || 0); };
+  const curSavings = suiviEpargne(currentKey);
+  const prevSavings = suiviEpargne(prevKey);
 
   const savingsVal = $('perf-savings-val');
   savingsVal.textContent = fmt(curSavings);
