@@ -34,6 +34,10 @@ const CAT_META = {
   'Impôts': { emoji: '🧾', color: '#DD7B85' },
   'Transactions': { emoji: '🔄', color: '#A0AEC0' },
   'Amis & Famille': { emoji: '💌', color: '#DD7B85' },
+  'Éducation': { emoji: '🎓', color: '#7C3F58' },
+  'Voyages': { emoji: '✈️', color: '#4FC3F7' },
+  'Divertissement': { emoji: '🎬', color: '#E76F51' },
+  'Aide au logement': { emoji: '🏘️', color: '#7FB89E' },
   'Autres': { emoji: '📌', color: '#A0AEC0' }
 };
 // Métadonnées des banques source (pastilles LCL / BoursoBank)
