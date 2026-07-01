@@ -78,8 +78,10 @@ function closeSidebar() {
   document.body.style.overflow = '';
 }
 
-// ═══ HELP BANNERS ══════════════════════════════════════════════
-function closeHelp(id) {
+// ═══ HELP BANNERS (accordéons) ═════════════════════════════════
+function closeHelp(id, ev) {
+  // stopper le clic pour ne pas déclencher toggleHelp du parent
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
   const el = document.getElementById(id);
   if (el) el.classList.add('hidden');
   try {
@@ -87,11 +89,85 @@ function closeHelp(id) {
     if (!hidden.includes(id)) { hidden.push(id); localStorage.setItem('monie_help_hidden', JSON.stringify(hidden)); }
   } catch (e) {}
 }
+function toggleHelp(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('open');
+  try {
+    const openIds = JSON.parse(localStorage.getItem('monie_help_open') || '[]');
+    const isOpen = el.classList.contains('open');
+    const filtered = openIds.filter(x => x !== id);
+    if (isOpen) filtered.push(id);
+    localStorage.setItem('monie_help_open', JSON.stringify(filtered));
+  } catch (e) {}
+}
 function restoreHelpBanners() {
   try {
     const hidden = JSON.parse(localStorage.getItem('monie_help_hidden') || '[]');
     hidden.forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+    const openIds = JSON.parse(localStorage.getItem('monie_help_open') || '[]');
+    openIds.forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('open'); });
   } catch (e) {}
+  // Injecter le chevron + rendre le header cliquable pour chaque banner
+  document.querySelectorAll('.help-banner').forEach(banner => {
+    const hd = banner.querySelector('.help-banner-hd');
+    if (!hd || banner.dataset.wired) return;
+    banner.dataset.wired = '1';
+    // Ajouter chevron si pas déjà présent
+    if (!hd.querySelector('.help-banner-chevron')) {
+      const chev = document.createElement('div');
+      chev.className = 'help-banner-chevron';
+      chev.textContent = '▾';
+      hd.appendChild(chev);
+    }
+    hd.addEventListener('click', (e) => {
+      // Le bouton close a son propre stopPropagation
+      if (e.target.closest('.help-banner-close')) return;
+      toggleHelp(banner.id);
+    });
+  });
+}
+
+// ═══ HEADER AUTO-HIDE ══════════════════════════════════════════
+let _lastScrollY = 0;
+let _headerHidden = false;
+function initHeaderAutoHide() {
+  const header = document.querySelector('.mobile-header') || document.querySelector('.header') || document.querySelector('header');
+  if (!header) return;
+  const threshold = 8; // pixels de tolérance
+  const onScroll = () => {
+    const y = window.scrollY;
+    // En haut de page → toujours visible
+    if (y < 60) {
+      if (_headerHidden) { header.classList.remove('header-hidden'); _headerHidden = false; }
+      _lastScrollY = y;
+      return;
+    }
+    const dy = y - _lastScrollY;
+    if (dy > threshold && !_headerHidden) {
+      header.classList.add('header-hidden');
+      _headerHidden = true;
+    } else if (dy < -threshold && _headerHidden) {
+      header.classList.remove('header-hidden');
+      _headerHidden = false;
+    }
+    _lastScrollY = y;
+  };
+  // Throttle via requestAnimationFrame
+  let ticking = false;
+  window.addEventListener('scroll', () => {
+    if (!ticking) {
+      requestAnimationFrame(() => { onScroll(); ticking = false; });
+      ticking = true;
+    }
+  }, { passive: true });
+  // Show on hover (souris en haut d'écran)
+  document.addEventListener('mousemove', (e) => {
+    if (e.clientY < 60 && _headerHidden) {
+      header.classList.remove('header-hidden');
+      _headerHidden = false;
+    }
+  }, { passive: true });
 }
 
 // ═══ TOAST + MODAL ═════════════════════════════════════════════
@@ -219,6 +295,7 @@ async function showApp(user) {
   renderDashboard();
   populateCategorySelects();
   restoreHelpBanners();
+  initHeaderAutoHide();
 }
 
 async function loadGoals() {
@@ -900,13 +977,13 @@ function showImportPreview() {
 
   html += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;padding:8px 12px;background:var(--bg);border-radius:8px">${tipMsg}</div>`;
 
-  // Bulk action bar (si des transactions sont sélectionnées)
+  // Bulk action bar (si des transactions sont sélectionnées) — visible en haut + en bas (sticky)
   const visibleIndexes = displayed.map(t => importPreviewData.indexOf(t));
   const selectedInView = visibleIndexes.filter(i => selectedIndexes.has(i));
   if (selectedIndexes.size > 0) {
     const catOptions = cats.map(c => `<option value="${c}">${catIcon(c)} ${c}</option>`).join('');
     html += `
-      <div class="bulk-bar">
+      <div class="bulk-bar floating" id="bulk-bar-floating">
         <span class="bulk-bar-count">${selectedIndexes.size}</span>
         <span class="bulk-bar-label">sélectionnée(s)</span>
         <div class="bulk-bar-actions">
@@ -944,6 +1021,13 @@ function showImportPreview() {
       const globalIdx = importPreviewData.indexOf(t);
       const isSelected = selectedIndexes.has(globalIdx);
       const catsToShow = cats.map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('');
+      const isAutre = (t.category || '').toLowerCase() === 'autres';
+      const noteHtml = isAutre ? `
+        <div class="tx-note-wrap">
+          <input type="text" class="tx-note-input" placeholder="✏️ Note : à quoi correspond cette transaction ?"
+                 value="${(t.comment || '').replace(/"/g, '&quot;')}"
+                 oninput="setImportTxNote(${globalIdx}, this.value)">
+        </div>` : '';
       html += `
         <div class="tx-row ${isSelected ? 'selected' : ''}" style="border-bottom:1px solid var(--border-soft)" data-tx-idx="${globalIdx}">
           <input type="checkbox" class="tx-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelectTx(${globalIdx}, this.checked)" title="Sélectionner">
@@ -957,6 +1041,7 @@ function showImportPreview() {
           </div>
           <div class="tx-amt ${t.type === 'entree' ? 'amt-in' : 'amt-out'}">${t.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(t.amount))}</div>
           <button class="import-del-btn" onclick="deleteImportTx(${globalIdx})" title="Supprimer de l'import">✕</button>
+          ${noteHtml}
         </div>`;
     });
   }
@@ -976,11 +1061,25 @@ function showImportPreview() {
     html += `<div class="pag-info" style="text-align:center;padding:16px">${filtered.length} transaction(s) affichée(s)</div>`;
   }
 
+  // Barre d'actions en bas de page (duplicate du haut)
+  html += `
+    <div style="margin-top:20px;padding:16px;background:var(--bg);border-radius:var(--radius);display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;border:1.5px dashed var(--border)">
+      <button class="btn-ghost" onclick="cancelImport()">Annuler</button>
+      <button class="btn-primary" onclick="confirmImport()">✓ Valider l'import (${nNew})</button>
+    </div>`;
+
   html += `</div></div>`;
   wrap.innerHTML = html;
 
   // Restaurer scroll
   requestAnimationFrame(() => window.scrollTo({ top: preservedScroll, behavior: 'instant' }));
+}
+
+// Sauvegarde de la note sur une transaction import (catégorie "Autres")
+function setImportTxNote(idx, val) {
+  if (importPreviewData[idx]) {
+    importPreviewData[idx].comment = val;
+  }
 }
 
 function setPreviewTab(tab) {
@@ -1214,7 +1313,8 @@ async function confirmImport() {
     sub_category: t.sub_category,
     source: 'import_' + (t._source || 'csv'),
     merchant_key: t.merchant_key,
-    account: t.account || 'Compte courant'
+    account: t.account || 'Compte courant',
+    comment: t.comment || null
   }));
   if (!toAdd.length) { toast('Rien à importer', 'error'); return; }
   toast(`Import de ${toAdd.length} transactions…`);
