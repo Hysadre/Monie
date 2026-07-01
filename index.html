@@ -183,16 +183,48 @@
           </div>
           <div id="day-tx-list"></div>
           <div class="quick-add">
-            <div class="quick-add-hd">➕ Saisir une dépense pour ce jour</div>
-            <div class="quick-add-form">
-              <input class="inp" type="text" id="qa-label" placeholder="Ex: Café Dolce">
-              <input class="inp" type="number" step="0.01" id="qa-amount" placeholder="Montant €">
-              <button class="btn-primary" onclick="quickAddTx()">Ajouter</button>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:8px;align-items:center;font-size:12px;color:var(--muted)">
-              <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="qa-type" value="sortie" checked> Sortie</label>
-              <label style="display:flex;align-items:center;gap:6px"><input type="radio" name="qa-type" value="entree"> Entrée</label>
-              <select class="select" id="qa-cat" style="margin-left:auto;font-size:12px"></select>
+            <div class="quick-add-hd">➕ Saisir une opération pour ce jour</div>
+            <div class="qa-form-v2">
+              <!-- Étape 1 : Sortie / Entrée -->
+              <div class="qa-field">
+                <label class="qa-label">1️⃣ Type d'opération</label>
+                <div class="qa-type-toggle">
+                  <label class="qa-type-btn qa-type-out">
+                    <input type="radio" name="qa-type" value="sortie" checked onchange="updatePayMethodOptions()">
+                    <span>💸 Sortie</span>
+                  </label>
+                  <label class="qa-type-btn qa-type-in">
+                    <input type="radio" name="qa-type" value="entree" onchange="updatePayMethodOptions()">
+                    <span>💰 Entrée</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Étape 2 : Moyen de paiement -->
+              <div class="qa-field">
+                <label class="qa-label" id="qa-paymethod-label">2️⃣ 💳 Payé avec</label>
+                <select class="select" id="qa-paymethod"></select>
+              </div>
+
+              <!-- Étape 3 : Montant -->
+              <div class="qa-field">
+                <label class="qa-label">3️⃣ 💶 Montant</label>
+                <input class="inp" type="number" step="0.01" id="qa-amount" placeholder="0,00 €" inputmode="decimal">
+              </div>
+
+              <!-- Étape 4 : Libellé -->
+              <div class="qa-field">
+                <label class="qa-label">4️⃣ ✏️ Libellé</label>
+                <input class="inp" type="text" id="qa-label" placeholder="Ex: Café Dolce">
+              </div>
+
+              <!-- Étape 5 : Catégorie -->
+              <div class="qa-field">
+                <label class="qa-label">5️⃣ 🗂️ Catégorie</label>
+                <select class="select" id="qa-cat"></select>
+              </div>
+
+              <button class="btn-primary qa-submit" onclick="quickAddTx()">✓ Ajouter</button>
             </div>
           </div>
         </div>

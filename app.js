@@ -579,10 +579,45 @@ function populateCategorySelects() {
   const type = document.querySelector('input[name="qa-type"]:checked')?.value || 'sortie';
   const opts = (type === 'sortie' ? cats : catsEnt).map(c => `<option value="${c}">${catIcon(c)} ${c}</option>`).join('');
   $('qa-cat').innerHTML = opts;
+  updatePayMethodOptions();
   // Filter select
   const catsAll = Object.keys(CAT_META).sort();
   const filtCur = $('tx-filter-cat').value;
   $('tx-filter-cat').innerHTML = '<option value="all">Toutes catégories</option>' + catsAll.map(c => `<option value="${c}" ${filtCur === c ? 'selected' : ''}>${c}</option>`).join('');
+}
+
+// Moyens de paiement adaptés selon Sortie / Entrée
+const PAY_METHODS_SORTIE = [
+  { v: 'carte',       l: '💳 Carte bancaire' },
+  { v: 'especes',     l: '💵 Espèces' },
+  { v: 'cheque',      l: '📃 Chèque' },
+  { v: 'prelevement', l: '🔁 Prélèvement' },
+  { v: 'virement',    l: '➡️ Virement' },
+  { v: 'ticket_resto',l: '🎫 Titre-restaurant' },
+  { v: 'autre',       l: '❔ Autre' }
+];
+const PAY_METHODS_ENTREE = [
+  { v: 'virement',     l: '➡️ Virement (salaire, remboursement…)' },
+  { v: 'especes',      l: '💵 Espèces' },
+  { v: 'cheque',       l: '📃 Chèque' },
+  { v: 'ticket_resto', l: '🎫 Titre-restaurant' },
+  { v: 'autre',        l: '❔ Autre' }
+];
+function updatePayMethodOptions() {
+  const sel = $('qa-paymethod');
+  if (!sel) return;
+  const type = document.querySelector('input[name="qa-type"]:checked')?.value || 'sortie';
+  const methods = type === 'sortie' ? PAY_METHODS_SORTIE : PAY_METHODS_ENTREE;
+  const currentValue = sel.value;
+  sel.innerHTML = methods.map(m => `<option value="${m.v}">${m.l}</option>`).join('');
+  // Garder la valeur si toujours possible, sinon défaut (carte pour sortie, virement pour entrée)
+  if (methods.find(m => m.v === currentValue)) {
+    sel.value = currentValue;
+  } else {
+    sel.value = type === 'sortie' ? 'carte' : 'virement';
+  }
+  const lbl = $('qa-paymethod-label');
+  if (lbl) lbl.textContent = type === 'sortie' ? '💳 Payé avec :' : '💰 Reçu par :';
 }
 document.addEventListener('change', e => {
   if (e.target.matches('input[name="qa-type"]')) populateCategorySelects();
@@ -593,6 +628,7 @@ async function quickAddTx() {
   const amount = parseFloat($('qa-amount').value);
   const type = document.querySelector('input[name="qa-type"]:checked').value;
   const category = $('qa-cat').value;
+  const payMethod = $('qa-paymethod') ? $('qa-paymethod').value : null;
   if (!label || !amount || amount <= 0) { toast('Description et montant requis', 'error'); return; }
   const newTx = {
     user_id: currentUser.id,
@@ -603,16 +639,31 @@ async function quickAddTx() {
     category: category,
     sub_category: null,
     source: 'manual',
-    merchant_key: merchantKey(label)
+    merchant_key: merchantKey(label),
+    payment_method: payMethod || null
   };
   const { data, error } = await sb.from('transactions').insert(newTx).select().single();
   if (error) { toast('Erreur : ' + error.message, 'error'); return; }
   transactions.unshift(data);
   $('qa-label').value = '';
   $('qa-amount').value = '';
-  toast('Ajouté !', 'success');
+  toast('✓ Ajouté dans le calendrier et les transactions', 'success');
   renderCalendar();
   selectDay(selectedDay);
+  // Rafraîchir la vue Transactions pour que la nouvelle op y apparaisse
+  if (typeof renderTransactionsList === 'function') renderTransactionsList();
+  // Rafraîchir le dashboard aussi (KPIs, graphique du mois)
+  if (typeof renderDashboard === 'function') renderDashboard();
+}
+
+// Helper : icône pour un moyen de paiement (utilisé aussi dans Transactions)
+function payMethodIcon(pm) {
+  const map = {
+    carte: '💳', especes: '💵', cheque: '📃',
+    prelevement: '🔁', virement: '➡️',
+    ticket_resto: '🎫', autre: '❔'
+  };
+  return map[pm] || '';
 }
 
 // ═══ DASHBOARD ═════════════════════════════════════════════════

@@ -595,6 +595,73 @@ body::after {
   align-items: center;
 }
 .quick-add-form .inp { padding: 10px 12px; font-size: 13px; }
+
+/* ─── QUICK-ADD V2 : formulaire étape par étape ─── */
+.qa-form-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.qa-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.qa-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.qa-type-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.qa-type-btn {
+  position: relative;
+  cursor: pointer;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: white;
+  border: 2px solid var(--border);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--muted);
+  text-align: center;
+  transition: all 0.15s;
+  user-select: none;
+}
+.qa-type-btn input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+.qa-type-btn span { display: block; }
+.qa-type-btn:hover { border-color: var(--rose); }
+.qa-type-btn.qa-type-out:has(input:checked) {
+  background: linear-gradient(135deg, var(--rose), var(--tender-rose));
+  color: white;
+  border-color: var(--rose);
+  box-shadow: 0 4px 12px rgba(231,111,81,0.25);
+}
+.qa-type-btn.qa-type-in:has(input:checked) {
+  background: linear-gradient(135deg, var(--sage), #6BA88B);
+  color: white;
+  border-color: var(--sage);
+  box-shadow: 0 4px 12px rgba(127,184,158,0.25);
+}
+.qa-form-v2 .inp,
+.qa-form-v2 .select {
+  padding: 12px 14px;
+  font-size: 14px;
+  width: 100%;
+  min-height: 44px;
+}
+.qa-submit {
+  margin-top: 6px;
+  padding: 14px 20px;
+  font-size: 15px;
+  font-weight: 800;
+  width: 100%;
+}
 .btn-primary {
   background: linear-gradient(135deg, var(--rose), var(--tender-rose));
   color: white;
