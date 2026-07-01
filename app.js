@@ -33,10 +33,24 @@ const CAT_META = {
   'Banque': { emoji: '🏦', color: '#718096' },
   'Impôts': { emoji: '🧾', color: '#DD7B85' },
   'Transactions': { emoji: '🔄', color: '#A0AEC0' },
+  'Amis & Famille': { emoji: '💌', color: '#DD7B85' },
   'Autres': { emoji: '📌', color: '#A0AEC0' }
+};
+// Métadonnées des banques source (pastilles LCL / BoursoBank)
+const BANK_META = {
+  'LCL':        { label: 'LCL',    color: '#0059A5', bg: '#E3EEFB' },
+  'BoursoBank': { label: 'Bourso', color: '#E52A5A', bg: '#FCE4EC' },
+  'Boursobank': { label: 'Bourso', color: '#E52A5A', bg: '#FCE4EC' }
 };
 const catIcon = c => CAT_META[c]?.emoji || '📌';
 const catColor = c => CAT_META[c]?.color || '#A0AEC0';
+// Petite pastille pour indiquer la banque source (LCL / BoursoBank)
+function bankBadge(bs) {
+  if (!bs) return '';
+  const m = BANK_META[bs];
+  if (!m) return '';
+  return `<span class="bank-badge" style="color:${m.color};background:${m.bg}" title="Compte ${m.label}">${m.label}</span>`;
+}
 
 // ─── STATE ────────────────────────────────────────────────────
 let currentUser = null;
@@ -1114,7 +1128,10 @@ function renderTransactionsList() {
     <div class="tx-row">
       <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}<br><span style="font-size:10px">${t.date_op.slice(0, 4)}</span></div>
       <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
-      <div class="tx-info"><div class="tx-label">${t.label}</div><div class="tx-cat">${t.category}${t.sub_category ? ' · ' + t.sub_category : ''}</div></div>
+      <div class="tx-info">
+        <div class="tx-label">${t.label} ${bankBadge(t.bank_source)}</div>
+        <div class="tx-cat">${t.category}${t.sub_category ? ' · ' + t.sub_category : ''}</div>
+      </div>
       <div class="tx-amt ${t.type === 'entree' ? 'amt-in' : 'amt-out'}">${t.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(Number(t.amount)))}</div>
     </div>
   `).join('');
@@ -1223,12 +1240,18 @@ async function parseJSON(file) {
   const text = await file.text();
   const d = JSON.parse(text);
   if (d.transactions && Array.isArray(d.transactions)) {
-    // Legacy format Monie
+    // Format Monie v2 : supporte cat, subcat, compte, paymethod
     return d.transactions.filter(t => t.label && t.amount && t.date).map(t => ({
       date_op: t.date,
       label: t.label,
       amount: t.type === 'entree' ? Math.abs(t.amount) : -Math.abs(t.amount),
-      type: t.type || (t.amount > 0 ? 'entree' : 'sortie')
+      type: t.type || (t.amount > 0 ? 'entree' : 'sortie'),
+      // Nouveaux champs enrichis (v2)
+      category: t.cat || t.category || null,
+      sub_category: t.subcat || t.sub_category || null,
+      bank_source: t.compte || t.bank_source || null,
+      payment_method: t.paymethod || t.payment_method || null,
+      comment: t.comment || null
     }));
   }
   return [];
@@ -1470,7 +1493,7 @@ function showImportPreview() {
           <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}<br><span style="font-size:10px">${t.date_op.slice(0, 4)}</span></div>
           <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
           <div class="tx-info">
-            <div class="tx-label">${t.label}</div>
+            <div class="tx-label">${t.label} ${bankBadge(t.bank_source)}</div>
             <select class="select" style="margin-top:4px;padding:4px 8px;font-size:11px;width:auto;min-width:180px" onchange="recategorizeImportTx(${globalIdx}, this.value)">
               ${catsToShow}
             </select>
@@ -1750,7 +1773,9 @@ async function confirmImport() {
     source: 'import_' + (t._source || 'csv'),
     merchant_key: t.merchant_key,
     account: t.account || 'Compte courant',
-    comment: t.comment || null
+    comment: t.comment || null,
+    payment_method: t.payment_method || null,
+    bank_source: t.bank_source || null
   }));
   if (!toAdd.length) { toast('Rien à importer', 'error'); return; }
   toast(`Import de ${toAdd.length} transactions…`);

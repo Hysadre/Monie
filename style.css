@@ -1005,6 +1005,20 @@ body::after {
 }
 .tx-info { flex: 1; min-width: 0; }
 .tx-label { font-size: 14px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ─── PASTILLES BANQUE (LCL / BoursoBank) ─── */
+.bank-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 100px;
+  vertical-align: middle;
+  margin-left: 6px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
 .tx-cat { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .tx-amt { font-family: var(--fm); font-weight: 700; font-size: 14px; flex-shrink: 0; }
 
