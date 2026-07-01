@@ -753,6 +753,7 @@ body::after {
 .tx-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap; /* permet à la note "Autres" de wrap sur une 2e ligne */
   gap: 12px;
   padding: 14px 16px;
   border-radius: var(--radius-sm);
@@ -1582,12 +1583,21 @@ body::after {
   }
 }
 
-/* Champ note pour "Autre" */
+/* Champ note pour "Autre" — desktop : 2ᵉ ligne en dessous, décalé sous le label */
 .tx-note-wrap {
   flex: 1 1 100%;
-  order: 5;
-  margin-top: 6px;
+  order: 10; /* passe toujours à la fin */
+  margin-top: 4px;
+  padding-left: 108px; /* aligne sous .tx-info (checkbox + date + icon + gap) */
   animation: slideDown 0.2s ease;
+  box-sizing: border-box;
+}
+@media (max-width: 900px) {
+  .tx-note-wrap {
+    padding-left: 0;
+    order: 5;
+    margin-top: 6px;
+  }
 }
 .tx-note-input {
   width: 100%;
