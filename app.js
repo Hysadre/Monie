@@ -2107,6 +2107,7 @@ async function renderSuivi() {
   const body = $('suivi-body');
   body.innerHTML = '';
   const now = new Date();
+  let prevGrandTotal = null; // pour évolution vs N-1
   for (let m = 0; m < 12; m++) {
     if (new Date(year, m, 1) > new Date(now.getFullYear(), now.getMonth() + 1, 1)) break;
     const key = `${year}-${String(m + 1).padStart(2, '0')}`;
@@ -2122,6 +2123,19 @@ async function renderSuivi() {
     const autres = r.autres_revenus || 0;
     const patTot = (r.lcl || 0) + (r.bourso || 0) + (r.especes || 0) + (r.esalia || 0) + (r.banque_postale || 0) + (r.investissements || 0) + (r.autre || 0);
     const revTot = salaire + tickets + rembours + autres;
+    const grandTotal = patTot + revTot;
+
+    // Évolution vs mois N-1
+    let evoValStr = '—', evoPctStr = '—', evoColor = 'var(--muted)';
+    if (prevGrandTotal !== null && prevGrandTotal > 0 && grandTotal > 0) {
+      const diff = grandTotal - prevGrandTotal;
+      const pct = (diff / prevGrandTotal) * 100;
+      evoColor = diff >= 0 ? 'var(--sage)' : 'var(--tender-rose)';
+      const sign = diff >= 0 ? '+' : '';
+      evoValStr = `${sign}${fmt(diff)}`;
+      evoPctStr = `${sign}${pct.toFixed(1)}%`;
+    }
+
     const autoStyle = 'style="color:var(--sage);background:var(--sage-soft);font-family:var(--fm);font-weight:600" title="Calculé auto depuis tes transactions"';
     body.innerHTML += `<tr data-month="${key}">
       <td>${MONTHS_SHORT[m]} ${year}</td>
@@ -2138,9 +2152,11 @@ async function renderSuivi() {
       <td ${autoStyle}>${autoRem > 0 ? fmt(autoRem) : '—'}</td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${autres > 0 ? autres : ''}" placeholder="0" oninput="saveSuivi('${key}','autres_revenus',this.value)"></td>
       <td style="font-weight:700;color:var(--sage);background:var(--sage-soft)">${revTot > 0 ? fmt(revTot) : '—'}</td>
-      <td><input class="suivi-inp" type="number" step="0.01" value="${r.epargne_cible > 0 ? r.epargne_cible : ''}" placeholder="0" oninput="saveSuivi('${key}','epargne_cible',this.value)"></td>
-      <td><input class="suivi-inp" type="number" step="0.01" value="${r.epargne_reel > 0 ? r.epargne_reel : ''}" placeholder="0" oninput="saveSuivi('${key}','epargne_reel',this.value)"></td>
+      <td style="font-weight:800;color:var(--ink);background:linear-gradient(135deg,#FFEDE5,#E7F3EC)">${grandTotal > 0 ? fmt(grandTotal) : '—'}</td>
+      <td style="font-weight:700;color:${evoColor}">${evoValStr}</td>
+      <td style="font-weight:700;color:${evoColor}">${evoPctStr}</td>
     </tr>`;
+    if (grandTotal > 0) prevGrandTotal = grandTotal;
   }
 }
 let suiviSaveTimers = {};

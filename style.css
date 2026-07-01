@@ -1157,6 +1157,8 @@ body::after {
 .th-group-pat { background: var(--rose-soft); color: var(--rose) !important; border-radius: 6px 6px 0 0; }
 .th-group-rev { background: var(--sage-soft); color: var(--sage) !important; border-radius: 6px 6px 0 0; }
 .th-group-ep { background: var(--lavender-soft); color: var(--plum) !important; border-radius: 6px 6px 0 0; }
+.th-group-total { background: linear-gradient(135deg, var(--rose-soft), var(--sage-soft)); color: var(--ink) !important; font-weight: 900; border-radius: 6px 6px 0 0; }
+.th-group-evo { background: var(--gold-soft); color: var(--gold) !important; border-radius: 6px 6px 0 0; }
 
 /* ─── TOAST ─── */
 .toast {
