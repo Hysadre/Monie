@@ -1034,34 +1034,28 @@ function setDashView(view) {
 
 // Toggle affichage/masquage du formulaire de saisie rapide (calendrier)
 function toggleQuickAdd() {
-  const form = $('quick-add-form-wrap');
-  const chev = $('quick-add-chevron');
-  if (!form) return;
-  const isOpen = form.style.display !== 'none';
-  if (isOpen) {
-    form.style.display = 'none';
-    if (chev) chev.style.transform = 'rotate(-90deg)';
-    try { localStorage.setItem('monie_quick_add_open', '0'); } catch (e) {}
-  } else {
-    form.style.display = '';
-    if (chev) chev.style.transform = '';
-    try { localStorage.setItem('monie_quick_add_open', '1'); } catch (e) {}
-  }
+  const box = document.getElementById('quick-add-box');
+  const btn = box ? box.querySelector('.quick-add-toggle') : null;
+  if (!box) return;
+  const nowCollapsed = box.classList.toggle('collapsed');
+  if (btn) btn.setAttribute('aria-expanded', String(!nowCollapsed));
+  try { localStorage.setItem('monie_quick_add_open', nowCollapsed ? '0' : '1'); } catch (e) {}
 }
 // Applique l'état sauvegardé au chargement
 (function restoreQuickAddState() {
-  try {
-    const open = localStorage.getItem('monie_quick_add_open');
-    if (open === '0') {
-      // Attendre que le DOM soit prêt
-      document.addEventListener('DOMContentLoaded', () => {
-        const form = document.getElementById('quick-add-form-wrap');
-        const chev = document.getElementById('quick-add-chevron');
-        if (form) form.style.display = 'none';
-        if (chev) chev.style.transform = 'rotate(-90deg)';
-      });
-    }
-  } catch (e) {}
+  const apply = () => {
+    try {
+      const open = localStorage.getItem('monie_quick_add_open');
+      const box = document.getElementById('quick-add-box');
+      if (box && open === '0') {
+        box.classList.add('collapsed');
+        const btn = box.querySelector('.quick-add-toggle');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+    } catch (e) {}
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+  else apply();
 })();
 
 // Helper : icône pour un moyen de paiement (utilisé aussi dans Transactions)
