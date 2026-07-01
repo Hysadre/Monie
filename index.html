@@ -458,16 +458,39 @@
             <h1 class="page-title">Épargne</h1>
             <p class="page-sub">Tes objectifs & ta capacité</p>
           </div>
+          <button class="btn-primary" onclick="openGoalForm()">+ Nouvel objectif</button>
         </div>
         <div class="kpi-grid">
           <div class="kpi kpi-sage"><div class="kpi-label">Épargné année</div><div class="kpi-val kpi-val-sage" id="ep-year">—</div><div class="kpi-hint" id="ep-year-hint">—</div></div>
-          <div class="kpi kpi-peach"><div class="kpi-label">Cible année</div><div class="kpi-val" id="ep-cible">—</div><div class="kpi-hint">Programmée</div></div>
-          <div class="kpi kpi-rose"><div class="kpi-label">Écart</div><div class="kpi-val kpi-val-rose" id="ep-ecart">—</div><div class="kpi-hint">vs cible</div></div>
+          <div class="kpi kpi-peach"><div class="kpi-label">Cible active</div><div class="kpi-val" id="ep-cible">—</div><div class="kpi-hint" id="ep-cible-hint">tous objectifs</div></div>
+          <div class="kpi kpi-rose"><div class="kpi-label">Reste à épargner</div><div class="kpi-val kpi-val-rose" id="ep-ecart">—</div><div class="kpi-hint" id="ep-ecart-hint">pour tout finir</div></div>
           <div class="kpi kpi-gold"><div class="kpi-label">Taux d'épargne</div><div class="kpi-val kpi-val-gold" id="ep-rate">—</div><div class="kpi-hint">% des revenus</div></div>
         </div>
+
+        <!-- Objectifs en cours -->
         <div class="card">
-          <div class="card-hd"><div class="card-title">Objectifs</div><button class="btn-primary" onclick="addGoal()">+ Ajouter</button></div>
-          <div id="goals-list"></div>
+          <div class="card-hd">
+            <div class="card-title">🎯 Objectifs en cours <span class="import-tab-count" id="goals-active-count">0</span></div>
+          </div>
+          <div id="goals-active-list"></div>
+        </div>
+
+        <!-- Objectifs atteints (historique) -->
+        <div class="card" id="goals-achieved-card" style="display:none">
+          <div class="card-hd">
+            <div class="card-title">🏆 Objectifs atteints <span class="import-tab-count" id="goals-achieved-count">0</span></div>
+            <button class="btn-ghost" onclick="toggleAchievedList()" id="toggle-achieved-btn" style="padding:6px 12px;font-size:12px">Voir</button>
+          </div>
+          <div id="goals-achieved-list" style="display:none"></div>
+        </div>
+
+        <!-- Objectifs abandonnés (historique) -->
+        <div class="card" id="goals-abandoned-card" style="display:none">
+          <div class="card-hd">
+            <div class="card-title">💤 Abandonnés <span class="import-tab-count" id="goals-abandoned-count">0</span></div>
+            <button class="btn-ghost" onclick="toggleAbandonedList()" id="toggle-abandoned-btn" style="padding:6px 12px;font-size:12px">Voir</button>
+          </div>
+          <div id="goals-abandoned-list" style="display:none"></div>
         </div>
       </div>
     </main>

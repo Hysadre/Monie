@@ -55,6 +55,9 @@ let importMatches = [];
 let annuelleYear = new Date().getFullYear();
 let budgetData = { revenu_mensuel: 0, pct_charges: 50, pct_plaisir: 30, pct_epargne: 20 };
 let investissements = [];
+let goalsList = [];
+let showAchieved = false;
+let showAbandoned = false;
 
 // ═══ TOAST + MODAL ═════════════════════════════════════════════
 function toast(msg, type = '') {
@@ -155,11 +158,18 @@ async function showApp(user) {
   await loadAllData();
   await loadBudgetPrep();
   await loadInvestissements();
+  await loadGoals();
   populateYearSelect();
   populateDateSelects();
   renderCalendar();
   renderDashboard();
   populateCategorySelects();
+}
+
+async function loadGoals() {
+  const { data, error } = await sb.from('epargne_objectifs').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+  if (error) { console.error('loadGoals', error); return; }
+  goalsList = data || [];
 }
 
 async function loadBudgetPrep() {
@@ -1074,22 +1084,314 @@ function renderEpargne() {
   const year = new Date().getFullYear();
   const yearTx = transactions.filter(t => t.date_op.startsWith(String(year)));
   const totalIn = yearTx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
-  const yearRows = Object.entries(suiviData).filter(([k]) => k.startsWith(String(year)));
-  const epReel = yearRows.reduce((s, [_, r]) => s + (r.epargne_reel || 0), 0);
-  const epCible = yearRows.reduce((s, [_, r]) => s + (r.epargne_cible || 0), 0);
-  set('ep-year', fmt(epReel));
-  set('ep-year-hint', yearRows.length + ' mois saisis');
-  set('ep-cible', fmt(epCible));
-  const ecart = epReel - epCible;
-  set('ep-ecart', (ecart >= 0 ? '+' : '') + fmt(ecart));
-  const rate = totalIn > 0 ? Math.round(epReel / totalIn * 100) : 0;
+
+  // Calcul depuis les objectifs (cible + déjà épargné)
+  const active = goalsList.filter(g => g.statut === 'en_cours');
+  const achieved = goalsList.filter(g => g.statut === 'atteint');
+  const abandoned = goalsList.filter(g => g.statut === 'abandonne');
+
+  const totalCible = active.reduce((s, g) => s + Number(g.cible || 0), 0);
+  const totalEpargne = active.reduce((s, g) => s + Number(g.deja_epargne || 0), 0);
+  const reste = Math.max(0, totalCible - totalEpargne);
+
+  set('ep-year', fmt(totalEpargne));
+  set('ep-year-hint', `${active.length} objectif(s) actif(s)`);
+  set('ep-cible', fmt(totalCible));
+  set('ep-cible-hint', `${active.length} en cours`);
+  set('ep-ecart', fmt(reste));
+  set('ep-ecart-hint', totalCible > 0 ? `${Math.round(totalEpargne / totalCible * 100)}% atteint` : 'pour tout finir');
+  const rate = totalIn > 0 ? Math.round(totalEpargne / totalIn * 100) : 0;
   set('ep-rate', rate + '%');
-  // TODO: goals CRUD
-  $('goals-list').innerHTML = '<div class="empty"><div class="empty-emoji">🎯</div><div class="empty-title">Aucun objectif défini</div><div class="empty-sub">Utilise le bouton + Ajouter</div></div>';
+
+  // Objectifs actifs
+  const activeList = $('goals-active-list');
+  set('goals-active-count', active.length);
+  if (!active.length) {
+    activeList.innerHTML = `
+      <div class="empty">
+        <div class="empty-emoji">🎯</div>
+        <div class="empty-title">Aucun objectif en cours</div>
+        <div class="empty-sub">Clique <b>+ Nouvel objectif</b> pour commencer à épargner intentionnellement</div>
+      </div>`;
+  } else {
+    activeList.innerHTML = active.map(renderGoalCard).join('');
+  }
+
+  // Objectifs atteints
+  const achievedCard = $('goals-achieved-card');
+  if (achieved.length > 0) {
+    achievedCard.style.display = '';
+    set('goals-achieved-count', achieved.length);
+    $('goals-achieved-list').innerHTML = achieved.map(g => renderGoalCard(g, true)).join('');
+  } else {
+    achievedCard.style.display = 'none';
+  }
+
+  // Objectifs abandonnés
+  const abandonedCard = $('goals-abandoned-card');
+  if (abandoned.length > 0) {
+    abandonedCard.style.display = '';
+    set('goals-abandoned-count', abandoned.length);
+    $('goals-abandoned-list').innerHTML = abandoned.map(g => renderGoalCard(g, false, true)).join('');
+  } else {
+    abandonedCard.style.display = 'none';
+  }
 }
-function addGoal() {
-  toast('Bientôt disponible 🌸');
+
+function renderGoalCard(g, isAchieved = false, isAbandoned = false) {
+  const pct = g.cible > 0 ? Math.min(100, Math.round(g.deja_epargne / g.cible * 100)) : 0;
+  const reste = Math.max(0, Number(g.cible) - Number(g.deja_epargne));
+
+  let barClass = 'low';
+  if (pct >= 100) barClass = 'done';
+  else if (pct >= 66) barClass = 'high';
+  else if (pct >= 33) barClass = 'medium';
+
+  let pctClass = pct >= 100 ? 'done' : '';
+
+  // Calcul rythme mensuel requis
+  let rythmeInfo = 'Pas de deadline';
+  let rythmeClass = '';
+  if (g.date_cible && !isAchieved && !isAbandoned) {
+    const now = new Date();
+    const deadline = new Date(g.date_cible);
+    const monthsLeft = Math.max(0, (deadline.getFullYear() - now.getFullYear()) * 12 + (deadline.getMonth() - now.getMonth()));
+    if (monthsLeft > 0) {
+      const rythme = Math.ceil(reste / monthsLeft);
+      rythmeInfo = `${fmt(rythme)} / mois`;
+      if (rythme > 500) rythmeClass = 'warn';
+      if (rythme > 1000) rythmeClass = 'danger';
+    } else if (deadline < now && reste > 0) {
+      rythmeInfo = '⚠️ Dépassé';
+      rythmeClass = 'danger';
+    } else {
+      rythmeInfo = 'Ce mois-ci';
+      rythmeClass = 'warn';
+    }
+  }
+
+  // Date cible formatée
+  let dateCibleStr = 'Pas de date';
+  if (g.date_cible) {
+    const d = new Date(g.date_cible);
+    dateCibleStr = d.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
+  }
+
+  const actions = isAchieved
+    ? `<button class="goal-btn danger" onclick="deleteGoal('${g.id}')">🗑️ Supprimer</button>`
+    : isAbandoned
+      ? `<button class="goal-btn" onclick="reactivateGoal('${g.id}')">🔄 Réactiver</button>
+         <button class="goal-btn danger" onclick="deleteGoal('${g.id}')">🗑️</button>`
+      : `<button class="goal-btn primary" onclick="openContribForm('${g.id}')">+ Contribuer</button>
+         <button class="goal-btn" onclick="editGoal('${g.id}')">✏️</button>
+         ${pct >= 100 ? `<button class="goal-btn" onclick="markAchieved('${g.id}')" style="color:var(--gold);border-color:var(--gold)">🏆 Atteint !</button>` : ''}
+         <button class="goal-btn" onclick="abandonGoal('${g.id}')">💤</button>
+         <button class="goal-btn danger" onclick="deleteGoal('${g.id}')">🗑️</button>`;
+
+  const dateAtteintStr = isAchieved && g.updated_at ? new Date(g.updated_at).toLocaleDateString('fr-FR') : '';
+
+  return `
+    <div class="goal-card ${isAchieved ? 'achieved' : ''} ${isAbandoned ? 'abandoned' : ''}" style="border-left-color:${g.couleur || 'var(--sage)'}">
+      <div class="goal-hd">
+        <div class="goal-title-block">
+          <div class="goal-emoji" style="background:${g.couleur ? g.couleur + '20' : 'var(--sage-soft)'}">${g.emoji || '🎯'}</div>
+          <div style="min-width:0;flex:1">
+            <div class="goal-name">${g.nom}</div>
+            <div class="goal-sub">
+              ${isAchieved ? `🏆 Atteint le ${dateAtteintStr}` : isAbandoned ? '💤 Abandonné' : `Depuis le ${new Date(g.date_debut).toLocaleDateString('fr-FR')}`}
+              ${g.note ? ' · ' + g.note : ''}
+            </div>
+          </div>
+        </div>
+        <div class="goal-actions">${actions}</div>
+      </div>
+      <div class="goal-progress">
+        <div class="goal-progress-bar">
+          <div class="goal-progress-fill ${barClass}" style="width:${pct}%"></div>
+        </div>
+        <div class="goal-progress-info">
+          <div class="goal-progress-txt">${fmt(g.deja_epargne)} <span style="color:var(--muted);font-weight:600"> / ${fmt(g.cible)}</span></div>
+          <div class="goal-progress-pct ${pctClass}">${pct}%</div>
+        </div>
+      </div>
+      <div class="goal-meta">
+        <div class="goal-meta-cell">
+          <div class="goal-meta-lbl">Reste à épargner</div>
+          <div class="goal-meta-val ${reste === 0 ? 'ok' : ''}">${fmt(reste)}</div>
+        </div>
+        <div class="goal-meta-cell">
+          <div class="goal-meta-lbl">Date cible</div>
+          <div class="goal-meta-val">${dateCibleStr}</div>
+        </div>
+        <div class="goal-meta-cell">
+          <div class="goal-meta-lbl">Rythme requis</div>
+          <div class="goal-meta-val ${rythmeClass}">${rythmeInfo}</div>
+        </div>
+      </div>
+      ${pct >= 100 && !isAchieved ? '<div class="goal-tip">🎉 Bravo ! Tu peux marquer cet objectif comme atteint</div>' : ''}
+      ${pct > 0 && pct < 100 && !isAchieved && !isAbandoned ? `<div class="goal-tip" style="background:var(--sage-soft);color:var(--sage)">🌱 Il te reste ${fmt(reste)} pour atteindre ton objectif — tu peux le faire !</div>` : ''}
+    </div>`;
 }
+
+function toggleAchievedList() {
+  showAchieved = !showAchieved;
+  $('goals-achieved-list').style.display = showAchieved ? '' : 'none';
+  $('toggle-achieved-btn').textContent = showAchieved ? 'Masquer' : 'Voir';
+}
+function toggleAbandonedList() {
+  showAbandoned = !showAbandoned;
+  $('goals-abandoned-list').style.display = showAbandoned ? '' : 'none';
+  $('toggle-abandoned-btn').textContent = showAbandoned ? 'Masquer' : 'Voir';
+}
+
+function openGoalForm(existing) {
+  const isEdit = !!existing;
+  const emojisChoice = ['🎯','🌸','🏖️','💻','🚗','🏠','💍','🎓','👶','✈️','🎁','🚨','💐','📚','🌱','⛰️'];
+  const colorsChoice = [
+    { name: 'Sauge', code: '#7FB89E' },
+    { name: 'Rose', code: '#E76F51' },
+    { name: 'Pêche', code: '#F4A993' },
+    { name: 'Lavande', code: '#D8B4DD' },
+    { name: 'Or', code: '#E8B84D' },
+    { name: 'Rose tendre', code: '#DD7B85' }
+  ];
+
+  openModal(
+    isEdit ? '✏️ Modifier l\'objectif' : '🎯 Nouvel objectif d\'épargne',
+    'Définis ce vers quoi tu veux tendre',
+    async () => {
+      const nom = $('goal-form-nom').value.trim();
+      const cible = parseFloat($('goal-form-cible').value) || 0;
+      const dejaEp = parseFloat($('goal-form-deja').value) || 0;
+      const dateCible = $('goal-form-date').value || null;
+      const emoji = $('goal-form-emoji').value || '🎯';
+      const couleur = $('goal-form-color').value || '#7FB89E';
+      const note = $('goal-form-note').value.trim();
+      if (!nom || cible <= 0) { toast('Nom et montant cible requis', 'error'); return; }
+      const payload = {
+        user_id: currentUser.id,
+        nom, cible, deja_epargne: dejaEp,
+        date_cible: dateCible,
+        emoji, couleur, note
+      };
+      if (isEdit) {
+        await sb.from('epargne_objectifs').update(payload).eq('id', existing.id);
+      } else {
+        payload.date_debut = new Date().toISOString().slice(0, 10);
+        await sb.from('epargne_objectifs').insert(payload);
+      }
+      await loadGoals();
+      renderEpargne();
+      toast(isEdit ? 'Objectif mis à jour !' : 'Objectif créé !', 'success');
+    },
+    `<div style="display:flex;flex-direction:column;gap:14px">
+      <div class="auth-field"><label>Nom de l'objectif</label>
+        <input class="inp" id="goal-form-nom" value="${existing?.nom || ''}" placeholder="Ex: Vacances Bali, Fonds urgence, Nouvel ordi"></div>
+      <div class="auth-field"><label>Emoji</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          ${emojisChoice.map(e => `<button type="button" onclick="document.getElementById('goal-form-emoji').value='${e}';document.querySelectorAll('.emoji-choice').forEach(b=>b.style.background='var(--bg)');this.style.background='var(--rose-soft)'" class="emoji-choice" style="width:38px;height:38px;font-size:20px;border:1.5px solid var(--border);border-radius:10px;background:${existing?.emoji === e ? 'var(--rose-soft)' : 'var(--bg)'};cursor:pointer">${e}</button>`).join('')}
+        </div>
+        <input type="hidden" id="goal-form-emoji" value="${existing?.emoji || '🎯'}"></div>
+      <div class="auth-field"><label>Couleur</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          ${colorsChoice.map(c => `<button type="button" onclick="document.getElementById('goal-form-color').value='${c.code}';document.querySelectorAll('.color-choice').forEach(b=>b.style.borderColor='var(--border)');this.style.borderColor='var(--ink)'" class="color-choice" title="${c.name}" style="width:38px;height:38px;border-radius:10px;background:${c.code};border:2px solid ${existing?.couleur === c.code ? 'var(--ink)' : 'var(--border)'};cursor:pointer"></button>`).join('')}
+        </div>
+        <input type="hidden" id="goal-form-color" value="${existing?.couleur || '#7FB89E'}"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="auth-field"><label>Montant cible (€)</label>
+          <input class="inp" type="number" step="0.01" id="goal-form-cible" value="${existing?.cible || ''}" placeholder="Ex: 3000"></div>
+        <div class="auth-field"><label>Déjà épargné (€)</label>
+          <input class="inp" type="number" step="0.01" id="goal-form-deja" value="${existing?.deja_epargne || ''}" placeholder="Ex: 500"></div>
+      </div>
+      <div class="auth-field"><label>Date cible (optionnelle)</label>
+        <input class="inp" type="date" id="goal-form-date" value="${existing?.date_cible || ''}"></div>
+      <div class="auth-field"><label>Note (optionnel)</label>
+        <input class="inp" id="goal-form-note" value="${existing?.note || ''}" placeholder="Ex: pour août"></div>
+    </div>`
+  );
+}
+
+function editGoal(id) {
+  const g = goalsList.find(g => g.id === id);
+  if (g) openGoalForm(g);
+}
+
+function openContribForm(id) {
+  const g = goalsList.find(g => g.id === id);
+  if (!g) return;
+  openModal(
+    `+ Contribuer à "${g.nom}"`,
+    `Ajoute un montant à ton objectif`,
+    async () => {
+      const montant = parseFloat($('contrib-montant').value) || 0;
+      if (montant <= 0) { toast('Montant invalide', 'error'); return; }
+      const newDeja = Number(g.deja_epargne || 0) + montant;
+      await sb.from('epargne_objectifs').update({ deja_epargne: newDeja }).eq('id', id);
+      // Trace la contribution
+      await sb.from('epargne_contributions').insert({
+        objectif_id: id,
+        user_id: currentUser.id,
+        montant: montant
+      });
+      await loadGoals();
+      renderEpargne();
+      toast(`+${fmt(montant)} ajoutés à "${g.nom}" 🌱`, 'success');
+    },
+    `<div style="display:flex;flex-direction:column;gap:14px">
+      <div style="background:var(--sage-soft);padding:14px;border-radius:10px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Actuel</div>
+        <div style="font-family:var(--fm);font-size:22px;font-weight:800;color:var(--sage)">${fmt(g.deja_epargne)} / ${fmt(g.cible)}</div>
+      </div>
+      <div class="auth-field"><label>Montant à ajouter (€)</label>
+        <input class="inp" type="number" step="0.01" id="contrib-montant" placeholder="Ex: 50" autofocus></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button type="button" onclick="document.getElementById('contrib-montant').value=10" class="goal-btn">+10 €</button>
+        <button type="button" onclick="document.getElementById('contrib-montant').value=25" class="goal-btn">+25 €</button>
+        <button type="button" onclick="document.getElementById('contrib-montant').value=50" class="goal-btn">+50 €</button>
+        <button type="button" onclick="document.getElementById('contrib-montant').value=100" class="goal-btn">+100 €</button>
+        <button type="button" onclick="document.getElementById('contrib-montant').value=200" class="goal-btn">+200 €</button>
+        <button type="button" onclick="document.getElementById('contrib-montant').value=500" class="goal-btn">+500 €</button>
+      </div>
+    </div>`
+  );
+}
+
+async function markAchieved(id) {
+  await sb.from('epargne_objectifs').update({ statut: 'atteint' }).eq('id', id);
+  await loadGoals();
+  renderEpargne();
+  toast('🏆 Bravo ! Objectif atteint !', 'success');
+}
+
+async function abandonGoal(id) {
+  const g = goalsList.find(g => g.id === id);
+  if (!g) return;
+  openModal('Abandonner cet objectif ?', `"${g.nom}" sera déplacé dans les abandonnés. Tu pourras le réactiver plus tard.`, async () => {
+    await sb.from('epargne_objectifs').update({ statut: 'abandonne' }).eq('id', id);
+    await loadGoals();
+    renderEpargne();
+    toast('Objectif déplacé dans les abandonnés');
+  });
+}
+
+async function reactivateGoal(id) {
+  await sb.from('epargne_objectifs').update({ statut: 'en_cours' }).eq('id', id);
+  await loadGoals();
+  renderEpargne();
+  toast('Objectif réactivé 🌱', 'success');
+}
+
+async function deleteGoal(id) {
+  const g = goalsList.find(g => g.id === id);
+  if (!g) return;
+  openModal('Supprimer', `Supprimer définitivement "${g.nom}" ?`, async () => {
+    await sb.from('epargne_objectifs').delete().eq('id', id);
+    await loadGoals();
+    renderEpargne();
+    toast('Supprimé');
+  });
+}
+function addGoal() { openGoalForm(); }
 
 // ═══ PERFORMANCE CARDS vs M-1 ═════════════════════════════════
 function renderPerfCards(currentKey, curIn, curOut, curBal) {
