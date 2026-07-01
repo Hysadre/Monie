@@ -56,8 +56,11 @@ let annuelleYear = new Date().getFullYear();
 let budgetData = { revenu_mensuel: 0, pct_charges: 50, pct_plaisir: 30, pct_epargne: 20 };
 let investissements = [];
 let goalsList = [];
+let contribList = [];
 let showAchieved = false;
 let showAbandoned = false;
+let epargneMonth = new Date().getMonth();
+let epargneYear = new Date().getFullYear();
 
 // ═══ MOBILE SIDEBAR ════════════════════════════════════════════
 function toggleSidebar() {
@@ -115,9 +118,24 @@ function closeModal() {
   m.style.display = 'none';
   _modalCb = null;
 }
-function confirmModal() {
-  if (_modalCb) _modalCb();
-  closeModal();
+async function confirmModal() {
+  if (!_modalCb) { closeModal(); return; }
+  const btn = $('modal-confirm');
+  const originalTxt = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ ...'; }
+  try {
+    const result = await Promise.resolve(_modalCb());
+    if (result === false) {
+      // Callback demande à garder le modal ouvert (validation échouée)
+      if (btn) { btn.disabled = false; btn.textContent = originalTxt; }
+      return;
+    }
+    closeModal();
+  } catch (err) {
+    console.error('modal callback', err);
+    toast('Erreur : ' + (err.message || err), 'error');
+    if (btn) { btn.disabled = false; btn.textContent = originalTxt; }
+  }
 }
 
 // ═══ AUTH ══════════════════════════════════════════════════════
@@ -207,6 +225,8 @@ async function loadGoals() {
   const { data, error } = await sb.from('epargne_objectifs').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
   if (error) { console.error('loadGoals', error); return; }
   goalsList = data || [];
+  const { data: cdata } = await sb.from('epargne_contributions').select('*').eq('user_id', currentUser.id).order('date_contrib', { ascending: false });
+  contribList = cdata || [];
 }
 
 async function loadBudgetPrep() {
@@ -260,6 +280,8 @@ function populateDateSelects() {
   if ($('cal-year-select')) $('cal-year-select').innerHTML = buildYearOpts(calYear);
   if ($('dash-month-select')) $('dash-month-select').innerHTML = buildMonthOpts(dashMonth);
   if ($('dash-year-select')) $('dash-year-select').innerHTML = buildYearOpts(dashYear);
+  if ($('ep-month-select')) $('ep-month-select').innerHTML = buildMonthOpts(epargneMonth);
+  if ($('ep-year-select')) $('ep-year-select').innerHTML = buildYearOpts(epargneYear);
   if ($('annuelle-year')) {
     $('annuelle-year').innerHTML = '';
     years.forEach(y => {
@@ -283,6 +305,12 @@ function setDashDate() {
   dashMonth = parseInt($('dash-month-select').value);
   dashYear = parseInt($('dash-year-select').value);
   renderDashboard();
+}
+
+function setEpDate() {
+  epargneMonth = parseInt($('ep-month-select').value);
+  epargneYear = parseInt($('ep-year-select').value);
+  renderEpargne();
 }
 
 // ═══ CATEGORIZE ════════════════════════════════════════════════
@@ -488,6 +516,9 @@ function renderDashboard() {
 
   // ═══ Performance vs M-1 ═══
   renderPerfCards(monthPrefix, totalIn, totalOut, bal);
+
+  // ═══ Widget "Prochain objectif" ═══
+  renderDashGoalWidget();
 
   // Évolution 12 mois se termine au mois sélectionné
   const evoLabels = [];
@@ -1280,11 +1311,16 @@ async function resyncSuivi() {
 
 // ═══ ÉPARGNE ═══════════════════════════════════════════════════
 function renderEpargne() {
-  const year = new Date().getFullYear();
-  const yearTx = transactions.filter(t => t.date_op.startsWith(String(year)));
+  if ($('ep-month-select')) $('ep-month-select').value = epargneMonth;
+  if ($('ep-year-select')) $('ep-year-select').value = epargneYear;
+  const monthKey = `${epargneYear}-${String(epargneMonth + 1).padStart(2, '0')}`;
+  const yearTx = transactions.filter(t => t.date_op.startsWith(String(epargneYear)));
   const totalIn = yearTx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
 
-  // Calcul depuis les objectifs (cible + déjà épargné)
+  // Contributions du mois sélectionné
+  const monthContribs = contribList.filter(c => c.date_contrib && c.date_contrib.startsWith(monthKey));
+  const totalMoisEpargne = monthContribs.reduce((s, c) => s + Number(c.montant), 0);
+
   const active = goalsList.filter(g => g.statut === 'en_cours');
   const achieved = goalsList.filter(g => g.statut === 'atteint');
   const abandoned = goalsList.filter(g => g.statut === 'abandonne');
@@ -1293,12 +1329,12 @@ function renderEpargne() {
   const totalEpargne = active.reduce((s, g) => s + Number(g.deja_epargne || 0), 0);
   const reste = Math.max(0, totalCible - totalEpargne);
 
-  set('ep-year', fmt(totalEpargne));
-  set('ep-year-hint', `${active.length} objectif(s) actif(s)`);
+  set('ep-year', fmt(totalMoisEpargne));
+  set('ep-year-hint', `${monthContribs.length} contribution(s) en ${MONTHS[epargneMonth]}`);
   set('ep-cible', fmt(totalCible));
   set('ep-cible-hint', `${active.length} en cours`);
   set('ep-ecart', fmt(reste));
-  set('ep-ecart-hint', totalCible > 0 ? `${Math.round(totalEpargne / totalCible * 100)}% atteint` : 'pour tout finir');
+  set('ep-ecart-hint', totalCible > 0 ? `${Math.round(totalEpargne / totalCible * 100)}% atteint total` : 'pour tout finir');
   const rate = totalIn > 0 ? Math.round(totalEpargne / totalIn * 100) : 0;
   set('ep-rate', rate + '%');
 
@@ -1340,6 +1376,20 @@ function renderEpargne() {
 function renderGoalCard(g, isAchieved = false, isAbandoned = false) {
   const pct = g.cible > 0 ? Math.min(100, Math.round(g.deja_epargne / g.cible * 100)) : 0;
   const reste = Math.max(0, Number(g.cible) - Number(g.deja_epargne));
+
+  // Contributions ce mois-ci sur ce goal
+  const monthKey = `${epargneYear}-${String(epargneMonth + 1).padStart(2, '0')}`;
+  const monthContribs = contribList.filter(c => c.objectif_id === g.id && c.date_contrib && c.date_contrib.startsWith(monthKey));
+  const monthTotal = monthContribs.reduce((s, c) => s + Number(c.montant), 0);
+  // Calcul de la cible mensuelle : (cible - déjà épargné avant ce mois) / mois restants
+  let cibleMensuelle = 0;
+  if (g.date_cible && !isAchieved && !isAbandoned) {
+    const now = new Date();
+    const deadline = new Date(g.date_cible);
+    const monthsLeft = Math.max(1, (deadline.getFullYear() - now.getFullYear()) * 12 + (deadline.getMonth() - now.getMonth()) + 1);
+    cibleMensuelle = Math.round(reste / monthsLeft);
+  }
+  const monthAchieved = monthTotal >= cibleMensuelle && cibleMensuelle > 0;
 
   let barClass = 'low';
   if (pct >= 100) barClass = 'done';
@@ -1428,8 +1478,84 @@ function renderGoalCard(g, isAchieved = false, isAbandoned = false) {
         </div>
       </div>
       ${pct >= 100 && !isAchieved ? '<div class="goal-tip">🎉 Bravo ! Tu peux marquer cet objectif comme atteint</div>' : ''}
-      ${pct > 0 && pct < 100 && !isAchieved && !isAbandoned ? `<div class="goal-tip" style="background:var(--sage-soft);color:var(--sage)">🌱 Il te reste ${fmt(reste)} pour atteindre ton objectif — tu peux le faire !</div>` : ''}
+      ${!isAchieved && !isAbandoned && (monthTotal > 0 || cibleMensuelle > 0) ? `
+        <div class="goal-tip" style="background:${monthAchieved ? 'var(--sage-soft)' : 'var(--peach-soft)'};color:${monthAchieved ? 'var(--sage)' : 'var(--peach)'}">
+          ${monthAchieved ? '✅' : '⏳'} <b>${MONTHS[epargneMonth]} ${epargneYear}</b> · Contribué : <b>${fmt(monthTotal)}</b>${cibleMensuelle > 0 ? ` · Cible mensuelle : <b>${fmt(cibleMensuelle)}</b>` : ''}
+        </div>` : ''}
+      ${pct > 0 && pct < 100 && !isAchieved && !isAbandoned ? `<div class="goal-tip" style="background:var(--sage-soft);color:var(--sage)">🌱 Il te reste ${fmt(reste)} au total pour atteindre ton objectif</div>` : ''}
     </div>`;
+}
+
+function renderDashGoalWidget() {
+  const widget = $('dash-goal-widget');
+  if (!widget) return;
+
+  const active = goalsList.filter(g => g.statut === 'en_cours');
+  const achieved = goalsList.filter(g => g.statut === 'atteint');
+
+  if (active.length === 0 && achieved.length === 0) {
+    widget.style.display = 'none';
+    return;
+  }
+
+  widget.style.display = '';
+
+  if (active.length === 0) {
+    // Uniquement des atteints, on montre le dernier atteint
+    const last = achieved[0];
+    set('dash-goal-lbl', 'Dernier objectif atteint');
+    $('dash-goal-emoji').textContent = last.emoji || '🏆';
+    set('dash-goal-name', last.nom);
+    set('dash-goal-pct', '100%');
+    $('dash-goal-fill').style.width = '100%';
+    $('dash-goal-fill').style.background = 'linear-gradient(90deg, var(--gold), var(--sage))';
+    set('dash-goal-info', `🏆 Bravo ! Atteint le ${new Date(last.updated_at).toLocaleDateString('fr-FR')} · Crée un nouvel objectif pour continuer 🌱`);
+    return;
+  }
+
+  // Trouve l'objectif le plus urgent (deadline la plus proche, sinon le plus proche de 100%)
+  let priority = active.slice().sort((a, b) => {
+    // 1. Ceux avec deadline en premier
+    if (a.date_cible && !b.date_cible) return -1;
+    if (!a.date_cible && b.date_cible) return 1;
+    // 2. Deadline la plus proche
+    if (a.date_cible && b.date_cible) return new Date(a.date_cible) - new Date(b.date_cible);
+    // 3. Sinon le plus proche de 100%
+    const pctA = a.cible > 0 ? a.deja_epargne / a.cible : 0;
+    const pctB = b.cible > 0 ? b.deja_epargne / b.cible : 0;
+    return pctB - pctA;
+  })[0];
+
+  const pct = priority.cible > 0 ? Math.min(100, Math.round(priority.deja_epargne / priority.cible * 100)) : 0;
+  const reste = Math.max(0, Number(priority.cible) - Number(priority.deja_epargne));
+
+  set('dash-goal-lbl', `Prochain objectif · ${active.length} en cours`);
+  $('dash-goal-emoji').textContent = priority.emoji || '🎯';
+  set('dash-goal-name', priority.nom);
+  set('dash-goal-pct', pct + '%');
+  $('dash-goal-fill').style.width = pct + '%';
+  $('dash-goal-fill').style.background = pct >= 100 ? 'linear-gradient(90deg, var(--gold), var(--sage))' :
+    pct >= 66 ? 'linear-gradient(90deg, var(--sage), var(--peach))' :
+    pct >= 33 ? 'linear-gradient(90deg, var(--peach), var(--gold))' :
+    'linear-gradient(90deg, var(--tender-rose), var(--peach))';
+
+  let info = `${fmt(priority.deja_epargne)} / ${fmt(priority.cible)}`;
+  if (reste > 0 && priority.date_cible) {
+    const now = new Date();
+    const deadline = new Date(priority.date_cible);
+    const monthsLeft = Math.max(1, (deadline.getFullYear() - now.getFullYear()) * 12 + (deadline.getMonth() - now.getMonth()) + 1);
+    const rythme = Math.round(reste / monthsLeft);
+    info += ` · Rythme : ${fmt(rythme)}/mois pour tenir la deadline`;
+  } else if (reste > 0) {
+    info += ` · Reste ${fmt(reste)}`;
+  } else {
+    info += ' · 🎉 Atteint ! Marque-le comme accompli';
+  }
+  // Rappel de la précédente réussite
+  if (achieved.length > 0) {
+    info += ` · Dernière réussite : ${achieved[0].emoji} ${achieved[0].nom}`;
+  }
+  set('dash-goal-info', info);
 }
 
 function toggleAchievedList() {
@@ -1466,18 +1592,25 @@ function openGoalForm(existing) {
       const emoji = $('goal-form-emoji').value || '🎯';
       const couleur = $('goal-form-color').value || '#7FB89E';
       const note = $('goal-form-note').value.trim();
-      if (!nom || cible <= 0) { toast('Nom et montant cible requis', 'error'); return; }
+      if (!nom) { toast('Nom requis', 'error'); return false; }
+      if (cible <= 0) { toast('Montant cible doit être > 0', 'error'); return false; }
       const payload = {
         user_id: currentUser.id,
         nom, cible, deja_epargne: dejaEp,
         date_cible: dateCible,
         emoji, couleur, note
       };
+      let result, error;
       if (isEdit) {
-        await sb.from('epargne_objectifs').update(payload).eq('id', existing.id);
+        ({ data: result, error } = await sb.from('epargne_objectifs').update(payload).eq('id', existing.id).select());
       } else {
         payload.date_debut = new Date().toISOString().slice(0, 10);
-        await sb.from('epargne_objectifs').insert(payload);
+        ({ data: result, error } = await sb.from('epargne_objectifs').insert(payload).select());
+      }
+      if (error) {
+        console.error('epargne_objectifs', error);
+        toast('Erreur : ' + error.message, 'error');
+        return false;
       }
       await loadGoals();
       renderEpargne();
@@ -1523,9 +1656,10 @@ function openContribForm(id) {
     `Ajoute un montant à ton objectif`,
     async () => {
       const montant = parseFloat($('contrib-montant').value) || 0;
-      if (montant <= 0) { toast('Montant invalide', 'error'); return; }
+      if (montant <= 0) { toast('Montant invalide', 'error'); return false; }
       const newDeja = Number(g.deja_epargne || 0) + montant;
-      await sb.from('epargne_objectifs').update({ deja_epargne: newDeja }).eq('id', id);
+      const { error } = await sb.from('epargne_objectifs').update({ deja_epargne: newDeja }).eq('id', id);
+      if (error) { toast('Erreur : ' + error.message, 'error'); console.error(error); return false; }
       // Trace la contribution
       await sb.from('epargne_contributions').insert({
         objectif_id: id,
@@ -1958,7 +2092,7 @@ function openInvestForm(inv) {
       const invested = parseFloat($('inv-form-invested').value) || 0;
       const current = parseFloat($('inv-form-current').value) || 0;
       const date = $('inv-form-date').value || null;
-      if (!nom) { toast('Nom requis', 'error'); return; }
+      if (!nom) { toast('Nom requis', 'error'); return false; }
       const payload = {
         user_id: currentUser.id,
         nom,
@@ -1967,10 +2101,16 @@ function openInvestForm(inv) {
         valeur_actuelle: current,
         date_ouverture: date
       };
+      let error;
       if (isEdit) {
-        await sb.from('investissements').update(payload).eq('id', inv.id);
+        ({ error } = await sb.from('investissements').update(payload).eq('id', inv.id));
       } else {
-        await sb.from('investissements').insert(payload);
+        ({ error } = await sb.from('investissements').insert(payload));
+      }
+      if (error) {
+        console.error('investissements', error);
+        toast('Erreur : ' + error.message, 'error');
+        return false;
       }
       await loadInvestissements();
       renderInvestissements();
