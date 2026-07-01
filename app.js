@@ -892,7 +892,7 @@ function categorize(label, amount) {
     return { category: 'Éducation', sub_category: 'CVEC' };
   }
   // Marchands connus (fiabilise les imports + corrige les erreurs récurrentes)
-  if (L.includes('aboitie')) return { category: 'Amis & Famille', sub_category: 'Famille' };
+  if (L.includes('aboitie') || L.includes('colombe')) return { category: 'Amis & Famille', sub_category: 'Famille' };
   if (/\bassi\b/.test(L)) return { category: 'Transactions', sub_category: 'Virement interne' };
   if (L.includes('pety')) return { category: 'Loyer', sub_category: null };
   if (L.includes('predica') || L.includes('option system')) return { category: 'Investissements', sub_category: null };
@@ -902,8 +902,8 @@ function categorize(label, amount) {
   if (L.includes('klarna') || L.includes('scalapay')) return { category: 'Paiement échelonné', sub_category: null };
   if (L.includes('sfr') || L.includes('bouygues telecom')) return { category: 'Abonnements', sub_category: 'Téléphone' };
   if (L.includes('amouan') || L.includes('gnagne') || L.includes('mame diouf') || L.includes('saffo')) return { category: 'Amis & Famille', sub_category: null };
-  if (L.includes('deliveroo') || L.includes('franprix')) return { category: 'Alimentation', sub_category: null };
-  if (L.includes('flixbus') || L.includes('transpole')) return { category: 'Transport', sub_category: null };
+  if (L.includes('uber eats') || L.includes('deliveroo') || L.includes('franprix') || L.includes('distrifives') || L.includes('legrand primeur') || L.includes('delices exotic') || L.includes('delicesexotic') || L.includes('djam burger') || L.includes('ovalys') || L.includes('minimarket') || L.includes('boulange')) return { category: 'Alimentation', sub_category: null };
+  if (L.includes('flixbus') || L.includes('transpole') || L.includes('ubr') || L.includes('pending.ube')) return { category: 'Transport', sub_category: null };
   // Pass 1: rules spécifiques
   const specifics = rules.filter(r => !r.is_generic).sort((a, b) => b.priority - a.priority || b.pattern.length - a.pattern.length);
   for (const r of specifics) {
