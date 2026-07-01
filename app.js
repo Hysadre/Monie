@@ -20,7 +20,6 @@ const CAT_META = {
   'Loyer': { emoji: '🏠', color: '#DD7B85' },
   'Alimentation': { emoji: '🛒', color: '#F4A993' },
   'Transport': { emoji: '🚗', color: '#7C3F58' },
-  'Maison & Logement': { emoji: '🏡', color: '#DD7B85' },
   'Cosmétique': { emoji: '💄', color: '#E76F51' },
   'Mode': { emoji: '👗', color: '#D8B4DD' },
   'Santé': { emoji: '💊', color: '#E76F51' },
@@ -2976,7 +2975,7 @@ function renderPerfCards(currentKey, curIn, curOut, curBal) {
 
 // ═══ VUE ANNUELLE ══════════════════════════════════════════════
 const REV_CATS = ['Salaire', 'Tickets restaurant', 'Remboursements'];
-const EXP_CATS = ['Loyer', 'Alimentation', 'Transport', 'Maison & Logement', 'Cosmétique', 'Mode', 'Santé', 'Éducation', 'Administratif', 'Vie quotidienne', 'Abonnements', 'Paiement échelonné', 'Dîme', 'Dons', 'Investissements', 'Banque', 'Impôts', 'Transactions', 'Autres'];
+const EXP_CATS = ['Loyer', 'Alimentation', 'Transport', 'Cosmétique', 'Mode', 'Santé', 'Éducation', 'Administratif', 'Vie quotidienne', 'Abonnements', 'Paiement échelonné', 'Dîme', 'Dons', 'Investissements', 'Banque', 'Impôts', 'Transactions', 'Autres'];
 
 function renderVueAnnuelle() {
   if ($('annuelle-year')) annuelleYear = parseInt($('annuelle-year').value) || annuelleYear;
@@ -3067,7 +3066,7 @@ function renderVueAnnuelle() {
 // Mapping explicite catégorie → bloc budgétaire (transparent et prévisible)
 const BUDGET_BLOCK = {
   'Loyer': 'charges', 'Alimentation': 'charges', 'Transport': 'charges', 'Santé': 'charges',
-  'Abonnements': 'charges', 'Maison & Logement': 'charges', 'Administratif': 'charges',
+  'Abonnements': 'charges', 'Administratif': 'charges',
   'Impôts': 'charges', 'Banque': 'charges', 'Éducation': 'charges', 'Aide au logement': 'charges',
   'Vie quotidienne': 'plaisir', 'Mode': 'plaisir', 'Cosmétique': 'plaisir', 'Dons': 'plaisir',
   'Amis & Famille': 'plaisir', 'Divertissement': 'plaisir', 'Voyages': 'plaisir',
@@ -3230,7 +3229,6 @@ function renderBudget() {
       { cat: 'Transport',    pct: 5 },
       { cat: 'Santé',        pct: 3 },
       { cat: 'Abonnements',  pct: 2 },
-      { cat: 'Maison & Logement', pct: 5 },
       { cat: 'Administratif',pct: 2 }
     ],
     plaisir: [
@@ -3317,7 +3315,7 @@ function updateSubBudget(blocKey, index, newPct) {
       subBudget = {
         charges: [
           { cat: 'Loyer', pct: 30 }, { cat: 'Alimentation', pct: 10 }, { cat: 'Transport', pct: 5 },
-          { cat: 'Santé', pct: 3 }, { cat: 'Abonnements', pct: 2 }, { cat: 'Maison & Logement', pct: 5 },
+          { cat: 'Santé', pct: 3 }, { cat: 'Abonnements', pct: 2 },
           { cat: 'Administratif', pct: 2 }
         ],
         plaisir: [
