@@ -864,6 +864,98 @@ html, body {
 .empty-title { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
 .empty-sub { font-size: 12px; }
 
+/* ─── IMPORT TABS ─── */
+.import-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.import-tab {
+  flex: 1;
+  min-width: 120px;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--ff);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.import-tab:hover { background: var(--card); color: var(--ink); }
+.import-tab.active {
+  background: var(--card);
+  color: var(--rose);
+  box-shadow: var(--shadow-sm);
+}
+.import-tab-count {
+  display: inline-block;
+  background: var(--border-soft);
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 24px;
+  text-align: center;
+}
+.import-tab.active .import-tab-count {
+  background: var(--rose-soft);
+  color: var(--rose);
+}
+
+/* ─── PAGINATION ─── */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 0 4px;
+  margin-top: 12px;
+  border-top: 1px solid var(--border-soft);
+  flex-wrap: wrap;
+}
+.pag-btn {
+  padding: 10px 18px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  font-family: var(--ff);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-height: 44px;
+}
+.pag-btn:hover:not(:disabled) {
+  border-color: var(--rose);
+  color: var(--rose);
+  background: var(--rose-soft);
+}
+.pag-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pag-info {
+  font-size: 13px;
+  color: var(--ink);
+  text-align: center;
+  flex: 1;
+}
+
 /* ─── IMPORT DELETE BUTTON ─── */
 .import-del-btn {
   width: 32px;

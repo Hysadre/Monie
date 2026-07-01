@@ -486,6 +486,12 @@ function setupDragDrop() {
 async function handleImportFile(file) {
   if (!file) return;
   const name = file.name.toLowerCase();
+  // Reset l'état de preview pour repartir propre
+  previewTab = 'todo';
+  previewPage = 1;
+  previewFilterYear = 'all';
+  previewFilterMonth = 'all';
+  previewFilterCat = 'all';
   toast('Analyse de ' + file.name + '…');
   try {
     let parsed = [];
@@ -638,8 +644,13 @@ function detectDuplicates() {
 let previewFilterYear = 'all';
 let previewFilterMonth = 'all';
 let previewFilterCat = 'all';
+let previewTab = 'todo'; // 'todo' | 'done' | 'auto'
+let previewPage = 1;
+const PREVIEW_PAGE_SIZE = 50;
+let preservedScroll = 0;
 
 function showImportPreview() {
+  preservedScroll = window.scrollY;
   const wrap = $('import-preview');
   wrap.style.display = 'block';
   const nDup = importMatches.length;
@@ -651,22 +662,27 @@ function showImportPreview() {
   const monthsAvail = previewFilterYear === 'all'
     ? [...new Set(importPreviewData.map(t => t.date_op.slice(5, 7)))].sort()
     : [...new Set(importPreviewData.filter(t => t.date_op.startsWith(previewFilterYear)).map(t => t.date_op.slice(5, 7)))].sort();
-  const catsInImport = [...new Set(importPreviewData.map(t => t.category))].sort();
+
+  // Répartition des transactions par état
+  const active = importPreviewData.filter(t => !t._duplicate);
+  const todo = active.filter(t => t.category === 'Autres' && !t._userCategorized);
+  const done = active.filter(t => t._userCategorized);
+  const auto = active.filter(t => t.category !== 'Autres' && !t._userCategorized);
 
   let html = `
     <div class="card">
       <div class="card-hd">
         <div class="card-title">📥 Analyse de l'import</div>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn-ghost" onclick="cancelImport()">Annuler</button>
-          <button class="btn-primary" onclick="confirmImport()">Confirmer l'import (${nNew})</button>
+          <button class="btn-primary" onclick="confirmImport()">✓ Valider l'import (${nNew})</button>
         </div>
       </div>
       <div class="kpi-grid">
-        <div class="kpi kpi-sage"><div class="kpi-label">Nouvelles</div><div class="kpi-val kpi-val-sage">${nNew}</div><div class="kpi-hint">à ajouter</div></div>
-        <div class="kpi kpi-peach"><div class="kpi-label">Doublons</div><div class="kpi-val" style="color:var(--peach)">${nDup}</div><div class="kpi-hint">à vérifier</div></div>
-        <div class="kpi kpi-rose"><div class="kpi-label">Total lu</div><div class="kpi-val">${importPreviewData.length}</div><div class="kpi-hint">lignes</div></div>
-        <div class="kpi kpi-gold"><div class="kpi-label">Auto-catégorisées</div><div class="kpi-val kpi-val-gold">${importPreviewData.filter(t => t.category !== 'Autres').length}</div><div class="kpi-hint">reconnues</div></div>
+        <div class="kpi kpi-sage"><div class="kpi-label">✓ Nouvelles</div><div class="kpi-val kpi-val-sage">${nNew}</div><div class="kpi-hint">à ajouter</div></div>
+        <div class="kpi kpi-peach"><div class="kpi-label">⚠ Doublons</div><div class="kpi-val" style="color:var(--peach)">${nDup}</div><div class="kpi-hint">à vérifier</div></div>
+        <div class="kpi kpi-rose"><div class="kpi-label">🤔 À vérifier</div><div class="kpi-val kpi-val-rose">${todo.length}</div><div class="kpi-hint">non reconnues</div></div>
+        <div class="kpi kpi-gold"><div class="kpi-label">✨ Auto-cat.</div><div class="kpi-val kpi-val-gold">${auto.length}</div><div class="kpi-hint">reconnues</div></div>
       </div>`;
 
   if (nDup > 0) {
@@ -685,72 +701,134 @@ function showImportPreview() {
     html += `</div>`;
   }
 
-  // Filtres + liste
+  // ─── ONGLETS ──────────────────────────────────────
   html += `
     <div style="margin-top:20px">
-      <div class="card-hd">
-        <div class="card-title">✨ Nouvelles transactions</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <select class="select" style="width:auto" onchange="setPreviewFilter('year', this.value)">
-            <option value="all" ${previewFilterYear === 'all' ? 'selected' : ''}>Toutes années</option>
-            ${years.map(y => `<option value="${y}" ${previewFilterYear === y ? 'selected' : ''}>${y}</option>`).join('')}
-          </select>
-          <select class="select" style="width:auto" onchange="setPreviewFilter('month', this.value)">
-            <option value="all" ${previewFilterMonth === 'all' ? 'selected' : ''}>Tous mois</option>
-            ${monthsAvail.map(m => `<option value="${m}" ${previewFilterMonth === m ? 'selected' : ''}>${MONTHS[parseInt(m) - 1]}</option>`).join('')}
-          </select>
-          <select class="select" style="width:auto" onchange="setPreviewFilter('cat', this.value)">
-            <option value="all" ${previewFilterCat === 'all' ? 'selected' : ''}>Toutes catégo.</option>
-            ${catsInImport.map(c => `<option value="${c}" ${previewFilterCat === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('')}
-          </select>
-        </div>
+      <div class="import-tabs">
+        <button class="import-tab ${previewTab === 'todo' ? 'active' : ''}" onclick="setPreviewTab('todo')">
+          🤔 À vérifier <span class="import-tab-count">${todo.length}</span>
+        </button>
+        <button class="import-tab ${previewTab === 'done' ? 'active' : ''}" onclick="setPreviewTab('done')">
+          ✓ Catégorisées <span class="import-tab-count">${done.length}</span>
+        </button>
+        <button class="import-tab ${previewTab === 'auto' ? 'active' : ''}" onclick="setPreviewTab('auto')">
+          ✨ Auto <span class="import-tab-count">${auto.length}</span>
+        </button>
       </div>`;
 
-  // Filtrage
-  let filtered = importPreviewData.filter(t => !t._duplicate);
+  // Data selon l'onglet
+  let filtered = previewTab === 'todo' ? todo : previewTab === 'done' ? done : auto;
+  const filteredCats = [...new Set(filtered.map(t => t.category))].sort();
+
+  // Filtres date + catégorie
+  html += `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+        <select class="select" style="width:auto" onchange="setPreviewFilter('year', this.value)">
+          <option value="all" ${previewFilterYear === 'all' ? 'selected' : ''}>Toutes années</option>
+          ${years.map(y => `<option value="${y}" ${previewFilterYear === y ? 'selected' : ''}>${y}</option>`).join('')}
+        </select>
+        <select class="select" style="width:auto" onchange="setPreviewFilter('month', this.value)">
+          <option value="all" ${previewFilterMonth === 'all' ? 'selected' : ''}>Tous mois</option>
+          ${monthsAvail.map(m => `<option value="${m}" ${previewFilterMonth === m ? 'selected' : ''}>${MONTHS[parseInt(m) - 1]}</option>`).join('')}
+        </select>
+        <select class="select" style="width:auto" onchange="setPreviewFilter('cat', this.value)">
+          <option value="all" ${previewFilterCat === 'all' ? 'selected' : ''}>Toutes catégo.</option>
+          ${filteredCats.map(c => `<option value="${c}" ${previewFilterCat === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('')}
+        </select>
+      </div>`;
+
+  // Appliquer filtres date/cat
   if (previewFilterYear !== 'all') filtered = filtered.filter(t => t.date_op.startsWith(previewFilterYear));
   if (previewFilterMonth !== 'all') filtered = filtered.filter(t => t.date_op.slice(5, 7) === previewFilterMonth);
   if (previewFilterCat !== 'all') filtered = filtered.filter(t => t.category === previewFilterCat);
-  const displayed = filtered.slice(0, 100);
 
-  html += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Affiché : ${displayed.length} / ${filtered.length} · Tape sur une catégorie pour la changer et enseigner à Monie 🌸</div>`;
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PREVIEW_PAGE_SIZE));
+  if (previewPage > totalPages) previewPage = totalPages;
+  const startIdx = (previewPage - 1) * PREVIEW_PAGE_SIZE;
+  const displayed = filtered.slice(startIdx, startIdx + PREVIEW_PAGE_SIZE);
 
-  displayed.forEach((t, idx) => {
-    const globalIdx = importPreviewData.indexOf(t);
+  const tipMsg = {
+    'todo': 'Tape sur une catégorie pour classer la transaction. Monie apprend et applique la règle aux transactions similaires 🌸',
+    'done': 'Voici les transactions que tu as toi-même catégorisées.',
+    'auto': 'Transactions catégorisées automatiquement par les règles Monie.'
+  }[previewTab];
+
+  html += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;padding:8px 12px;background:var(--bg);border-radius:8px">${tipMsg}</div>`;
+
+  if (!filtered.length) {
+    html += previewTab === 'todo'
+      ? `<div class="empty"><div class="empty-emoji">✨</div><div class="empty-title">Bravo, tout est catégorisé !</div><div class="empty-sub">Tu peux valider l'import ci-dessus</div></div>`
+      : `<div class="empty"><div class="empty-title">Aucune transaction ici</div></div>`;
+  } else {
+    displayed.forEach(t => {
+      const globalIdx = importPreviewData.indexOf(t);
+      const catsToShow = previewTab === 'done' || previewTab === 'auto'
+        ? cats.map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('')
+        : cats.map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('');
+      html += `
+        <div class="tx-row" style="border-bottom:1px solid var(--border-soft)" data-tx-idx="${globalIdx}">
+          <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}<br><span style="font-size:10px">${t.date_op.slice(0, 4)}</span></div>
+          <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
+          <div class="tx-info">
+            <div class="tx-label">${t.label}</div>
+            <select class="select" style="margin-top:4px;padding:4px 8px;font-size:11px;width:auto;min-width:180px" onchange="recategorizeImportTx(${globalIdx}, this.value)">
+              ${catsToShow}
+            </select>
+          </div>
+          <div class="tx-amt ${t.type === 'entree' ? 'amt-in' : 'amt-out'}">${t.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(t.amount))}</div>
+          <button class="import-del-btn" onclick="deleteImportTx(${globalIdx})" title="Supprimer de l'import">✕</button>
+        </div>`;
+    });
+  }
+
+  // ─── PAGINATION ──────────────────────────────────
+  if (totalPages > 1) {
     html += `
-      <div class="tx-row" style="border-bottom:1px solid var(--border-soft)">
-        <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}<br><span style="font-size:10px">${t.date_op.slice(0, 4)}</span></div>
-        <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
-        <div class="tx-info">
-          <div class="tx-label">${t.label}</div>
-          <select class="select" style="margin-top:4px;padding:4px 8px;font-size:11px;width:auto;min-width:180px" onchange="recategorizeImportTx(${globalIdx}, this.value)">
-            ${cats.map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('')}
-          </select>
+      <div class="pagination">
+        <button class="pag-btn" ${previewPage === 1 ? 'disabled' : ''} onclick="changePreviewPage(-1)">‹ Précédente</button>
+        <div class="pag-info">
+          Page <b>${previewPage}</b> / ${totalPages}
+          <span style="color:var(--muted);font-weight:400"> · ${filtered.length} transaction(s)</span>
         </div>
-        <div class="tx-amt ${t.type === 'entree' ? 'amt-in' : 'amt-out'}">${t.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(t.amount))}</div>
-        <button class="import-del-btn" onclick="deleteImportTx(${globalIdx})" title="Supprimer de l'import (n'apparaîtra pas ce mois-ci)">✕</button>
+        <button class="pag-btn" ${previewPage === totalPages ? 'disabled' : ''} onclick="changePreviewPage(1)">Suivante ›</button>
       </div>`;
-  });
-
-  if (filtered.length > 100) html += `<div class="empty-sub" style="margin-top:12px;text-align:center">… ${filtered.length - 100} autres — utilise les filtres pour affiner</div>`;
-  if (!filtered.length) html += `<div class="empty"><div class="empty-title">Aucune transaction pour ce filtre</div></div>`;
+  } else if (filtered.length > 0) {
+    html += `<div class="pag-info" style="text-align:center;padding:16px">${filtered.length} transaction(s) affichée(s)</div>`;
+  }
 
   html += `</div></div>`;
   wrap.innerHTML = html;
-  if (wrap.scrollIntoView && previewFilterYear === 'all' && previewFilterMonth === 'all' && previewFilterCat === 'all') {
-    wrap.scrollIntoView({ behavior: 'smooth' });
-  }
+
+  // Restaurer scroll
+  requestAnimationFrame(() => window.scrollTo({ top: preservedScroll, behavior: 'instant' }));
+}
+
+function setPreviewTab(tab) {
+  previewTab = tab;
+  previewPage = 1;
+  previewFilterCat = 'all';
+  showImportPreview();
+}
+
+function changePreviewPage(dir) {
+  previewPage += dir;
+  if (previewPage < 1) previewPage = 1;
+  showImportPreview();
+  // Scroll en haut de la liste pour la nouvelle page
+  requestAnimationFrame(() => {
+    const wrap = $('import-preview');
+    if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 }
 
 function deleteImportTx(idx) {
   if (idx < 0 || idx >= importPreviewData.length) return;
   const t = importPreviewData[idx];
-  const dateStr = t.date_op ? new Date(t.date_op).toLocaleDateString('fr-FR') : '';
-  // Retire la transaction
+  preservedScroll = window.scrollY;
   importPreviewData.splice(idx, 1);
-  // Retire aussi des matches si présent
   importMatches = importMatches.filter(m => m.new !== t);
-  toast(`"${t.label.substring(0, 30)}..." retirée de l'import`, 'success');
+  toast(`"${t.label.substring(0, 30)}..." retirée`, 'success');
   showImportPreview();
 }
 
@@ -770,6 +848,7 @@ async function recategorizeImportTx(idx, newCat) {
   t.category = newCat;
   t.sub_category = null;
   t._userTaught = true;
+  t._userCategorized = true;
   // Créer une règle perso pour ce marchand
   const key = t.merchant_key || merchantKey(t.label);
   // Prendre les 2-3 premiers mots significatifs comme pattern
@@ -794,6 +873,7 @@ async function recategorizeImportTx(idx, newCat) {
         if (other !== t && !other._userTaught && other.merchant_key && other.merchant_key.includes(pattern)) {
           other.category = newCat;
           other.sub_category = null;
+          other._userCategorized = true; // Elles passent aussi dans "Catégorisées"
           count++;
         }
       });
