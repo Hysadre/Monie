@@ -43,10 +43,17 @@ html, body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+  overflow-y: auto;
   min-height: 100vh;
   /* Fix iOS Safari overscroll rubber-band → bottom-nav glitch */
   overscroll-behavior-y: none;
-  -webkit-overflow-scrolling: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* S'assurer que body peut scroller librement même quand un contenu très long est chargé */
+body {
+  height: auto;
+  min-height: 100vh;
+  position: relative;
 }
 html { background: var(--bg); }
 /* Layer sous la bottom-nav pour cacher le contenu qui rebondit derrière */
@@ -1864,7 +1871,12 @@ body::after {
     /* padding-top pour compenser le header fixed (~62px) */
     padding: calc(62px + 12px) 12px calc(var(--nav-h) + 40px + env(safe-area-inset-bottom));
     order: 2;
-    overflow-x: hidden;
+    /* PAS de overflow-x hidden ici — ça crée un scroll context
+       et empêche le body de scroller quand le contenu est très long (ex: 5154 tx).
+       overflow-x est déjà géré par html/body. */
+    overflow: visible;
+    flex: 0 1 auto;
+    min-height: 100vh;
   }
   .bottom-nav { display: flex; }
 
