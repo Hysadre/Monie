@@ -3384,7 +3384,8 @@ function renderBudget() {
       { cat: 'Transport',    pct: 5 },
       { cat: 'Santé',        pct: 3 },
       { cat: 'Abonnements',  pct: 2 },
-      { cat: 'Administratif',pct: 2 }
+      { cat: 'Administratif',pct: 2 },
+      { cat: 'Dîme',         pct: 10 }
     ],
     plaisir: [
       { cat: 'Vie quotidienne', pct: 8 },
@@ -3396,7 +3397,6 @@ function renderBudget() {
       { cat: 'Divertissement',  pct: 2 }
     ],
     epargne: [
-      { cat: 'Dîme',           pct: 10 },
       { cat: 'Investissements',pct: 5 },
       { cat: 'Épargne libre',  pct: 5 }
     ]
@@ -3405,6 +3405,16 @@ function renderBudget() {
   // Charge les valeurs éditées depuis localStorage si dispo
   let userSubBudget;
   try { userSubBudget = JSON.parse(localStorage.getItem('monie_sub_budget') || 'null'); } catch (e) {}
+  // Migration : la Dîme n'est plus une épargne (c'est un don) → la déplacer vers Charges si elle traîne encore dans l'épargne
+  if (userSubBudget && Array.isArray(userSubBudget.epargne)) {
+    const di = userSubBudget.epargne.findIndex(it => it.cat === 'Dîme');
+    if (di >= 0) {
+      const dime = userSubBudget.epargne.splice(di, 1)[0];
+      userSubBudget.charges = userSubBudget.charges || [];
+      if (!userSubBudget.charges.some(it => it.cat === 'Dîme')) userSubBudget.charges.push(dime);
+      try { localStorage.setItem('monie_sub_budget', JSON.stringify(userSubBudget)); } catch (e) {}
+    }
+  }
   const subBudget = userSubBudget || DEFAULT_SUB_PCT;
 
   // Rendu par bloc
@@ -3471,7 +3481,7 @@ function updateSubBudget(blocKey, index, newPct) {
         charges: [
           { cat: 'Loyer', pct: 30 }, { cat: 'Alimentation', pct: 10 }, { cat: 'Transport', pct: 5 },
           { cat: 'Santé', pct: 3 }, { cat: 'Abonnements', pct: 2 },
-          { cat: 'Administratif', pct: 2 }
+          { cat: 'Administratif', pct: 2 }, { cat: 'Dîme', pct: 10 }
         ],
         plaisir: [
           { cat: 'Vie quotidienne', pct: 8 }, { cat: 'Mode', pct: 5 }, { cat: 'Cosmétique', pct: 5 },
@@ -3479,7 +3489,7 @@ function updateSubBudget(blocKey, index, newPct) {
           { cat: 'Amis & Famille', pct: 3 }, { cat: 'Divertissement', pct: 2 }
         ],
         epargne: [
-          { cat: 'Dîme', pct: 10 }, { cat: 'Investissements', pct: 5 }, { cat: 'Épargne libre', pct: 5 }
+          { cat: 'Investissements', pct: 5 }, { cat: 'Épargne libre', pct: 5 }
         ]
       };
     }
