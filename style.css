@@ -1310,6 +1310,98 @@ body::after {
 .help-banner-body li { margin-bottom: 4px; }
 .help-banner.hidden { display: none; }
 
+/* Bulle info : toujours visible, permet de rouvrir la note explicative */
+.help-bubble {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--rose-soft), var(--peach-soft));
+  border: 1.5px solid rgba(231, 111, 81, 0.25);
+  color: var(--rose);
+  font-size: 16px;
+  cursor: pointer;
+  font-family: var(--ff);
+  font-weight: 800;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(231,111,81,0.12);
+  margin-bottom: 10px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.help-bubble:hover {
+  background: var(--rose);
+  color: white;
+  border-color: var(--rose);
+  transform: scale(1.08);
+  box-shadow: 0 4px 16px rgba(231,111,81,0.28);
+}
+.help-bubble::after {
+  /* Tooltip au hover */
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 46px;
+  top: 50%;
+  transform: translateY(-50%) translateX(-6px);
+  background: var(--ink);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.18s;
+  z-index: 60;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+}
+.help-bubble::before {
+  /* Petite flèche du tooltip */
+  content: '';
+  position: absolute;
+  left: 40px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: var(--ink);
+  opacity: 0;
+  transition: opacity 0.18s;
+  z-index: 60;
+}
+.help-bubble:hover::after,
+.help-bubble:hover::before {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+.help-bubble:hover::before {
+  transform: translateY(-50%);
+}
+/* Sur mobile, tooltip au-dessus au lieu d'à côté (évite débord droit) */
+@media (max-width: 900px) {
+  .help-bubble::after {
+    left: 50%;
+    top: -8px;
+    transform: translateX(-50%) translateY(-100%) translateY(6px);
+    white-space: normal;
+    max-width: calc(100vw - 40px);
+    width: max-content;
+  }
+  .help-bubble::before {
+    left: 50%;
+    top: -8px;
+    transform: translateX(-50%);
+    border-right-color: transparent;
+    border-top-color: var(--ink);
+  }
+  .help-bubble:hover::after {
+    transform: translateX(-50%) translateY(-100%);
+  }
+}
+
 /* ─── EMPTY STATE ─── */
 .empty {
   text-align: center;

@@ -108,11 +108,17 @@ function restoreHelpBanners() {
     const openIds = JSON.parse(localStorage.getItem('monie_help_open') || '[]');
     openIds.forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('open'); });
   } catch (e) {}
-  // Injecter le chevron + rendre le header cliquable pour chaque banner
+  // Injecter le chevron + rendre le header cliquable + créer la bulle info sœur
   document.querySelectorAll('.help-banner').forEach(banner => {
     const hd = banner.querySelector('.help-banner-hd');
     if (!hd || banner.dataset.wired) return;
     banner.dataset.wired = '1';
+
+    // Récupérer titre + emoji du banner pour construire le tooltip
+    const titleEl = banner.querySelector('.help-banner-title');
+    const iconEl = banner.querySelector('.help-banner-icon');
+    const tooltipText = titleEl ? titleEl.textContent.trim() : 'Voir l\'aide';
+
     // Ajouter chevron si pas déjà présent
     if (!hd.querySelector('.help-banner-chevron')) {
       const chev = document.createElement('div');
@@ -121,10 +127,40 @@ function restoreHelpBanners() {
       hd.appendChild(chev);
     }
     hd.addEventListener('click', (e) => {
-      // Le bouton close a son propre stopPropagation
       if (e.target.closest('.help-banner-close')) return;
       toggleHelp(banner.id);
     });
+
+    // Créer la bulle info sœur, insérée juste avant le banner
+    if (!banner.previousElementSibling || !banner.previousElementSibling.classList.contains('help-bubble')) {
+      const bubble = document.createElement('button');
+      bubble.className = 'help-bubble';
+      bubble.setAttribute('data-target', banner.id);
+      bubble.setAttribute('data-tooltip', tooltipText);
+      bubble.setAttribute('aria-label', tooltipText);
+      bubble.innerHTML = 'ℹ️';
+      bubble.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        const target = document.getElementById(banner.id);
+        if (!target) return;
+        // Retirer .hidden si masqué + ouvrir + retirer du localStorage hidden
+        target.classList.remove('hidden');
+        target.classList.add('open');
+        try {
+          const hidden = JSON.parse(localStorage.getItem('monie_help_hidden') || '[]');
+          const filtered = hidden.filter(x => x !== banner.id);
+          localStorage.setItem('monie_help_hidden', JSON.stringify(filtered));
+          const openIds = JSON.parse(localStorage.getItem('monie_help_open') || '[]');
+          if (!openIds.includes(banner.id)) {
+            openIds.push(banner.id);
+            localStorage.setItem('monie_help_open', JSON.stringify(openIds));
+          }
+        } catch (e) {}
+        // Scroll doux vers le banner
+        target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+      banner.parentNode.insertBefore(bubble, banner);
+    }
   });
 }
 
