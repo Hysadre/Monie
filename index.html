@@ -98,9 +98,13 @@
         </button>
       </nav>
       <div class="sidebar-bottom">
-        <div class="user-pill">
+        <div class="user-pill" onclick="showTab('profile')" style="cursor:pointer" title="Voir mon profil">
           <div class="user-avatar" id="user-avatar">?</div>
-          <span class="user-email" id="user-email">—</span>
+          <div style="display:flex;flex-direction:column;min-width:0;flex:1">
+            <span class="user-name" id="user-name" style="font-weight:800;font-size:12px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Mon compte</span>
+            <span class="user-email" id="user-email" style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</span>
+          </div>
+          <span style="color:var(--muted);font-size:14px">⚙</span>
         </div>
         <button class="logout-btn" onclick="logout()">Déconnexion</button>
       </div>
@@ -110,10 +114,10 @@
       <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
       </button>
-      <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;cursor:pointer" onclick="showTab('profile')" title="Mon profil">
         <img src="favicon.svg" class="brand-logo-sm" alt="M">
         <div style="min-width:0;overflow:hidden">
-          <div id="mobile-greeting" style="font-size:14px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Bonjour 🌸</div>
+          <div id="mobile-greeting" style="font-size:14px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Bonjour</div>
           <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="mobile-email">—</div>
         </div>
       </div>
@@ -682,6 +686,142 @@
             <button class="btn-ghost" onclick="toggleAbandonedList()" id="toggle-abandoned-btn" style="padding:6px 12px;font-size:12px">Voir</button>
           </div>
           <div id="goals-abandoned-list" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- ⚙ RÉGLAGES / PROFIL -->
+      <div id="tab-profile" class="tab">
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">Réglages du profil</h1>
+            <p class="page-sub">Compte, sécurité et apparence</p>
+          </div>
+        </div>
+        <div class="help-banner" id="help-profile">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">⚙</div>
+            <div class="help-banner-title">Comment ça marche — Réglages</div>
+            <button class="help-banner-close" onclick="closeHelp('help-profile')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            <b>Personnalise ton expérience Monie :</b>
+            <ul>
+              <li><b>Identité</b> : pseudo + avatar (emoji) affichés en haut</li>
+              <li><b>Sécurité</b> : change ton email ou ton mot de passe à tout moment</li>
+              <li><b>Apparence</b> : choisis parmi 5 palettes selon ton humeur (rose, océan, forêt, nuit, sobre)</li>
+              <li><b>Emojis</b> : activable / désactivable si tu veux quelque chose de plus sobre</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Bloc 1 : Identité -->
+        <div class="card">
+          <div class="card-hd"><div class="card-title">👤 Mon identité</div></div>
+          <div style="display:flex;flex-direction:column;gap:14px;max-width:520px">
+            <div class="qa-field">
+              <label class="qa-label">Pseudo affiché</label>
+              <input class="inp" type="text" id="profile-name" placeholder="Ex: Marie, Jean, Miss Budget…">
+            </div>
+            <div class="qa-field">
+              <label class="qa-label">Emoji avatar</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap" id="profile-avatar-picker">
+                <button class="avatar-pick" data-emoji="🌸">🌸</button>
+                <button class="avatar-pick" data-emoji="🐻">🐻</button>
+                <button class="avatar-pick" data-emoji="🦊">🦊</button>
+                <button class="avatar-pick" data-emoji="🐼">🐼</button>
+                <button class="avatar-pick" data-emoji="🦁">🦁</button>
+                <button class="avatar-pick" data-emoji="🐨">🐨</button>
+                <button class="avatar-pick" data-emoji="🐧">🐧</button>
+                <button class="avatar-pick" data-emoji="🦉">🦉</button>
+                <button class="avatar-pick" data-emoji="🐳">🐳</button>
+                <button class="avatar-pick" data-emoji="⭐">⭐</button>
+                <button class="avatar-pick" data-emoji="🌙">🌙</button>
+                <button class="avatar-pick" data-emoji="⚡">⚡</button>
+                <button class="avatar-pick" data-emoji="🔥">🔥</button>
+                <button class="avatar-pick" data-emoji="💎">💎</button>
+                <button class="avatar-pick" data-emoji="🎯">🎯</button>
+                <button class="avatar-pick" data-emoji="🍀">🍀</button>
+              </div>
+            </div>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+              <input type="checkbox" id="profile-show-emojis" style="width:18px;height:18px;accent-color:var(--rose)">
+              <span style="font-size:14px;font-weight:600">Afficher les emojis dans l'interface (fleurs, cœurs…)</span>
+            </label>
+            <button class="btn-primary" onclick="saveProfile()" style="align-self:flex-start">✓ Enregistrer</button>
+          </div>
+        </div>
+
+        <!-- Bloc 2 : Sécurité -->
+        <div class="card">
+          <div class="card-hd"><div class="card-title">🔒 Sécurité du compte</div></div>
+          <div style="display:flex;flex-direction:column;gap:20px;max-width:520px">
+            <!-- Changer email -->
+            <div>
+              <div class="qa-field">
+                <label class="qa-label">Adresse email</label>
+                <input class="inp" type="email" id="profile-email" placeholder="nouveau@email.com">
+              </div>
+              <button class="btn-ghost" onclick="changeEmail()" style="margin-top:8px">Modifier l'email</button>
+              <div style="font-size:11px;color:var(--muted);margin-top:6px">Un email de confirmation te sera envoyé sur les 2 adresses.</div>
+            </div>
+
+            <!-- Changer mot de passe -->
+            <div style="border-top:1px dashed var(--border);padding-top:16px">
+              <div class="qa-field">
+                <label class="qa-label">Nouveau mot de passe</label>
+                <input class="inp" type="password" id="profile-new-pwd" placeholder="Min. 6 caractères">
+              </div>
+              <div class="qa-field" style="margin-top:8px">
+                <label class="qa-label">Confirmer le mot de passe</label>
+                <input class="inp" type="password" id="profile-new-pwd2" placeholder="Retape le même">
+              </div>
+              <button class="btn-ghost" onclick="changePassword()" style="margin-top:8px">Modifier le mot de passe</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bloc 3 : Apparence -->
+        <div class="card">
+          <div class="card-hd"><div class="card-title">🎨 Apparence</div></div>
+          <div style="max-width:640px">
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Choisis la palette qui te ressemble. C'est sauvegardé sur ton compte, donc tu retrouves ton thème sur tous tes appareils.</p>
+            <div class="theme-picker">
+              <button class="theme-card" data-theme="rose" onclick="setTheme('rose')">
+                <div class="theme-swatch" style="background:linear-gradient(135deg,#E76F51,#DD7B85,#F4A993)"></div>
+                <div class="theme-name">🌸 Rose framboise</div>
+                <div class="theme-sub">Girly, douce, féminine</div>
+              </button>
+              <button class="theme-card" data-theme="ocean" onclick="setTheme('ocean')">
+                <div class="theme-swatch" style="background:linear-gradient(135deg,#2E6D8F,#4FC3F7,#B0D8DE)"></div>
+                <div class="theme-name">🌊 Océan</div>
+                <div class="theme-sub">Frais, apaisant, marin</div>
+              </button>
+              <button class="theme-card" data-theme="foret" onclick="setTheme('foret')">
+                <div class="theme-swatch" style="background:linear-gradient(135deg,#556B2F,#8FBC8F,#D2B48C)"></div>
+                <div class="theme-name">🌲 Forêt</div>
+                <div class="theme-sub">Nature, terreux, calme</div>
+              </button>
+              <button class="theme-card" data-theme="nuit" onclick="setTheme('nuit')">
+                <div class="theme-swatch" style="background:linear-gradient(135deg,#1F2937,#4C1D95,#7C3AED)"></div>
+                <div class="theme-name">🌙 Nuit</div>
+                <div class="theme-sub">Sombre, tamisé, élégant</div>
+              </button>
+              <button class="theme-card" data-theme="sobre" onclick="setTheme('sobre')">
+                <div class="theme-swatch" style="background:linear-gradient(135deg,#334155,#64748B,#94A3B8)"></div>
+                <div class="theme-name">🏢 Sobre</div>
+                <div class="theme-sub">Pro, neutre, minimaliste</div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bloc 4 : Zone dangereuse -->
+        <div class="card" style="border-color:rgba(229,57,53,0.3)">
+          <div class="card-hd"><div class="card-title" style="color:#E53935">⚠ Zone sensible</div></div>
+          <div style="max-width:520px">
+            <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Supprimer ton compte est <b>irréversible</b> : toutes tes transactions, règles, objectifs et investissements seront effacés définitivement.</p>
+            <button class="btn-ghost" onclick="requestDeleteAccount()" style="border-color:#E53935;color:#E53935">Supprimer mon compte</button>
+          </div>
         </div>
       </div>
     </main>

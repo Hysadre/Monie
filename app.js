@@ -421,8 +421,19 @@ async function loadAllData() {
   ]);
   transactions = txRes.data || [];
   rules = rulesRes.data || [];
-  console.log(`📊 ${transactions.length} transactions, ${rules.length} règles`);
+  await loadProfile();
+  console.log(`📊 ${transactions.length} transactions, ${rules.length} règles, profil chargé`);
 }
+
+// Appliquer immédiatement le thème mémorisé en localStorage (évite le flash rose)
+(function initThemeEarly() {
+  try {
+    const saved = localStorage.getItem('monie_theme');
+    if (saved && ['rose','ocean','foret','nuit','sobre'].includes(saved)) {
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+  } catch (e) {}
+})();
 
 // ═══ TABS ══════════════════════════════════════════════════════
 function showTab(name) {
@@ -441,6 +452,155 @@ function showTab(name) {
   if (name === 'budget') renderBudget();
   if (name === 'invest') renderInvestissements();
   if (name === 'import') { $('import-preview').style.display = 'none'; }
+  if (name === 'profile') renderProfile();
+}
+
+// ═══ PROFIL & THÈMES ═══════════════════════════════════════════
+let userProfile = null;
+const VALID_THEMES = ['rose', 'ocean', 'foret', 'nuit', 'sobre'];
+
+function applyTheme(theme) {
+  if (!VALID_THEMES.includes(theme)) theme = 'rose';
+  document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem('monie_theme', theme); } catch (e) {}
+  // MAJ theme-color mobile (barre iOS)
+  const tc = document.querySelector('meta[name="theme-color"]');
+  if (tc) {
+    const colors = { rose:'#FDFAF8', ocean:'#F5FAFC', foret:'#FAF9F4', nuit:'#0F172A', sobre:'#F8FAFC' };
+    tc.setAttribute('content', colors[theme] || '#FDFAF8');
+  }
+  // MAJ visuelle du picker
+  document.querySelectorAll('.theme-card').forEach(c =>
+    c.classList.toggle('selected', c.dataset.theme === theme)
+  );
+}
+
+async function setTheme(theme) {
+  applyTheme(theme);
+  if (userProfile) userProfile.theme = theme;
+  if (currentUser) {
+    await sb.from('profiles').upsert({
+      user_id: currentUser.id,
+      theme: theme
+    }, { onConflict: 'user_id' });
+  }
+  toast('✓ Thème mis à jour', 'success');
+}
+
+async function loadProfile() {
+  const { data, error } = await sb.from('profiles').select('*').eq('user_id', currentUser.id).maybeSingle();
+  if (error) { console.error('loadProfile', error); return; }
+  if (!data) {
+    // Créer le profil par défaut à la 1ère connexion
+    const defaultName = currentUser.email ? currentUser.email.split('@')[0] : 'Ami·e';
+    const { data: newProf } = await sb.from('profiles').insert({
+      user_id: currentUser.id,
+      display_name: defaultName,
+      avatar_emoji: '🌸',
+      theme: 'rose',
+      show_emojis: true
+    }).select().single();
+    userProfile = newProf || { display_name: defaultName, avatar_emoji: '🌸', theme: 'rose', show_emojis: true };
+  } else {
+    userProfile = data;
+  }
+  applyTheme(userProfile.theme || 'rose');
+  // MAJ affichage sidebar + mobile
+  const nameEl = $('user-name');
+  if (nameEl) nameEl.textContent = userProfile.display_name || 'Mon compte';
+  const av = $('user-avatar');
+  if (av) av.textContent = userProfile.avatar_emoji || '🌸';
+  const greet = $('mobile-greeting');
+  if (greet) greet.textContent = `Bonjour, ${userProfile.display_name || ''}`.trim();
+}
+
+function renderProfile() {
+  if (!userProfile) return;
+  const nameInput = $('profile-name');
+  if (nameInput) nameInput.value = userProfile.display_name || '';
+  const emailInput = $('profile-email');
+  if (emailInput && currentUser) emailInput.value = currentUser.email || '';
+  const showEmojis = $('profile-show-emojis');
+  if (showEmojis) showEmojis.checked = userProfile.show_emojis !== false;
+  // Avatar picker : mettre en selected celui du user
+  document.querySelectorAll('.avatar-pick').forEach(b => {
+    b.classList.toggle('selected', b.dataset.emoji === (userProfile.avatar_emoji || '🌸'));
+    b.onclick = () => {
+      document.querySelectorAll('.avatar-pick').forEach(x => x.classList.remove('selected'));
+      b.classList.add('selected');
+      userProfile.avatar_emoji = b.dataset.emoji;
+    };
+  });
+  // Theme picker : marquer le courant
+  document.querySelectorAll('.theme-card').forEach(c =>
+    c.classList.toggle('selected', c.dataset.theme === (userProfile.theme || 'rose'))
+  );
+}
+
+async function saveProfile() {
+  if (!currentUser) return;
+  const name = $('profile-name').value.trim();
+  const showEmojis = $('profile-show-emojis').checked;
+  const avatar = userProfile.avatar_emoji || '🌸';
+  const { error } = await sb.from('profiles').upsert({
+    user_id: currentUser.id,
+    display_name: name || null,
+    avatar_emoji: avatar,
+    show_emojis: showEmojis
+  }, { onConflict: 'user_id' });
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  userProfile.display_name = name;
+  userProfile.avatar_emoji = avatar;
+  userProfile.show_emojis = showEmojis;
+  // Refresh header
+  const nameEl = $('user-name');
+  if (nameEl) nameEl.textContent = name || 'Mon compte';
+  const av = $('user-avatar');
+  if (av) av.textContent = avatar;
+  const greet = $('mobile-greeting');
+  if (greet) greet.textContent = `Bonjour, ${name}`.trim();
+  toast('✓ Profil enregistré', 'success');
+}
+
+async function changeEmail() {
+  const newEmail = $('profile-email').value.trim();
+  if (!newEmail || !newEmail.includes('@')) { toast('Email invalide', 'error'); return; }
+  if (newEmail === currentUser.email) { toast('C\'est déjà ton email actuel', 'error'); return; }
+  const { error } = await sb.auth.updateUser({ email: newEmail });
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  toast('📩 Email de confirmation envoyé — vérifie tes 2 boîtes mail', 'success');
+}
+
+async function changePassword() {
+  const p1 = $('profile-new-pwd').value;
+  const p2 = $('profile-new-pwd2').value;
+  if (!p1 || p1.length < 6) { toast('Min. 6 caractères', 'error'); return; }
+  if (p1 !== p2) { toast('Les 2 mots de passe ne correspondent pas', 'error'); return; }
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  $('profile-new-pwd').value = '';
+  $('profile-new-pwd2').value = '';
+  toast('✓ Mot de passe modifié', 'success');
+}
+
+async function requestDeleteAccount() {
+  openModal(
+    '⚠ Supprimer mon compte',
+    'Toutes tes données (transactions, règles, objectifs, investissements) seront effacées définitivement. Cette action est irréversible.',
+    async () => {
+      // Supprime toutes les données du user (grâce aux ON DELETE CASCADE, l'auth delete ferait tout, mais on ne peut pas delete l'auth user depuis le front)
+      await sb.from('transactions').delete().eq('user_id', currentUser.id);
+      await sb.from('merchant_rules').delete().eq('user_id', currentUser.id);
+      await sb.from('epargne_objectifs').delete().eq('user_id', currentUser.id);
+      await sb.from('epargne_contributions').delete().eq('user_id', currentUser.id);
+      await sb.from('investissements').delete().eq('user_id', currentUser.id);
+      await sb.from('budget_prep').delete().eq('user_id', currentUser.id);
+      await sb.from('profiles').delete().eq('user_id', currentUser.id);
+      await sb.auth.signOut();
+      toast('Compte vidé et déconnecté. Contacte-moi pour supprimer définitivement l\'accès.', 'success');
+      location.reload();
+    }
+  );
 }
 
 // ─── Populate sélecteurs Calendrier/Dashboard/Annuelle ────────

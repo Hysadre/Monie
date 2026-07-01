@@ -1,5 +1,5 @@
-:root {
-  /* 🌸 Palette Monie V3 — claire, féminine, apaisée */
+:root, [data-theme="rose"] {
+  /* 🌸 Palette Rose framboise (défaut) */
   --bg: #FDFAF8;
   --card: #FFFFFF;
   --card-hover: #FDF7F5;
@@ -22,6 +22,112 @@
   --lavender-soft: #F5E8F7;
   --gold: #E8B84D;
   --gold-soft: #FCF3DC;
+}
+
+/* 🌊 Océan */
+[data-theme="ocean"] {
+  --bg: #F5FAFC;
+  --card: #FFFFFF;
+  --card-hover: #EEF6F9;
+  --border: #C7DEE7;
+  --border-soft: #E1EDF3;
+  --ink: #0F2942;
+  --text: #1F3547;
+  --muted: #5A7C8E;
+  --dim: #A0B4C0;
+  --rose: #2E6D8F;         /* accent primaire = bleu marine */
+  --rose-soft: #DBEEF6;
+  --plum: #143A55;
+  --sage: #4FC3F7;         /* secondaire = turquoise */
+  --sage-soft: #E1F5FE;
+  --peach: #B0D8DE;
+  --peach-soft: #E8F4F5;
+  --tender-rose: #3B90B8;
+  --tender-rose-soft: #D6EAF3;
+  --lavender: #A1B7C5;
+  --lavender-soft: #E5EBEF;
+  --gold: #F4A261;
+  --gold-soft: #FDEEE0;
+}
+
+/* 🌲 Forêt */
+[data-theme="foret"] {
+  --bg: #FAF9F4;
+  --card: #FFFFFF;
+  --card-hover: #F7F5EE;
+  --border: #D8DEC1;
+  --border-soft: #ECEEE0;
+  --ink: #2A2E1A;
+  --text: #3E4223;
+  --muted: #7A7C55;
+  --dim: #B0B39A;
+  --rose: #556B2F;         /* accent = vert olive */
+  --rose-soft: #E8EDD9;
+  --plum: #33471B;
+  --sage: #8FBC8F;
+  --sage-soft: #E6F0E4;
+  --peach: #D2B48C;
+  --peach-soft: #F1E7D5;
+  --tender-rose: #6B8E4E;
+  --tender-rose-soft: #DEE7CE;
+  --lavender: #B7A98B;
+  --lavender-soft: #EDE7DA;
+  --gold: #DAA520;
+  --gold-soft: #F8ECC7;
+}
+
+/* 🌙 Nuit (sombre) */
+[data-theme="nuit"] {
+  --bg: #0F172A;
+  --card: #1E293B;
+  --card-hover: #273449;
+  --border: #334155;
+  --border-soft: #2A3548;
+  --ink: #F1F5F9;
+  --text: #E2E8F0;
+  --muted: #94A3B8;
+  --dim: #64748B;
+  --rose: #A78BFA;         /* accent = violet clair */
+  --rose-soft: #2E1D5C;
+  --plum: #7C3AED;
+  --sage: #34D399;         /* secondaire = mint */
+  --sage-soft: #0F3D2E;
+  --peach: #FBBF24;
+  --peach-soft: #3E2E0F;
+  --tender-rose: #C084FC;
+  --tender-rose-soft: #2D1B4E;
+  --lavender: #818CF8;
+  --lavender-soft: #1E1F4A;
+  --gold: #FCD34D;
+  --gold-soft: #3E2E0F;
+}
+
+/* 🏢 Sobre (neutre pro) */
+[data-theme="sobre"] {
+  --bg: #F8FAFC;
+  --card: #FFFFFF;
+  --card-hover: #F1F5F9;
+  --border: #CBD5E1;
+  --border-soft: #E2E8F0;
+  --ink: #0F172A;
+  --text: #1E293B;
+  --muted: #64748B;
+  --dim: #94A3B8;
+  --rose: #334155;         /* accent = anthracite */
+  --rose-soft: #E2E8F0;
+  --plum: #1E293B;
+  --sage: #10B981;         /* juste un vert-succes */
+  --sage-soft: #D1FAE5;
+  --peach: #94A3B8;
+  --peach-soft: #F1F5F9;
+  --tender-rose: #475569;
+  --tender-rose-soft: #E2E8F0;
+  --lavender: #64748B;
+  --lavender-soft: #E2E8F0;
+  --gold: #F59E0B;
+  --gold-soft: #FEF3C7;
+}
+:root {
   --shadow-sm: 0 1px 3px rgba(45,55,72,0.04), 0 1px 2px rgba(45,55,72,0.03);
   --shadow: 0 4px 12px rgba(231,111,81,0.06), 0 2px 4px rgba(45,55,72,0.04);
   --shadow-lg: 0 12px 32px rgba(231,111,81,0.10), 0 4px 8px rgba(45,55,72,0.06);
@@ -673,6 +779,83 @@ body::after {
   font-weight: 800;
   width: 100%;
 }
+
+/* ─── PAGE RÉGLAGES / PROFIL ─── */
+.avatar-pick {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--card);
+  cursor: pointer;
+  font-size: 20px;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.avatar-pick:hover {
+  border-color: var(--rose);
+  transform: scale(1.1);
+  background: var(--rose-soft);
+}
+.avatar-pick.selected {
+  border-color: var(--rose);
+  background: linear-gradient(135deg, var(--rose-soft), var(--peach-soft));
+  transform: scale(1.15);
+  box-shadow: 0 4px 12px rgba(231,111,81,0.25);
+}
+
+.theme-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+.theme-card {
+  padding: 14px;
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--ff);
+  color: var(--ink);
+  transition: all 0.18s;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.theme-card:hover {
+  border-color: var(--rose);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+.theme-card.selected {
+  border-color: var(--rose);
+  background: linear-gradient(135deg, var(--rose-soft), var(--peach-soft));
+  box-shadow: 0 6px 18px rgba(231,111,81,0.2);
+}
+.theme-swatch {
+  width: 100%;
+  height: 40px;
+  border-radius: var(--radius-xs);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
+}
+.theme-name { font-size: 14px; font-weight: 800; }
+.theme-sub { font-size: 11px; color: var(--muted); font-weight: 500; }
+
+/* Mode sombre : ajustements de contraste */
+[data-theme="nuit"] .card { box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+[data-theme="nuit"] .kpi { background: var(--card); }
+[data-theme="nuit"] .avatar-pick { background: var(--card-hover); }
+[data-theme="nuit"] .theme-swatch { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1); }
+[data-theme="nuit"] input, [data-theme="nuit"] select, [data-theme="nuit"] textarea {
+  background: var(--card-hover);
+  color: var(--text);
+  border-color: var(--border);
+}
+[data-theme="nuit"] .inp::placeholder { color: var(--muted); }
 .btn-primary {
   background: linear-gradient(135deg, var(--rose), var(--tender-rose));
   color: white;
