@@ -654,7 +654,7 @@
             <ul>
               <li><b style="color:var(--tender-rose)">50% Charges</b> (loyer, alimentation, transports, santé, factures)</li>
               <li><b style="color:var(--peach)">30% Plaisir</b> (sorties, restos, mode, cosmétique, loisirs)</li>
-              <li><b style="color:var(--sage)">20% Épargne</b> (Livret A, PEA, dîme, objectifs perso)</li>
+              <li><b style="color:var(--sage)">20% Épargne</b> (Livret A, PEA, objectifs perso)</li>
             </ul>
             <b>Comment utiliser :</b> Saisis ton salaire mensuel → Monie calcule automatiquement combien allouer à chaque bloc + détaille par sous-catégorie (Loyer, Alimentation, Mode…).
           </div>
@@ -677,32 +677,33 @@
             <div class="card-hd"><div class="card-title">Ton revenu mensuel</div></div>
             <div class="field-group">
               <label class="field-label">Salaire net</label>
-              <input class="inp" type="number" id="bud-revenu" placeholder="Ex: 2200" oninput="renderBudget()" step="0.01">
+              <input class="inp" type="number" id="bud-revenu" placeholder="Ex: 2200" oninput="renderBudget()" onchange="saveBudgetPrepNow()" step="0.01">
             </div>
             <div class="field-group" style="margin-top:16px">
               <div class="field-label" style="margin-bottom:8px">Répartition (total = 100%)</div>
               <div class="bud-slider-row">
                 <div class="dot-col" style="background:var(--tender-rose)"></div>
                 <span>Charges</span>
-                <input class="inp" type="number" id="bud-pct-charges" value="50" min="0" max="100" oninput="normalizeBudgetPct('charges')" style="width:70px">
+                <input class="inp" type="number" id="bud-pct-charges" value="50" min="0" max="100" oninput="normalizeBudgetPct('charges')" onchange="saveBudgetPrepNow()" style="width:70px">
                 <span>%</span>
               </div>
               <div class="bud-slider-row">
                 <div class="dot-col" style="background:var(--peach)"></div>
                 <span>Plaisir</span>
-                <input class="inp" type="number" id="bud-pct-plaisir" value="30" min="0" max="100" oninput="normalizeBudgetPct('plaisir')" style="width:70px">
+                <input class="inp" type="number" id="bud-pct-plaisir" value="30" min="0" max="100" oninput="normalizeBudgetPct('plaisir')" onchange="saveBudgetPrepNow()" style="width:70px">
                 <span>%</span>
               </div>
               <div class="bud-slider-row">
                 <div class="dot-col" style="background:var(--sage)"></div>
                 <span>Épargne</span>
-                <input class="inp" type="number" id="bud-pct-epargne" value="20" min="0" max="100" oninput="normalizeBudgetPct('epargne')" style="width:70px">
+                <input class="inp" type="number" id="bud-pct-epargne" value="20" min="0" max="100" oninput="normalizeBudgetPct('epargne')" onchange="saveBudgetPrepNow()" style="width:70px">
                 <span>%</span>
               </div>
               <div style="margin-top:8px;font-size:12px;color:var(--muted);text-align:right">
                 Total : <span id="bud-total-pct" style="font-weight:700;color:var(--sage)">100%</span>
               </div>
             </div>
+            <button class="btn-primary" onclick="saveBudgetManual()" style="width:100%;margin-top:18px;padding:12px;font-size:15px">💾 Sauvegarder mon budget</button>
           </div>
           <div class="card">
             <div class="card-hd"><div class="card-title">Ta répartition suggérée</div></div>

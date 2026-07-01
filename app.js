@@ -1422,7 +1422,8 @@ function renderAnalyse() {
   const months = new Set(scope.map(t => t.date_op.slice(0, 7))).size || 1;
 
   // ── KPIs éducatifs ──
-  const epargne = exp.filter(t => ['Investissements', 'Dîme', 'Dons'].includes(t.category)).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  // Épargne = ce qui est réellement mis de côté (Investissements). La Dîme et les Dons = des dons, PAS de l'épargne.
+  const epargne = exp.filter(t => t.category === 'Investissements').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
   const solde = totalIn - totalOut;
   const tauxEp = totalIn > 0 ? Math.round((Math.max(0, solde) + epargne) / totalIn * 100) : 0;
   set('an-taux', tauxEp + '%');
@@ -3173,7 +3174,7 @@ const BUDGET_BLOCK = {
   'Impôts': 'charges', 'Banque': 'charges', 'Éducation': 'charges', 'Aide au logement': 'charges',
   'Vie quotidienne': 'plaisir', 'Mode': 'plaisir', 'Cosmétique': 'plaisir', 'Dons': 'plaisir',
   'Amis & Famille': 'plaisir', 'Divertissement': 'plaisir', 'Voyages': 'plaisir',
-  'Dîme': 'epargne', 'Investissements': 'epargne'
+  'Dîme': 'charges', 'Investissements': 'epargne'
 };
 function computeBudgetStatus() {
   const rev = budgetData.revenu_mensuel || 0;
@@ -3298,19 +3299,28 @@ function normalizeBudgetPct(changed) {
 }
 
 let budgetSaveTimer = null;
-async function saveBudgetPrep() {
+// Lit les valeurs courantes des champs et enregistre en base
+function _doBudgetSave() {
+  budgetData.revenu_mensuel = parseFloat($('bud-revenu').value) || 0;
+  budgetData.pct_charges = Math.max(0, Math.min(100, parseInt($('bud-pct-charges').value) || 0));
+  budgetData.pct_plaisir = Math.max(0, Math.min(100, parseInt($('bud-pct-plaisir').value) || 0));
+  budgetData.pct_epargne = Math.max(0, Math.min(100, parseInt($('bud-pct-epargne').value) || 0));
+  return dbGuard(sb.from('budget_prep').upsert({
+    user_id: currentUser.id,
+    revenu_mensuel: budgetData.revenu_mensuel,
+    pct_charges: budgetData.pct_charges,
+    pct_plaisir: budgetData.pct_plaisir,
+    pct_epargne: budgetData.pct_epargne
+  }, { onConflict: 'user_id' }), 'Sauvegarde du budget échouée.');
+}
+function saveBudgetPrep() { clearTimeout(budgetSaveTimer); budgetSaveTimer = setTimeout(_doBudgetSave, 1000); }
+// Sauvegarde IMMÉDIATE (appelée quand tu quittes un champ) → plus de perte au refresh
+function saveBudgetPrepNow() { clearTimeout(budgetSaveTimer); _doBudgetSave(); }
+// Sauvegarde manuelle via le bouton « Sauvegarder mon budget » (avec confirmation)
+async function saveBudgetManual() {
   clearTimeout(budgetSaveTimer);
-  budgetSaveTimer = setTimeout(async () => {
-    const rev = parseFloat($('bud-revenu').value) || 0;
-    budgetData.revenu_mensuel = rev;
-    await dbGuard(sb.from('budget_prep').upsert({
-      user_id: currentUser.id,
-      revenu_mensuel: budgetData.revenu_mensuel,
-      pct_charges: budgetData.pct_charges,
-      pct_plaisir: budgetData.pct_plaisir,
-      pct_epargne: budgetData.pct_epargne
-    }, { onConflict: 'user_id' }), 'Sauvegarde du budget échouée.');
-  }, 1000);
+  const r = await _doBudgetSave();
+  if (r.ok) toast('✓ Budget enregistré', 'success');
 }
 
 function renderBudget() {
