@@ -76,14 +76,6 @@
           <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Import
         </button>
-        <button class="nav-btn" data-tab="suivi" onclick="showTab('suivi')">
-          <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="8"/><rect x="12" y="6" width="3" height="12"/><rect x="17" y="14" width="3" height="4"/></svg>
-          Suivi mensuel
-        </button>
-        <button class="nav-btn" data-tab="annuelle" onclick="showTab('annuelle')">
-          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
-          Vue annuelle
-        </button>
         <button class="nav-btn" data-tab="budget" onclick="showTab('budget')">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           Prépa budget
@@ -270,6 +262,14 @@
           </div>
         </div>
 
+        <!-- 🎯 3 vues Dashboard : Global / Mensuel / Annuel -->
+        <div class="dash-view-tabs">
+          <button class="dash-view-btn active" data-view="global" onclick="setDashView('global')">🌍 Global</button>
+          <button class="dash-view-btn" data-view="mensuel" onclick="setDashView('mensuel')">📊 Mensuel</button>
+          <button class="dash-view-btn" data-view="annuel" onclick="setDashView('annuel')">📅 Annuel</button>
+        </div>
+
+        <div id="dash-view-global">
         <div class="kpi-grid">
           <div class="kpi kpi-sage"><div class="kpi-label">Revenus mois</div><div class="kpi-val kpi-val-sage" id="dash-rev">—</div><div class="kpi-hint" id="dash-rev-hint">Ce mois</div></div>
           <div class="kpi kpi-rose"><div class="kpi-label">Dépenses mois</div><div class="kpi-val kpi-val-rose" id="dash-dep">—</div><div class="kpi-hint" id="dash-dep-hint">Ce mois</div></div>
@@ -359,6 +359,29 @@
         <div class="card">
           <div class="card-hd"><div class="card-title">Top dépenses du mois</div></div>
           <div id="top-expenses"></div>
+        </div>
+        </div> <!-- /dash-view-global -->
+
+        <!-- 📊 VUE MENSUELLE (embarquée dans Dashboard) -->
+        <div id="dash-view-mensuel" style="display:none">
+          <div class="card">
+            <div class="card-hd"><div class="card-title">📊 Vue mensuelle — accès rapide</div></div>
+            <div style="text-align:center;padding:40px 20px">
+              <div style="font-size:14px;color:var(--muted);margin-bottom:12px">Consulte le suivi mensuel complet</div>
+              <button class="btn-primary" onclick="showTab('suivi')">Ouvrir le Suivi mensuel →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 📅 VUE ANNUELLE (embarquée dans Dashboard) -->
+        <div id="dash-view-annuel" style="display:none">
+          <div class="card">
+            <div class="card-hd"><div class="card-title">📅 Vue annuelle — accès rapide</div></div>
+            <div style="text-align:center;padding:40px 20px">
+              <div style="font-size:14px;color:var(--muted);margin-bottom:12px">Consulte la vue annuelle complète</div>
+              <button class="btn-primary" onclick="showTab('annuelle')">Ouvrir la Vue annuelle →</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -876,10 +899,6 @@
       <button class="bnav-btn" data-tab="import" onclick="showTab('import')">
         <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Import
-      </button>
-      <button class="bnav-btn" data-tab="suivi" onclick="showTab('suivi')">
-        <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="8"/><rect x="12" y="6" width="3" height="12"/><rect x="17" y="14" width="3" height="4"/></svg>
-        Bilan
       </button>
       <button class="bnav-btn" data-tab="epargne" onclick="showTab('epargne')">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>

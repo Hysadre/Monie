@@ -792,6 +792,42 @@ body::after {
   width: 100%;
 }
 
+/* ─── Dashboard : 3 vues CTA (Global / Mensuel / Annuel) ─── */
+.dash-view-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.dash-view-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 12px 16px;
+  border: 2px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  border-radius: var(--radius-sm);
+  font-family: var(--ff);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.dash-view-btn:hover {
+  border-color: var(--rose);
+  color: var(--rose);
+  transform: translateY(-1px);
+}
+.dash-view-btn.active {
+  background: linear-gradient(135deg, var(--rose), var(--tender-rose));
+  color: white;
+  border-color: var(--rose);
+  box-shadow: 0 4px 12px rgba(231,111,81,0.25);
+}
+@media (max-width: 900px) {
+  .dash-view-btn { font-size: 12px; padding: 10px 8px; }
+}
+
 /* ─── PAGE RÉGLAGES / PROFIL ─── */
 /* Zone upload photo */
 .avatar-upload {

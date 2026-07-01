@@ -766,8 +766,11 @@ function populateDateSelects() {
   const now = new Date().getFullYear();
   for (let y = now + 1; y >= 2020; y--) years.push(y);
 
-  const buildMonthOpts = (selected) => MONTHS.map((m, i) => `<option value="${i}" ${i === selected ? 'selected' : ''}>${m}</option>`).join('');
-  const buildYearOpts = (selected) => years.map(y => `<option value="${y}" ${y === selected ? 'selected' : ''}>${y}</option>`).join('');
+  // "-1" = Global (toutes années)
+  const buildMonthOpts = (selected) => `<option value="-1" ${selected === -1 ? 'selected' : ''}>🌍 Tous mois</option>` +
+    MONTHS.map((m, i) => `<option value="${i}" ${i === selected ? 'selected' : ''}>${m}</option>`).join('');
+  const buildYearOpts = (selected) => `<option value="-1" ${selected === -1 ? 'selected' : ''}>🌍 Global (toutes)</option>` +
+    years.map(y => `<option value="${y}" ${y === selected ? 'selected' : ''}>${y}</option>`).join('');
 
   if ($('cal-month-select')) $('cal-month-select').innerHTML = buildMonthOpts(calMonth);
   if ($('cal-year-select')) $('cal-year-select').innerHTML = buildYearOpts(calYear);
@@ -776,7 +779,7 @@ function populateDateSelects() {
   if ($('ep-month-select')) $('ep-month-select').innerHTML = buildMonthOpts(epargneMonth);
   if ($('ep-year-select')) $('ep-year-select').innerHTML = buildYearOpts(epargneYear);
   if ($('annuelle-year')) {
-    $('annuelle-year').innerHTML = '';
+    $('annuelle-year').innerHTML = `<option value="-1" ${annuelleYear === -1 ? 'selected' : ''}>🌍 Global (toutes)</option>`;
     years.forEach(y => {
       const o = document.createElement('option');
       o.value = y; o.textContent = y;
@@ -1016,6 +1019,19 @@ async function quickAddTx() {
   if (typeof renderDashboard === 'function') renderDashboard();
 }
 
+// Switch entre les 3 vues du Dashboard : Global / Mensuel / Annuel
+function setDashView(view) {
+  document.querySelectorAll('.dash-view-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === view));
+  ['global','mensuel','annuel'].forEach(v => {
+    const el = document.getElementById('dash-view-' + v);
+    if (el) el.style.display = v === view ? '' : 'none';
+  });
+  // Si Mensuel ou Annuel choisi : redirige direct vers la vraie page
+  if (view === 'mensuel') showTab('suivi');
+  else if (view === 'annuel') showTab('annuelle');
+}
+
 // Toggle affichage/masquage du formulaire de saisie rapide (calendrier)
 function toggleQuickAdd() {
   const form = $('quick-add-form-wrap');
@@ -1072,11 +1088,28 @@ function changeDashMonth(dir) {
   renderDashboard();
 }
 function renderDashboard() {
-  set('dash-month-lbl', MONTHS[dashMonth] + ' ' + dashYear);
+  const isGlobalYear = dashYear === -1;
+  const isGlobalMonth = dashMonth === -1;
+  const isGlobal = isGlobalYear || isGlobalMonth;
+
+  set('dash-month-lbl', isGlobal
+    ? '🌍 Global (toutes tes tx)'
+    : MONTHS[dashMonth] + ' ' + dashYear);
   if ($('dash-month-select')) $('dash-month-select').value = dashMonth;
   if ($('dash-year-select')) $('dash-year-select').value = dashYear;
-  const monthPrefix = `${dashYear}-${String(dashMonth + 1).padStart(2, '0')}`;
-  const monthTx = transactions.filter(t => t.date_op.startsWith(monthPrefix));
+
+  // En mode global : on prend TOUTES les transactions
+  let monthTx;
+  if (isGlobalYear && isGlobalMonth) {
+    monthTx = transactions.slice(); // tout
+  } else if (isGlobalYear) {
+    monthTx = transactions.filter(t => parseInt(t.date_op.slice(5, 7)) === dashMonth + 1);
+  } else if (isGlobalMonth) {
+    monthTx = transactions.filter(t => t.date_op.startsWith(String(dashYear)));
+  } else {
+    const monthPrefix = `${dashYear}-${String(dashMonth + 1).padStart(2, '0')}`;
+    monthTx = transactions.filter(t => t.date_op.startsWith(monthPrefix));
+  }
   const totalIn = monthTx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
   const totalOut = monthTx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
   const bal = totalIn - totalOut;
@@ -1085,34 +1118,45 @@ function renderDashboard() {
   const balEl = $('dash-bal');
   balEl.textContent = (bal >= 0 ? '+' : '') + fmt(bal);
   balEl.style.color = bal >= 0 ? 'var(--sage)' : 'var(--tender-rose)';
-  set('dash-bal-hint', bal >= 0 ? 'Positif ce mois' : 'Négatif ce mois');
+  set('dash-bal-hint', isGlobal ? (bal >= 0 ? 'Global positif' : 'Global négatif') : (bal >= 0 ? 'Positif ce mois' : 'Négatif ce mois'));
   set('dash-count', monthTx.length);
   set('dash-rev-hint', `${monthTx.filter(t => t.type === 'entree').length} entrées`);
   set('dash-dep-hint', `${monthTx.filter(t => t.type === 'sortie').length} sorties`);
 
-  // ═══ Performance vs M-1 ═══
-  renderPerfCards(monthPrefix, totalIn, totalOut, bal);
+  // ═══ Performance vs M-1 ═══ (désactivée en global)
+  const monthPrefix = isGlobal ? '' : `${dashYear}-${String(dashMonth + 1).padStart(2, '0')}`;
+  if (!isGlobal) renderPerfCards(monthPrefix, totalIn, totalOut, bal);
 
   // ═══ Widget "Prochain objectif" ═══
   renderDashGoalWidget();
 
-  // Évolution 12 mois : FIGÉE sur Jan-Déc de l'année sélectionnée
+  // Évolution 12 mois : FIGÉE sur Jan-Déc / ou GLOBAL par année (2020→2026)
   const evoLabels = [];
   const evoIn = [];
   const evoOut = [];
-  for (let m = 0; m < 12; m++) {
-    const key = `${dashYear}-${String(m + 1).padStart(2, '0')}`;
-    evoLabels.push(MONTHS_SHORT[m]);
-    const mtx = transactions.filter(t => t.date_op.startsWith(key));
-    evoIn.push(mtx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0));
-    evoOut.push(mtx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0));
+  if (isGlobalYear) {
+    // Mode global : agrège par année 2020-2026
+    const yrs = [...new Set(transactions.map(t => t.date_op.slice(0, 4)))].sort();
+    yrs.forEach(y => {
+      evoLabels.push(y);
+      const ytx = transactions.filter(t => t.date_op.startsWith(y));
+      evoIn.push(ytx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0));
+      evoOut.push(ytx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0));
+    });
+  } else {
+    for (let m = 0; m < 12; m++) {
+      const key = `${dashYear}-${String(m + 1).padStart(2, '0')}`;
+      evoLabels.push(MONTHS_SHORT[m]);
+      const mtx = transactions.filter(t => t.date_op.startsWith(key));
+      evoIn.push(mtx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0));
+      evoOut.push(mtx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0));
+    }
   }
-  // Totaux annuels
-  const yearTx = transactions.filter(t => t.date_op.startsWith(String(dashYear)));
+  // Totaux annuels (ou globaux si année=all)
+  const yearTx = isGlobalYear ? transactions.slice() : transactions.filter(t => t.date_op.startsWith(String(dashYear)));
   const yearIn = yearTx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
   const yearOut = yearTx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
   const yearBal = yearIn - yearOut;
-  // MAJ des labels pour afficher aussi les totaux annuels
   if ($('dash-year-total-rev')) set('dash-year-total-rev', fmt(yearIn));
   if ($('dash-year-total-dep')) set('dash-year-total-dep', fmt(yearOut));
   if ($('dash-year-total-bal')) {
@@ -1120,7 +1164,7 @@ function renderDashboard() {
     el.textContent = (yearBal >= 0 ? '+' : '') + fmt(yearBal);
     el.style.color = yearBal >= 0 ? 'var(--sage)' : 'var(--tender-rose)';
   }
-  if ($('dash-year-display')) set('dash-year-display', dashYear);
+  if ($('dash-year-display')) set('dash-year-display', isGlobalYear ? '🌍 Global' : dashYear);
   updateChart('chart-evolution', 'line', {
     labels: evoLabels,
     datasets: [
