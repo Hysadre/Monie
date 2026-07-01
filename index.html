@@ -640,7 +640,13 @@
         <div class="page-hd">
           <div>
             <h1 class="page-title">Prépa budget</h1>
-            <p class="page-sub">Répartis intelligemment ton revenu mensuel</p>
+            <p class="page-sub">Un budget par mois — navigue et compare</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select class="select" id="budget-month-select" onchange="setBudgetMonth()"></select>
+            <select class="select" id="budget-year-select" onchange="setBudgetMonth()"></select>
+            <button class="btn-ghost" id="budget-copy-prev" onclick="copyPrevBudget()" style="padding:8px 12px;font-size:12px;display:none" title="Reprendre le budget du mois précédent">📋 Copier M-1</button>
+            <button class="btn-ghost" id="budget-delete" onclick="deleteBudgetMonth()" style="padding:8px 12px;font-size:12px;display:none;color:var(--tender-rose);border-color:var(--tender-rose)" title="Supprimer le budget enregistré de ce mois">🗑 Supprimer</button>
           </div>
         </div>
         <div class="help-banner" id="help-budget">

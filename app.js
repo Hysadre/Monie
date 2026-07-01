@@ -71,7 +71,11 @@ let charts = {};
 let importPreviewData = [];
 let importMatches = [];
 let annuelleYear = new Date().getFullYear();
-let budgetData = { revenu_mensuel: 0, pct_charges: 50, pct_plaisir: 30, pct_epargne: 20 };
+let budgetData = { revenu_mensuel: 0, pct_charges: 50, pct_plaisir: 30, pct_epargne: 20, sub_budget: null, events: [] };
+let budgetByMonth = {};       // "YYYY-MM" -> ligne budget_mensuel
+let budgetTemplate = { revenu_mensuel: 0, pct_charges: 50, pct_plaisir: 30, pct_epargne: 20 }; // ancien budget_prep = modèle par défaut
+let budgetMonth = new Date().getMonth();
+let budgetYear = new Date().getFullYear();
 let investissements = [];
 let goalsList = [];
 let contribList = [];
@@ -490,8 +494,83 @@ async function loadGoals() {
 }
 
 async function loadBudgetPrep() {
-  const { data } = await sb.from('budget_prep').select('*').eq('user_id', currentUser.id).maybeSingle();
-  if (data) budgetData = data;
+  // Modèle par défaut = ancienne table budget_prep (utilisé pour pré-remplir un mois vierge)
+  const { data: tpl } = await sb.from('budget_prep').select('*').eq('user_id', currentUser.id).maybeSingle();
+  if (tpl) budgetTemplate = tpl;
+  // Tous les budgets mensuels
+  const { data } = await sb.from('budget_mensuel').select('*').eq('user_id', currentUser.id);
+  budgetByMonth = {};
+  (data || []).forEach(r => { budgetByMonth[r.month.slice(0, 7)] = r; });
+  // Positionne sur le mois en cours
+  budgetMonth = new Date().getMonth();
+  budgetYear = new Date().getFullYear();
+  loadBudgetForMonth();
+}
+function budgetKey() { return `${budgetYear}-${String(budgetMonth + 1).padStart(2, '0')}`; }
+// Charge budgetData depuis le mois sélectionné (ou pré-remplit avec le modèle si vierge)
+function loadBudgetForMonth() {
+  const saved = budgetByMonth[budgetKey()];
+  if (saved) {
+    budgetData = { ...saved, events: saved.events || [] };
+  } else {
+    budgetData = {
+      revenu_mensuel: budgetTemplate.revenu_mensuel || 0,
+      pct_charges: budgetTemplate.pct_charges || 50,
+      pct_plaisir: budgetTemplate.pct_plaisir || 30,
+      pct_epargne: budgetTemplate.pct_epargne || 20,
+      sub_budget: null,
+      events: []
+    };
+  }
+}
+// Changement de mois/année via les sélecteurs
+function setBudgetMonth() {
+  budgetMonth = parseInt($('budget-month-select').value);
+  budgetYear = parseInt($('budget-year-select').value);
+  loadBudgetForMonth();
+  $('bud-revenu').value = budgetData.revenu_mensuel || '';
+  $('bud-pct-charges').value = budgetData.pct_charges;
+  $('bud-pct-plaisir').value = budgetData.pct_plaisir;
+  $('bud-pct-epargne').value = budgetData.pct_epargne;
+  renderBudget();
+}
+// Copie tout le budget du mois précédent dans le mois affiché
+function copyPrevBudget() {
+  const pd = new Date(budgetYear, budgetMonth - 1, 1);
+  const prevKey = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}`;
+  const prev = budgetByMonth[prevKey];
+  if (!prev) { toast('Aucun budget enregistré le mois précédent', 'error'); return; }
+  budgetData = {
+    revenu_mensuel: prev.revenu_mensuel,
+    pct_charges: prev.pct_charges, pct_plaisir: prev.pct_plaisir, pct_epargne: prev.pct_epargne,
+    sub_budget: prev.sub_budget ? JSON.parse(JSON.stringify(prev.sub_budget)) : null,
+    events: prev.events ? JSON.parse(JSON.stringify(prev.events)) : []
+  };
+  $('bud-revenu').value = budgetData.revenu_mensuel || '';
+  $('bud-pct-charges').value = budgetData.pct_charges;
+  $('bud-pct-plaisir').value = budgetData.pct_plaisir;
+  $('bud-pct-epargne').value = budgetData.pct_epargne;
+  saveBudgetPrepNow();
+  renderBudget();
+  toast(`Budget de ${prevKey} copié — ajuste si besoin`, 'success');
+}
+// Supprime le budget enregistré du mois affiché
+function deleteBudgetMonth() {
+  const key = budgetKey();
+  if (!budgetByMonth[key]) { toast('Aucun budget enregistré pour ce mois', 'error'); return; }
+  const monthLabel = `${MONTHS[budgetMonth]} ${budgetYear}`;
+  openModal('Supprimer ce budget ?', `Le budget de ${monthLabel} sera supprimé définitivement.`, async () => {
+    const r = await dbGuard(sb.from('budget_mensuel').delete().eq('user_id', currentUser.id).eq('month', key + '-01'), 'Suppression échouée.');
+    if (!r.ok) return;
+    delete budgetByMonth[key];
+    loadBudgetForMonth(); // repart sur le modèle par défaut
+    $('bud-revenu').value = budgetData.revenu_mensuel || '';
+    $('bud-pct-charges').value = budgetData.pct_charges;
+    $('bud-pct-plaisir').value = budgetData.pct_plaisir;
+    $('bud-pct-epargne').value = budgetData.pct_epargne;
+    renderBudget();
+    toast(`Budget de ${monthLabel} supprimé`, 'success');
+  });
 }
 
 async function loadInvestissements() {
@@ -3177,19 +3256,20 @@ const BUDGET_BLOCK = {
   'Dîme': 'charges', 'Investissements': 'epargne'
 };
 function computeBudgetStatus() {
-  const rev = budgetData.revenu_mensuel || 0;
   const now = new Date();
   const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const b = budgetByMonth[key] || budgetTemplate; // budget du mois réel en cours (modèle si pas encore défini)
+  const rev = b.revenu_mensuel || 0;
   const spent = { charges: 0, plaisir: 0, epargne: 0 };
   transactions.forEach(t => {
     if (t.type !== 'sortie' || !t.date_op.startsWith(key)) return;
-    const b = BUDGET_BLOCK[t.category];
-    if (b) spent[b] += Math.abs(Number(t.amount));
+    const bl = BUDGET_BLOCK[t.category];
+    if (bl) spent[bl] += Math.abs(Number(t.amount));
   });
   const budget = {
-    charges: Math.round(rev * (budgetData.pct_charges || 0) / 100),
-    plaisir: Math.round(rev * (budgetData.pct_plaisir || 0) / 100),
-    epargne: Math.round(rev * (budgetData.pct_epargne || 0) / 100)
+    charges: Math.round(rev * (b.pct_charges || 0) / 100),
+    plaisir: Math.round(rev * (b.pct_plaisir || 0) / 100),
+    epargne: Math.round(rev * (b.pct_epargne || 0) / 100)
   };
   return { rev, key, spent, budget };
 }
@@ -3242,31 +3322,29 @@ function budgetStartupAlert() {
   if (over.length) toast(`⚠️ Budget dépassé ce mois : ${over.join(' et ')}`, 'error');
 }
 
-// ─── Dépenses/événements à prévoir ce mois (notes budget, persistées en localStorage) ───
-function loadBudgetEvents() { try { return JSON.parse(localStorage.getItem('monie_budget_events') || '[]'); } catch (e) { return []; } }
-function saveBudgetEvents(list) { try { localStorage.setItem('monie_budget_events', JSON.stringify(list)); } catch (e) {} }
+// ─── Dépenses/événements à prévoir (propres à chaque mois, enregistrés dans budget_mensuel) ───
 function addBudgetEvent() {
   const label = $('bud-event-label').value.trim();
   const amount = parseFloat($('bud-event-amount').value);
   if (!label || !amount || amount <= 0) { toast('Un libellé et un montant, s\'il te plaît', 'error'); return; }
-  const list = loadBudgetEvents();
-  list.push({ label, amount });
-  saveBudgetEvents(list);
+  budgetData.events = budgetData.events || [];
+  budgetData.events.push({ label, amount });
+  saveBudgetPrepNow();
   $('bud-event-label').value = '';
   $('bud-event-amount').value = '';
   $('bud-event-label').focus();
   renderBudgetEvents();
 }
 function removeBudgetEvent(i) {
-  const list = loadBudgetEvents();
-  list.splice(i, 1);
-  saveBudgetEvents(list);
+  budgetData.events = budgetData.events || [];
+  budgetData.events.splice(i, 1);
+  saveBudgetPrepNow();
   renderBudgetEvents();
 }
 function renderBudgetEvents() {
   const el = $('bud-events-list');
   if (!el) return;
-  const list = loadBudgetEvents();
+  const list = budgetData.events || [];
   if (!list.length) {
     el.innerHTML = '<div class="empty-sub">Rien de prévu pour l\'instant. Note ici ce que tu sais devoir dépenser ce mois-ci (Uber, cadeau, sortie, Ilévia…) pour l\'avoir en tête.</div>';
     return;
@@ -3305,13 +3383,18 @@ function _doBudgetSave() {
   budgetData.pct_charges = Math.max(0, Math.min(100, parseInt($('bud-pct-charges').value) || 0));
   budgetData.pct_plaisir = Math.max(0, Math.min(100, parseInt($('bud-pct-plaisir').value) || 0));
   budgetData.pct_epargne = Math.max(0, Math.min(100, parseInt($('bud-pct-epargne').value) || 0));
-  return dbGuard(sb.from('budget_prep').upsert({
-    user_id: currentUser.id,
+  const key = budgetKey();
+  const payload = {
+    user_id: currentUser.id, month: key + '-01',
     revenu_mensuel: budgetData.revenu_mensuel,
     pct_charges: budgetData.pct_charges,
     pct_plaisir: budgetData.pct_plaisir,
-    pct_epargne: budgetData.pct_epargne
-  }, { onConflict: 'user_id' }), 'Sauvegarde du budget échouée.');
+    pct_epargne: budgetData.pct_epargne,
+    sub_budget: budgetData.sub_budget || null,
+    events: budgetData.events || []
+  };
+  budgetByMonth[key] = { ...(budgetByMonth[key] || {}), ...payload };
+  return dbGuard(sb.from('budget_mensuel').upsert(payload, { onConflict: 'user_id,month' }), 'Sauvegarde du budget échouée.');
 }
 function saveBudgetPrep() { clearTimeout(budgetSaveTimer); budgetSaveTimer = setTimeout(_doBudgetSave, 1000); }
 // Sauvegarde IMMÉDIATE (appelée quand tu quittes un champ) → plus de perte au refresh
@@ -3323,11 +3406,43 @@ async function saveBudgetManual() {
   if (r.ok) toast('✓ Budget enregistré', 'success');
 }
 
+// Modèle de répartition fine par défaut (poids relatifs par sous-catégorie)
+const DEFAULT_SUB_PCT = {
+  charges: [
+    { cat: 'Loyer', pct: 30 }, { cat: 'Alimentation', pct: 10 }, { cat: 'Transport', pct: 5 },
+    { cat: 'Santé', pct: 3 }, { cat: 'Abonnements', pct: 2 }, { cat: 'Administratif', pct: 2 }, { cat: 'Dîme', pct: 10 }
+  ],
+  plaisir: [
+    { cat: 'Vie quotidienne', pct: 8 }, { cat: 'Mode', pct: 5 }, { cat: 'Cosmétique', pct: 5 },
+    { cat: 'Alimentation', pct: 5, note: '(restos)' }, { cat: 'Dons', pct: 2 }, { cat: 'Amis & Famille', pct: 3 }, { cat: 'Divertissement', pct: 2 }
+  ],
+  epargne: [
+    { cat: 'Investissements', pct: 5 }, { cat: 'Épargne libre', pct: 5 }
+  ]
+};
 function renderBudget() {
   if ($('bud-revenu').value === '' && budgetData.revenu_mensuel) $('bud-revenu').value = budgetData.revenu_mensuel;
   if (budgetData.pct_charges) $('bud-pct-charges').value = budgetData.pct_charges;
   if (budgetData.pct_plaisir) $('bud-pct-plaisir').value = budgetData.pct_plaisir;
   if (budgetData.pct_epargne) $('bud-pct-epargne').value = budgetData.pct_epargne;
+
+  // Sélecteurs mois / année
+  if ($('budget-month-select') && $('budget-month-select').options.length === 0)
+    $('budget-month-select').innerHTML = MONTHS.map((m, i) => `<option value="${i}">${m}</option>`).join('');
+  if ($('budget-year-select') && $('budget-year-select').options.length === 0) {
+    const yNow = new Date().getFullYear(); let opts = '';
+    for (let y = yNow + 1; y >= 2023; y--) opts += `<option value="${y}">${y}</option>`;
+    $('budget-year-select').innerHTML = opts;
+  }
+  if ($('budget-month-select')) $('budget-month-select').value = budgetMonth;
+  if ($('budget-year-select')) $('budget-year-select').value = budgetYear;
+  // Bouton « copier le mois précédent » : visible si le mois affiché est vierge et que le précédent a un budget
+  const _pd = new Date(budgetYear, budgetMonth - 1, 1);
+  const _prevKey = `${_pd.getFullYear()}-${String(_pd.getMonth() + 1).padStart(2, '0')}`;
+  const _copyBtn = $('budget-copy-prev');
+  if (_copyBtn) _copyBtn.style.display = (budgetByMonth[_prevKey] && !budgetByMonth[budgetKey()]) ? '' : 'none';
+  const _delBtn = $('budget-delete');
+  if (_delBtn) _delBtn.style.display = budgetByMonth[budgetKey()] ? '' : 'none';
 
   const rev = parseFloat($('bud-revenu').value) || 0;
   budgetData.revenu_mensuel = rev;
@@ -3375,44 +3490,17 @@ function renderBudget() {
     return;
   }
 
-  // ─── Sous-catégories ÉDITABLES ─────────────
-  // Structure par défaut (poids relatifs pour chaque sous-catégorie)
-  const DEFAULT_SUB_PCT = {
-    charges: [
-      { cat: 'Loyer',        pct: 30 },
-      { cat: 'Alimentation', pct: 10 },
-      { cat: 'Transport',    pct: 5 },
-      { cat: 'Santé',        pct: 3 },
-      { cat: 'Abonnements',  pct: 2 },
-      { cat: 'Administratif',pct: 2 },
-      { cat: 'Dîme',         pct: 10 }
-    ],
-    plaisir: [
-      { cat: 'Vie quotidienne', pct: 8 },
-      { cat: 'Mode',            pct: 5 },
-      { cat: 'Cosmétique',      pct: 5 },
-      { cat: 'Alimentation',    pct: 5, note: '(restos)' },
-      { cat: 'Dons',            pct: 2 },
-      { cat: 'Amis & Famille',  pct: 3 },
-      { cat: 'Divertissement',  pct: 2 }
-    ],
-    epargne: [
-      { cat: 'Investissements',pct: 5 },
-      { cat: 'Épargne libre',  pct: 5 }
-    ]
-  };
+  // ─── Sous-catégories ÉDITABLES (modèle par défaut = DEFAULT_SUB_PCT, défini au niveau module) ─────────────
 
-  // Charge les valeurs éditées depuis localStorage si dispo
-  let userSubBudget;
-  try { userSubBudget = JSON.parse(localStorage.getItem('monie_sub_budget') || 'null'); } catch (e) {}
-  // Migration : la Dîme n'est plus une épargne (c'est un don) → la déplacer vers Charges si elle traîne encore dans l'épargne
+  // Répartition fine du mois affiché (propre à chaque mois)
+  let userSubBudget = budgetData.sub_budget || null;
+  // Sécurité : la Dîme n'est plus une épargne (c'est un don) → la déplacer vers Charges si d'anciennes données la contiennent
   if (userSubBudget && Array.isArray(userSubBudget.epargne)) {
     const di = userSubBudget.epargne.findIndex(it => it.cat === 'Dîme');
     if (di >= 0) {
       const dime = userSubBudget.epargne.splice(di, 1)[0];
       userSubBudget.charges = userSubBudget.charges || [];
       if (!userSubBudget.charges.some(it => it.cat === 'Dîme')) userSubBudget.charges.push(dime);
-      try { localStorage.setItem('monie_sub_budget', JSON.stringify(userSubBudget)); } catch (e) {}
     }
   }
   const subBudget = userSubBudget || DEFAULT_SUB_PCT;
@@ -3443,7 +3531,12 @@ function renderBudget() {
               <input type="number" step="0.5" min="0" max="100" class="bud-sub-inp" value="${it.pct}"
                      onchange="updateSubBudget('${blocKey}',${i},this.value)">
               <span style="font-size:11px;color:var(--muted)">%</span>
-              <div class="bud-sub-amt">${fmt(amt)}</div>
+              <div class="bud-sub-amt" style="display:flex;align-items:center;gap:4px;justify-content:flex-end">
+                <input type="number" min="0" step="1" value="${amt}" title="Entre un montant en € — le % se calcule tout seul"
+                       onchange="updateSubBudgetAmount('${blocKey}',${i},this.value)"
+                       style="width:58px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
+                <span style="font-size:11px;color:var(--muted)">€</span>
+              </div>
             </div>`;
         }).join('')}
         <div class="bud-sub-total">
@@ -3477,33 +3570,26 @@ function renderBudget() {
 function saveSubBudgetManual() {
   const el = document.activeElement;
   if (el && el.classList && el.classList.contains('bud-sub-inp')) el.dispatchEvent(new Event('change'));
+  saveBudgetPrepNow();
   toast('✓ Répartition enregistrée', 'success');
 }
 function updateSubBudget(blocKey, index, newPct) {
   try {
-    let subBudget = JSON.parse(localStorage.getItem('monie_sub_budget') || 'null');
-    if (!subBudget) {
-      // Copie les DEFAULT
-      subBudget = {
-        charges: [
-          { cat: 'Loyer', pct: 30 }, { cat: 'Alimentation', pct: 10 }, { cat: 'Transport', pct: 5 },
-          { cat: 'Santé', pct: 3 }, { cat: 'Abonnements', pct: 2 },
-          { cat: 'Administratif', pct: 2 }, { cat: 'Dîme', pct: 10 }
-        ],
-        plaisir: [
-          { cat: 'Vie quotidienne', pct: 8 }, { cat: 'Mode', pct: 5 }, { cat: 'Cosmétique', pct: 5 },
-          { cat: 'Alimentation', pct: 5, note: '(restos)' }, { cat: 'Dons', pct: 2 },
-          { cat: 'Amis & Famille', pct: 3 }, { cat: 'Divertissement', pct: 2 }
-        ],
-        epargne: [
-          { cat: 'Investissements', pct: 5 }, { cat: 'Épargne libre', pct: 5 }
-        ]
-      };
-    }
-    subBudget[blocKey][index].pct = Math.max(0, parseFloat(newPct) || 0);
-    localStorage.setItem('monie_sub_budget', JSON.stringify(subBudget));
+    let subBudget = budgetData.sub_budget;
+    if (!subBudget) subBudget = JSON.parse(JSON.stringify(DEFAULT_SUB_PCT));
+    subBudget[blocKey][index].pct = Math.round(Math.max(0, parseFloat(newPct) || 0) * 10) / 10;
+    budgetData.sub_budget = subBudget;
+    saveBudgetPrep();          // enregistre dans budget_mensuel (mois affiché)
     renderBudget();
   } catch (e) { console.error(e); }
+}
+// Saisie du MONTANT en € → convertit en % automatiquement
+function updateSubBudgetAmount(blocKey, index, newAmount) {
+  const rev = budgetData.revenu_mensuel || 0;
+  if (!rev) { toast('Renseigne d\'abord ton revenu mensuel', 'error'); renderBudget(); return; }
+  const amt = Math.max(0, parseFloat(newAmount) || 0);
+  const pct = Math.round(amt / rev * 1000) / 10; // % avec 1 décimale
+  updateSubBudget(blocKey, index, pct);
 }
 
 // ═══ INVESTISSEMENTS ═══════════════════════════════════════════
