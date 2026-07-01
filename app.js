@@ -542,6 +542,7 @@ function showTab(name) {
   closeSidebar();
   if (name === 'calendar') renderCalendar();
   if (name === 'dashboard') renderDashboard();
+  if (name === 'analyse') renderAnalyse();
   if (name === 'transactions') renderTransactionsList();
   if (name === 'suivi') renderSuivi();
   if (name === 'epargne') renderEpargne();
@@ -900,6 +901,7 @@ function categorize(label, amount) {
   if (L.includes('shein') || L.includes('zalando') || L.includes('asos') || L.includes('na-kd')) return { category: 'Mode', sub_category: null };
   if (L.includes('klarna') || L.includes('scalapay')) return { category: 'Paiement échelonné', sub_category: null };
   if (L.includes('sfr') || L.includes('bouygues telecom')) return { category: 'Abonnements', sub_category: 'Téléphone' };
+  if (L.includes('claude') || L.includes('anthropic') || L.includes('perplexity') || L.includes('openai') || L.includes('chatgpt') || L.includes('midjourney')) return { category: 'Abonnements', sub_category: 'IA' };
   if (L.includes('amouan') || L.includes('gnagne') || L.includes('mame diouf') || L.includes('saffo')) return { category: 'Amis & Famille', sub_category: null };
   if (L.includes('uber eats') || L.includes('deliveroo') || L.includes('franprix') || L.includes('distrifives') || L.includes('legrand primeur') || L.includes('delices exotic') || L.includes('delicesexotic') || L.includes('djam burger') || L.includes('ovalys') || L.includes('minimarket') || L.includes('boulange')) return { category: 'Alimentation', sub_category: null };
   if (L.includes('flixbus') || L.includes('transpole') || L.includes('ubr') || L.includes('pending.ube')) return { category: 'Transport', sub_category: null };
@@ -1400,6 +1402,92 @@ function resetCatTrend() {
   catTrendSel = null;
   try { localStorage.removeItem('monie_cat_trend_sel'); } catch (e) {}
   renderCatTrend();
+}
+
+// ═══ PAGE ANALYSE ══════════════════════════════════════════════
+const ANALYSE_PALETTE = ['#E76F51', '#7FB89E', '#F4A993', '#7C3F58', '#E8B84D', '#DD7B85', '#B79CD6', '#4FC3F7', '#A0AEC0', '#D8B4DD'];
+function renderAnalyse() {
+  const ySel = $('analyse-year');
+  if (ySel && ySel.options.length === 0) {
+    const years = [...new Set(transactions.map(t => t.date_op.slice(0, 4)))].sort().reverse();
+    ySel.innerHTML = '<option value="-1">🌍 Toutes années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    ySel.value = years[0] || '-1';
+  }
+  const yr = ySel ? ySel.value : '-1';
+  const isGlobal = yr === '-1';
+  const scope = isGlobal ? transactions : transactions.filter(t => t.date_op.startsWith(yr));
+  const exp = scope.filter(t => t.type === 'sortie' && t.category !== 'Transactions');
+  const totalIn = scope.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
+  const totalOut = exp.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const months = new Set(scope.map(t => t.date_op.slice(0, 7))).size || 1;
+
+  // ── KPIs éducatifs ──
+  const epargne = exp.filter(t => ['Investissements', 'Dîme', 'Dons'].includes(t.category)).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const solde = totalIn - totalOut;
+  const tauxEp = totalIn > 0 ? Math.round((Math.max(0, solde) + epargne) / totalIn * 100) : 0;
+  set('an-taux', tauxEp + '%');
+  set('an-taux-hint', tauxEp >= 20 ? 'Excellent 🎯' : tauxEp >= 10 ? 'Correct' : 'À muscler');
+  set('an-rav', fmt(Math.round(solde / months)));
+  const abo = exp.filter(t => t.category === 'Abonnements').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  set('an-abo', fmt(Math.round(abo / months * 12)));
+  set('an-abo-hint', fmt(Math.round(abo / months)) + '/mois');
+  let ch = 0, pl = 0;
+  exp.forEach(t => { const b = BUDGET_BLOCK[t.category]; if (b === 'charges') ch += Math.abs(Number(t.amount)); if (b === 'plaisir') pl += Math.abs(Number(t.amount)); });
+  const plPct = (ch + pl) > 0 ? Math.round(pl / (ch + pl) * 100) : 0;
+  set('an-ratio', plPct + '%');
+
+  // ── Zoom catégorie → sous-catégories ──
+  const cSel = $('analyse-cat');
+  const expCats = [...new Set(exp.map(t => t.category))];
+  if (cSel && cSel.options.length === 0) {
+    cSel.innerHTML = EXP_CATS.filter(c => expCats.includes(c)).map(c => `<option value="${c}">${catIcon(c)} ${c}</option>`).join('');
+    cSel.value = expCats.includes('Alimentation') ? 'Alimentation' : (cSel.options[0] ? cSel.options[0].value : '');
+  }
+  const cat = cSel ? cSel.value : 'Alimentation';
+  const catTx = exp.filter(t => t.category === cat);
+  const subTotals = {};
+  catTx.forEach(t => { const s = t.sub_category || '(sans sous-catégorie)'; subTotals[s] = (subTotals[s] || 0) + Math.abs(Number(t.amount)); });
+  const subEntries = Object.entries(subTotals).sort((a, b) => b[1] - a[1]);
+  const catTotal = subEntries.reduce((s, e) => s + e[1], 0);
+  updateChart('analyse-donut', 'doughnut', {
+    labels: subEntries.map(e => e[0]),
+    datasets: [{ data: subEntries.map(e => e[1]), backgroundColor: subEntries.map((e, i) => ANALYSE_PALETTE[i % ANALYSE_PALETTE.length]), borderWidth: 0 }]
+  }, { plugins: { legend: { display: false } }, cutout: '60%' });
+  $('analyse-sublist').innerHTML = `<div style="font-weight:800;font-size:15px;margin-bottom:10px">${catIcon(cat)} ${esc(cat)} — ${fmt(catTotal)}</div>` +
+    (subEntries.map(([s, v], i) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 0;font-size:13px;border-bottom:1px solid var(--border-soft)">
+        <span style="width:10px;height:10px;border-radius:2px;background:${ANALYSE_PALETTE[i % ANALYSE_PALETTE.length]};flex-shrink:0"></span>
+        <span style="flex:1">${esc(s)}</span>
+        <span style="font-family:var(--fm);font-weight:700">${fmt(v)}</span>
+        <span style="color:var(--muted);font-size:11px;min-width:40px;text-align:right">${catTotal > 0 ? Math.round(v / catTotal * 100) : 0}%</span>
+      </div>`).join('') || '<div class="empty-sub">Aucune dépense sur cette période</div>');
+
+  // ── Conseils éducatifs (basés sur les vraies données) ──
+  const tips = [];
+  const alim = exp.filter(t => t.category === 'Alimentation');
+  const alimTot = alim.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const resto = alim.filter(t => /resto|restau|sorties|livraison/i.test(t.sub_category || '')).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  if (alimTot > 0) {
+    const rp = Math.round(resto / alimTot * 100);
+    tips.push(rp > 35
+      ? { i: '🍽️', ok: false, t: `Tes restos & livraisons pèsent <b>${rp}%</b> de ton budget alimentation (${fmt(resto)}). Cuisiner un peu plus pourrait libérer une vraie marge.` }
+      : { i: '🍽️', ok: true, t: `Restos & livraisons : <b>${rp}%</b> de ton alimentation — bon équilibre 👍` });
+  }
+  tips.push(tauxEp >= 20
+    ? { i: '🌱', ok: true, t: `Taux d'épargne de <b>${tauxEp}%</b> — au-dessus des 20% recommandés. Continue comme ça !` }
+    : { i: '🌱', ok: false, t: `Ton taux d'épargne est de <b>${tauxEp}%</b>. La règle 50/30/20 vise <b>20%</b> : un virement automatique en début de mois t'aide à t'y tenir sans y penser.` });
+  if (abo > 0) {
+    const aboAn = Math.round(abo / months * 12);
+    const heavy = totalOut > 0 && (abo / totalOut) > 0.12;
+    tips.push({ i: '📱', ok: !heavy, t: `Tes abonnements coûtent <b>${fmt(aboAn)}/an</b> (${fmt(Math.round(abo / months))}/mois)${heavy ? ' — c\'est un poste important, passe-les en revue : souvent 1 ou 2 ne servent plus.' : '. Pense à vérifier de temps en temps ceux que tu n\'utilises plus.'}` });
+  }
+  if (plPct > 35) tips.push({ i: '🌸', ok: false, t: `Tes dépenses « plaisir » représentent <b>${plPct}%</b> de tes dépenses courantes (repère conseillé : 30%). Rien de grave — juste un point de vigilance.` });
+  tips.push({ i: '📊', ok: true, t: `Sur cette période : <b>${fmt(totalIn)}</b> de revenus, <b>${fmt(totalOut)}</b> de dépenses, soit un solde de <b>${fmt(solde)}</b>.` });
+  $('analyse-tips').innerHTML = tips.map(t => `
+    <div style="display:flex;gap:12px;padding:12px 14px;border-radius:12px;background:${t.ok ? 'rgba(127,184,158,0.12)' : 'rgba(232,184,77,0.14)'};margin-bottom:10px">
+      <div style="font-size:22px;flex-shrink:0">${t.i}</div>
+      <div style="font-size:13px;line-height:1.55;align-self:center">${t.t}</div>
+    </div>`).join('');
 }
 
 // ═══ TRANSACTIONS LIST ═════════════════════════════════════════
@@ -3138,6 +3226,47 @@ function budgetStartupAlert() {
   if (over.length) toast(`⚠️ Budget dépassé ce mois : ${over.join(' et ')}`, 'error');
 }
 
+// ─── Dépenses/événements à prévoir ce mois (notes budget, persistées en localStorage) ───
+function loadBudgetEvents() { try { return JSON.parse(localStorage.getItem('monie_budget_events') || '[]'); } catch (e) { return []; } }
+function saveBudgetEvents(list) { try { localStorage.setItem('monie_budget_events', JSON.stringify(list)); } catch (e) {} }
+function addBudgetEvent() {
+  const label = $('bud-event-label').value.trim();
+  const amount = parseFloat($('bud-event-amount').value);
+  if (!label || !amount || amount <= 0) { toast('Un libellé et un montant, s\'il te plaît', 'error'); return; }
+  const list = loadBudgetEvents();
+  list.push({ label, amount });
+  saveBudgetEvents(list);
+  $('bud-event-label').value = '';
+  $('bud-event-amount').value = '';
+  $('bud-event-label').focus();
+  renderBudgetEvents();
+}
+function removeBudgetEvent(i) {
+  const list = loadBudgetEvents();
+  list.splice(i, 1);
+  saveBudgetEvents(list);
+  renderBudgetEvents();
+}
+function renderBudgetEvents() {
+  const el = $('bud-events-list');
+  if (!el) return;
+  const list = loadBudgetEvents();
+  if (!list.length) {
+    el.innerHTML = '<div class="empty-sub">Rien de prévu pour l\'instant. Note ici ce que tu sais devoir dépenser ce mois-ci (Uber, cadeau, sortie, Ilévia…) pour l\'avoir en tête.</div>';
+    return;
+  }
+  const total = list.reduce((s, e) => s + Number(e.amount), 0);
+  el.innerHTML = list.map((e, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border-soft)">
+      <span style="flex:1;font-size:14px">${esc(e.label)}</span>
+      <span style="font-family:var(--fm);font-weight:700">${fmtD(e.amount)}</span>
+      <button onclick="removeBudgetEvent(${i})" style="background:none;border:none;color:var(--tender-rose);cursor:pointer;font-size:16px;line-height:1" title="Retirer">✕</button>
+    </div>`).join('') +
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;font-weight:800;font-size:15px">
+       <span>Total à prévoir</span><span style="color:var(--rose)">${fmt(total)}</span>
+     </div>`;
+}
+
 function normalizeBudgetPct(changed) {
   const c = Math.max(0, Math.min(100, parseInt($('bud-pct-charges').value) || 0));
   const p = Math.max(0, Math.min(100, parseInt($('bud-pct-plaisir').value) || 0));
@@ -3178,6 +3307,7 @@ function renderBudget() {
   const rev = parseFloat($('bud-revenu').value) || 0;
   budgetData.revenu_mensuel = rev;
   renderBudgetStatus('budget-alert-page');
+  renderBudgetEvents();
   const c = budgetData.pct_charges;
   const p = budgetData.pct_plaisir;
   const e = budgetData.pct_epargne;

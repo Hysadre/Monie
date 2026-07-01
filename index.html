@@ -68,6 +68,10 @@
           <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
           Dashboard
         </button>
+        <button class="nav-btn" data-tab="analyse" onclick="showTab('analyse')">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Analyse
+        </button>
         <button class="nav-btn" data-tab="transactions" onclick="showTab('transactions')">
           <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
           Transactions
@@ -597,6 +601,39 @@
         </div>
       </div>
 
+      <!-- 🔎 ANALYSE -->
+      <div id="tab-analyse" class="tab">
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">Analyse</h1>
+            <p class="page-sub">Comprends où va vraiment ton argent, en détail</p>
+          </div>
+          <select class="select" id="analyse-year" onchange="renderAnalyse()"></select>
+        </div>
+
+        <div class="kpi-grid kpi-row-4" style="grid-template-columns:repeat(4,1fr)">
+          <div class="kpi kpi-sage"><div class="kpi-label">Taux d'épargne</div><div class="kpi-val kpi-val-sage" id="an-taux">—</div><div class="kpi-hint" id="an-taux-hint">—</div></div>
+          <div class="kpi kpi-rose"><div class="kpi-label">Reste à vivre /mois</div><div class="kpi-val" id="an-rav">—</div><div class="kpi-hint">en moyenne</div></div>
+          <div class="kpi kpi-peach"><div class="kpi-label">Abonnements /an</div><div class="kpi-val" id="an-abo">—</div><div class="kpi-hint" id="an-abo-hint">—</div></div>
+          <div class="kpi"><div class="kpi-label">Part « plaisir »</div><div class="kpi-val" id="an-ratio">—</div><div class="kpi-hint">des dépenses courantes</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-hd"><div class="card-title">🔍 Zoom sur une catégorie <span style="font-size:11px;font-weight:500;color:var(--muted)">— détail par sous-catégorie</span></div>
+            <select class="select" id="analyse-cat" onchange="renderAnalyse()"></select>
+          </div>
+          <div class="grid-2-1">
+            <div style="height:230px;display:flex;align-items:center;justify-content:center"><canvas id="analyse-donut"></canvas></div>
+            <div id="analyse-sublist"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hd"><div class="card-title">💡 Tes conseils perso <span style="font-size:11px;font-weight:500;color:var(--muted)">— basés sur tes vraies dépenses</span></div></div>
+          <div id="analyse-tips"></div>
+        </div>
+      </div>
+
       <!-- 💡 PRÉPA BUDGET -->
       <div id="tab-budget" class="tab">
         <div class="page-hd">
@@ -624,6 +661,15 @@
         <div class="card">
           <div class="card-hd"><div class="card-title">📊 Où en es-tu ce mois-ci ? <span style="font-size:11px;font-weight:500;color:var(--muted)">— dépenses réelles vs budget</span></div></div>
           <div id="budget-alert-page"></div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">📌 À prévoir ce mois-ci <span style="font-size:11px;font-weight:500;color:var(--muted)">— les dépenses que tu sais devoir faire</span></div></div>
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+            <input class="inp" id="bud-event-label" placeholder="Ex: Uber aéroport, cadeau anniv, Ilévia…" style="flex:1;min-width:170px" onkeydown="if(event.key==='Enter')addBudgetEvent()">
+            <input class="inp" id="bud-event-amount" type="number" step="0.01" placeholder="€" style="width:100px" onkeydown="if(event.key==='Enter')addBudgetEvent()">
+            <button class="btn-primary" onclick="addBudgetEvent()" style="padding:8px 18px">+ Ajouter</button>
+          </div>
+          <div id="bud-events-list"></div>
         </div>
         <div class="grid-2">
           <div class="card">
