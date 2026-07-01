@@ -722,9 +722,26 @@
               <label class="qa-label">Pseudo affiché</label>
               <input class="inp" type="text" id="profile-name" placeholder="Ex: Marie, Jean, Miss Budget…">
             </div>
+
+            <!-- Photo perso -->
             <div class="qa-field">
-              <label class="qa-label">Emoji avatar</label>
+              <label class="qa-label">Ta photo (facultative)</label>
+              <div class="avatar-upload">
+                <div class="avatar-big-preview" id="avatar-big-preview">🌸</div>
+                <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+                  <input type="file" id="avatar-file" accept="image/*" style="display:none" onchange="uploadAvatar(this.files[0])">
+                  <button class="btn-ghost" onclick="document.getElementById('avatar-file').click()">📷 Choisir une photo</button>
+                  <button class="btn-ghost" onclick="removeAvatar()" id="avatar-remove-btn" style="display:none;font-size:11px;padding:6px 10px">🗑 Retirer la photo</button>
+                  <div style="font-size:11px;color:var(--muted)">JPG / PNG · redimensionné auto à 400×400px max</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="qa-field">
+              <label class="qa-label">Ou choisis un emoji</label>
               <div style="display:flex;gap:8px;flex-wrap:wrap" id="profile-avatar-picker">
+                <button class="avatar-pick" data-emoji="🐝">🐝</button>
+                <button class="avatar-pick" data-emoji="🍯">🍯</button>
                 <button class="avatar-pick" data-emoji="🌸">🌸</button>
                 <button class="avatar-pick" data-emoji="🐻">🐻</button>
                 <button class="avatar-pick" data-emoji="🦊">🦊</button>
@@ -741,8 +758,6 @@
                 <button class="avatar-pick" data-emoji="💎">💎</button>
                 <button class="avatar-pick" data-emoji="🎯">🎯</button>
                 <button class="avatar-pick" data-emoji="🍀">🍀</button>
-                <button class="avatar-pick" data-emoji="🐝">🐝</button>
-                <button class="avatar-pick" data-emoji="🐝🍯">🐝🍯</button>
               </div>
             </div>
             <label style="display:flex;align-items:center;gap:10px;cursor:pointer">

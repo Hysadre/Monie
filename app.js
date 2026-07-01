@@ -505,11 +505,24 @@ async function loadProfile() {
     userProfile = data;
   }
   applyTheme(userProfile.theme || 'rose');
-  // MAJ affichage sidebar + mobile
+  renderUserPill();
+}
+
+// MAJ visuelle de l'avatar dans la sidebar + le header mobile
+function renderUserPill() {
+  if (!userProfile) return;
   const nameEl = $('user-name');
   if (nameEl) nameEl.textContent = userProfile.display_name || 'Mon compte';
   const av = $('user-avatar');
-  if (av) av.textContent = userProfile.avatar_emoji || '🌸';
+  if (av) {
+    if (userProfile.avatar_url) {
+      av.innerHTML = `<img src="${userProfile.avatar_url}?t=${Date.now()}" alt="avatar">`;
+      av.classList.add('has-photo');
+    } else {
+      av.textContent = userProfile.avatar_emoji || '🌸';
+      av.classList.remove('has-photo');
+    }
+  }
   const greet = $('mobile-greeting');
   if (greet) greet.textContent = `Bonjour, ${userProfile.display_name || ''}`.trim();
 }
@@ -522,18 +535,131 @@ function renderProfile() {
   if (emailInput && currentUser) emailInput.value = currentUser.email || '';
   const showEmojis = $('profile-show-emojis');
   if (showEmojis) showEmojis.checked = userProfile.show_emojis !== false;
+
+  // Grand preview de l'avatar (photo ou emoji)
+  const bigPreview = $('avatar-big-preview');
+  const removeBtn = $('avatar-remove-btn');
+  if (bigPreview) {
+    if (userProfile.avatar_url) {
+      bigPreview.innerHTML = `<img src="${userProfile.avatar_url}?t=${Date.now()}" alt="avatar">`;
+      if (removeBtn) removeBtn.style.display = '';
+    } else {
+      bigPreview.textContent = userProfile.avatar_emoji || '🌸';
+      if (removeBtn) removeBtn.style.display = 'none';
+    }
+  }
+
   // Avatar picker : mettre en selected celui du user
   document.querySelectorAll('.avatar-pick').forEach(b => {
     b.classList.toggle('selected', b.dataset.emoji === (userProfile.avatar_emoji || '🌸'));
-    b.onclick = () => {
+    b.onclick = async () => {
       document.querySelectorAll('.avatar-pick').forEach(x => x.classList.remove('selected'));
       b.classList.add('selected');
       userProfile.avatar_emoji = b.dataset.emoji;
+      // Si un emoji est sélectionné manuellement et qu'une photo existe → on garde la photo
+      // La photo prend priorité tant qu'elle est là.
+      if (!userProfile.avatar_url) {
+        bigPreview.textContent = b.dataset.emoji;
+      }
     };
   });
+
   // Theme picker : marquer le courant
   document.querySelectorAll('.theme-card').forEach(c =>
     c.classList.toggle('selected', c.dataset.theme === (userProfile.theme || 'rose'))
+  );
+}
+
+// Redimensionne l'image côté client (canvas) avant upload
+function resizeImage(file, maxSize = 400) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        // Contenir dans un carré maxSize x maxSize
+        if (width > height) {
+          if (width > maxSize) { height *= maxSize / width; width = maxSize; }
+        } else {
+          if (height > maxSize) { width *= maxSize / height; height = maxSize; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.85);
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadAvatar(file) {
+  if (!file) return;
+  if (!currentUser) return;
+  if (!file.type.startsWith('image/')) { toast('Ce n\'est pas une image', 'error'); return; }
+  if (file.size > 8 * 1024 * 1024) { toast('Image trop lourde (>8 Mo)', 'error'); return; }
+  toast('📷 Redimensionnement…');
+  try {
+    const blob = await resizeImage(file, 400);
+    const ext = 'jpg';
+    const path = `${currentUser.id}/avatar-${Date.now()}.${ext}`;
+    // Supprimer l'ancien avatar avant d'uploader (économise le stockage)
+    if (userProfile.avatar_url) {
+      try {
+        const oldPath = userProfile.avatar_url.split('/avatars/')[1];
+        if (oldPath) await sb.storage.from('avatars').remove([oldPath]);
+      } catch (e) { console.warn('Cleanup ancien avatar', e); }
+    }
+    const { error: upErr } = await sb.storage.from('avatars').upload(path, blob, {
+      contentType: 'image/jpeg',
+      upsert: true
+    });
+    if (upErr) { toast('Erreur upload : ' + upErr.message, 'error'); return; }
+    // Récupérer l'URL publique
+    const { data: urlData } = sb.storage.from('avatars').getPublicUrl(path);
+    const publicUrl = urlData.publicUrl;
+    // Sauvegarder dans le profil
+    const { error: profErr } = await sb.from('profiles').upsert({
+      user_id: currentUser.id,
+      avatar_url: publicUrl
+    }, { onConflict: 'user_id' });
+    if (profErr) { toast('Erreur profil : ' + profErr.message, 'error'); return; }
+    userProfile.avatar_url = publicUrl;
+    renderProfile();
+    renderUserPill();
+    toast('✓ Photo mise à jour', 'success');
+  } catch (e) {
+    console.error(e);
+    toast('Erreur : ' + (e.message || e), 'error');
+  } finally {
+    const inp = $('avatar-file');
+    if (inp) inp.value = ''; // reset pour permettre de re-uploader la même image
+  }
+}
+
+async function removeAvatar() {
+  if (!userProfile || !userProfile.avatar_url) return;
+  openModal(
+    'Retirer ta photo ?',
+    'Ton emoji reprendra sa place. Tu pourras toujours réuploader une nouvelle photo plus tard.',
+    async () => {
+      try {
+        const oldPath = userProfile.avatar_url.split('/avatars/')[1];
+        if (oldPath) await sb.storage.from('avatars').remove([oldPath]);
+      } catch (e) { console.warn(e); }
+      await sb.from('profiles').update({ avatar_url: null }).eq('user_id', currentUser.id);
+      userProfile.avatar_url = null;
+      renderProfile();
+      renderUserPill();
+      toast('✓ Photo retirée', 'success');
+    }
   );
 }
 

@@ -365,12 +365,24 @@ body::after {
   border-radius: var(--radius-sm);
 }
 .user-avatar {
-  width: 32px; height: 32px;
+  width: 36px; height: 36px;
   border-radius: 50%;
-  background: #FFF3E0; 
-  color: white;
+  background: #FFF3E0; /* 🍯 miel doux (choix perso) */
+  color: var(--ink);
   display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 13px;
+  font-weight: 700; font-size: 18px;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+.user-avatar img {
+  width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
+  display: block;
+}
+/* Si l'avatar contient une image, on retire le fond gradient (transparent derrière) */
+.user-avatar.has-photo {
+  background: var(--card);
+  box-shadow: inset 0 0 0 2px var(--rose);
 }
 .user-email {
   font-size: 12px;
@@ -781,6 +793,34 @@ body::after {
 }
 
 /* ─── PAGE RÉGLAGES / PROFIL ─── */
+/* Zone upload photo */
+.avatar-upload {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  background: linear-gradient(135deg, var(--rose-soft), var(--peach-soft));
+  border-radius: var(--radius-sm);
+  border: 1.5px dashed var(--rose);
+}
+.avatar-big-preview {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 3px solid white;
+  box-shadow: 0 4px 14px rgba(231,111,81,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.avatar-big-preview img {
+  width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
+}
+
 .avatar-pick {
   width: 44px;
   height: 44px;
