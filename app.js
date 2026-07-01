@@ -280,6 +280,24 @@ function toast(msg, type = '') {
   clearTimeout(t._t);
   t._t = setTimeout(() => t.classList.remove('show'), 3000);
 }
+
+// Garde générique pour les écritures Supabase : log console + toast rouge en cas d'échec.
+// Usage : if (!(await dbGuard(sb.from('x').update(...).eq('id', id), 'Message')).ok) return;
+async function dbGuard(query, errMsg = 'Échec de la sauvegarde. Vérifie ta connexion.') {
+  try {
+    const res = await query;
+    if (res && res.error) {
+      console.error('[dbGuard]', errMsg, res.error);
+      toast(errMsg, 'error');
+      return { ok: false, error: res.error, data: null };
+    }
+    return { ok: true, error: null, data: res ? res.data : null };
+  } catch (e) {
+    console.error('[dbGuard]', errMsg, e);
+    toast(errMsg, 'error');
+    return { ok: false, error: e, data: null };
+  }
+}
 let _modalCb = null;
 function openModal(title, msg, cb, bodyHtml = '') {
   set('modal-title', title);
@@ -746,13 +764,11 @@ async function requestDeleteAccount() {
     'Toutes tes données (transactions, règles, objectifs, investissements) seront effacées définitivement. Cette action est irréversible.',
     async () => {
       // Supprime toutes les données du user (grâce aux ON DELETE CASCADE, l'auth delete ferait tout, mais on ne peut pas delete l'auth user depuis le front)
-      await sb.from('transactions').delete().eq('user_id', currentUser.id);
-      await sb.from('merchant_rules').delete().eq('user_id', currentUser.id);
-      await sb.from('epargne_objectifs').delete().eq('user_id', currentUser.id);
-      await sb.from('epargne_contributions').delete().eq('user_id', currentUser.id);
-      await sb.from('investissements').delete().eq('user_id', currentUser.id);
-      await sb.from('budget_prep').delete().eq('user_id', currentUser.id);
-      await sb.from('profiles').delete().eq('user_id', currentUser.id);
+      const uid = currentUser.id;
+      const tables = ['transactions', 'merchant_rules', 'epargne_objectifs', 'epargne_contributions', 'investissements', 'budget_prep', 'tracker_mensuel', 'profiles'];
+      for (const tbl of tables) {
+        if (!(await dbGuard(sb.from(tbl).delete().eq('user_id', uid), 'Suppression interrompue. Certaines données subsistent, réessaie.')).ok) return;
+      }
       await sb.auth.signOut();
       toast('Compte vidé et déconnecté. Contacte-moi pour supprimer définitivement l\'accès.', 'success');
       location.reload();
@@ -2169,7 +2185,11 @@ async function saveSuivi(key, col, val) {
     ['lcl','bourso','especes','esalia','banque_postale','investissements','autre','salaire','tickets_resto','remboursements','autres_revenus','epargne_cible','epargne_reel'].forEach(c => {
       if (suiviData[key][c] !== undefined) payload[c] = suiviData[key][c];
     });
-    await sb.from('tracker_mensuel').upsert(payload, { onConflict: 'user_id,month' });
+    const r = await dbGuard(
+      sb.from('tracker_mensuel').upsert(payload, { onConflict: 'user_id,month' }),
+      'Sauvegarde du suivi échouée. Ta saisie n\'est pas enregistrée.'
+    );
+    if (r.ok) toast('Enregistré', 'success');
   }, 1200);
 }
 async function resyncSuivi() {
@@ -2559,7 +2579,7 @@ function openContribForm(id) {
 }
 
 async function markAchieved(id) {
-  await sb.from('epargne_objectifs').update({ statut: 'atteint' }).eq('id', id);
+  if (!(await dbGuard(sb.from('epargne_objectifs').update({ statut: 'atteint' }).eq('id', id))).ok) return;
   await loadGoals();
   renderEpargne();
   toast('🏆 Bravo ! Objectif atteint !', 'success');
@@ -2569,7 +2589,7 @@ async function abandonGoal(id) {
   const g = goalsList.find(g => g.id === id);
   if (!g) return;
   openModal('Abandonner cet objectif ?', `"${g.nom}" sera déplacé dans les abandonnés. Tu pourras le réactiver plus tard.`, async () => {
-    await sb.from('epargne_objectifs').update({ statut: 'abandonne' }).eq('id', id);
+    if (!(await dbGuard(sb.from('epargne_objectifs').update({ statut: 'abandonne' }).eq('id', id))).ok) return;
     await loadGoals();
     renderEpargne();
     toast('Objectif déplacé dans les abandonnés');
@@ -2577,7 +2597,7 @@ async function abandonGoal(id) {
 }
 
 async function reactivateGoal(id) {
-  await sb.from('epargne_objectifs').update({ statut: 'en_cours' }).eq('id', id);
+  if (!(await dbGuard(sb.from('epargne_objectifs').update({ statut: 'en_cours' }).eq('id', id))).ok) return;
   await loadGoals();
   renderEpargne();
   toast('Objectif réactivé 🌱', 'success');
@@ -2587,7 +2607,7 @@ async function deleteGoal(id) {
   const g = goalsList.find(g => g.id === id);
   if (!g) return;
   openModal('Supprimer', `Supprimer définitivement "${g.nom}" ?`, async () => {
-    await sb.from('epargne_objectifs').delete().eq('id', id);
+    if (!(await dbGuard(sb.from('epargne_objectifs').delete().eq('id', id))).ok) return;
     await loadGoals();
     renderEpargne();
     toast('Supprimé');
@@ -2821,13 +2841,13 @@ async function saveBudgetPrep() {
   budgetSaveTimer = setTimeout(async () => {
     const rev = parseFloat($('bud-revenu').value) || 0;
     budgetData.revenu_mensuel = rev;
-    await sb.from('budget_prep').upsert({
+    await dbGuard(sb.from('budget_prep').upsert({
       user_id: currentUser.id,
       revenu_mensuel: budgetData.revenu_mensuel,
       pct_charges: budgetData.pct_charges,
       pct_plaisir: budgetData.pct_plaisir,
       pct_epargne: budgetData.pct_epargne
-    }, { onConflict: 'user_id' });
+    }, { onConflict: 'user_id' }), 'Sauvegarde du budget échouée.');
   }, 1000);
 }
 
@@ -3107,7 +3127,7 @@ function editInvest(id) {
 }
 async function deleteInvest(id) {
   openModal('Supprimer', 'Supprimer cet investissement ?', async () => {
-    await sb.from('investissements').delete().eq('id', id);
+    if (!(await dbGuard(sb.from('investissements').delete().eq('id', id))).ok) return;
     await loadInvestissements();
     renderInvestissements();
     toast('Supprimé', 'success');
