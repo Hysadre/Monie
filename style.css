@@ -1343,26 +1343,27 @@ body::after {
   flex: 1;
 }
 .help-banner-chevron {
-  width: 24px; height: 24px;
+  width: 26px; height: 26px;
   display: flex; align-items: center; justify-content: center;
-  color: var(--rose);
-  transition: transform 0.25s;
-  font-size: 16px;
+  color: var(--sage);
+  transition: transform 0.25s, color 0.15s;
+  font-size: 18px;
   font-weight: 900;
   flex-shrink: 0;
+  order: 3; /* avant la croix */
 }
-.help-banner.open .help-banner-chevron { transform: rotate(180deg); }
+.help-banner.open .help-banner-chevron { transform: rotate(180deg); color: #4E8E70; }
 .help-banner-close {
   background: transparent;
   border: none;
-  color: var(--muted);
+  color: #E53935; /* Rouge vif */
   cursor: pointer;
   width: 28px;
   height: 28px;
   border-radius: 50%;
   font-family: var(--ff);
-  font-size: 18px;
-  font-weight: 400;
+  font-size: 22px;
+  font-weight: 900;
   line-height: 1;
   transition: all 0.15s;
   flex-shrink: 0;
@@ -1370,11 +1371,12 @@ body::after {
   align-items: center;
   justify-content: center;
   padding: 0;
+  order: 4; /* après le chevron */
 }
 .help-banner-close:hover {
-  background: rgba(231, 111, 81, 0.15);
-  color: var(--rose);
-  transform: scale(1.1);
+  background: rgba(229, 57, 53, 0.15);
+  color: #C62828;
+  transform: scale(1.15);
 }
 .help-banner-body {
   font-size: 13px;
@@ -1394,50 +1396,30 @@ body::after {
 .help-banner-body li { margin-bottom: 4px; }
 .help-banner.hidden { display: none; }
 
-/* Bulle info : rond rose framboise avec "i" blanc + queue de speech-bubble */
+/* Bulle info : SVG "i" en speech-bubble rouge rose, propre, sans overflow */
 .help-bubble {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--rose), var(--tender-rose));
+  width: 42px;
+  height: 42px;
   border: none;
-  color: white;
-  font-size: 20px;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-weight: 900;
-  font-style: italic;
+  background: transparent;
   cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 3px 10px rgba(231,111,81,0.35), inset 0 -2px 0 rgba(0,0,0,0.08);
-  margin-bottom: 14px;
+  padding: 0;
+  margin-bottom: 12px;
   vertical-align: middle;
   flex-shrink: 0;
-  padding: 0;
-  line-height: 1;
+  transition: transform 0.2s;
+  filter: drop-shadow(0 3px 8px rgba(231,111,81,0.28));
 }
+.help-bubble svg { width: 100%; height: 100%; display: block; }
 .help-bubble:hover {
   transform: scale(1.1) translateY(-1px);
-  box-shadow: 0 6px 18px rgba(231,111,81,0.45), inset 0 -2px 0 rgba(0,0,0,0.08);
+  filter: drop-shadow(0 5px 14px rgba(231,111,81,0.4));
 }
-.help-bubble:active {
-  transform: scale(0.96);
-}
-/* Queue de speech-bubble (élément SPAN injecté en JS) */
-.help-bubble-tail {
-  position: absolute;
-  bottom: -4px;
-  left: 6px;
-  width: 14px;
-  height: 14px;
-  background: linear-gradient(135deg, var(--rose), var(--tender-rose));
-  clip-path: polygon(100% 0, 100% 100%, 0 100%);
-  z-index: -1;
-  filter: drop-shadow(0 2px 3px rgba(231,111,81,0.28));
-}
+.help-bubble:active { transform: scale(0.96); }
 /* Tooltip : span enfant .help-bubble-tip */
 .help-bubble-tip {
   position: absolute;

@@ -118,16 +118,17 @@ function restoreHelpBanners() {
     const titleEl = banner.querySelector('.help-banner-title');
     const tooltipText = titleEl ? titleEl.textContent.trim() : 'Voir l\'aide';
 
-    // Ajouter chevron si pas déjà présent
+    // Ajouter chevron si pas déjà présent — inséré AVANT la croix
+    const closeBtn = hd.querySelector('.help-banner-close');
     if (!hd.querySelector('.help-banner-chevron')) {
       const chev = document.createElement('div');
       chev.className = 'help-banner-chevron';
       chev.textContent = '▾';
-      hd.appendChild(chev);
+      if (closeBtn) hd.insertBefore(chev, closeBtn);
+      else hd.appendChild(chev);
     }
 
-    // Remplacer "J'ai compris ✓" par une croix ×
-    const closeBtn = hd.querySelector('.help-banner-close');
+    // Remplacer "J'ai compris ✓" par une croix × rouge en gras
     if (closeBtn && closeBtn.textContent.trim() !== '×') {
       closeBtn.innerHTML = '&times;';
       closeBtn.setAttribute('aria-label', 'Masquer cette aide');
@@ -145,8 +146,19 @@ function restoreHelpBanners() {
       bubble.className = 'help-bubble';
       bubble.setAttribute('data-target', banner.id);
       bubble.setAttribute('aria-label', tooltipText);
-      // Structure : lettre "i" + queue speech-bubble + tooltip
-      bubble.innerHTML = `i<span class="help-bubble-tail"></span><span class="help-bubble-tip">${tooltipText}</span>`;
+      // SVG speech-bubble propre : cercle + queue intégrée + "i" blanc
+      bubble.innerHTML = `
+        <svg viewBox="0 0 42 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <defs>
+            <linearGradient id="hb-grad-${banner.id}" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#E76F51"/>
+              <stop offset="1" stop-color="#DD7B85"/>
+            </linearGradient>
+          </defs>
+          <path d="M21 2 C10 2 2 9 2 19 C2 27 8 33 15 34 L9 46 L22 33 C32 32 40 26 40 19 C40 9 32 2 21 2 Z" fill="url(#hb-grad-${banner.id})"/>
+          <text x="21" y="26" text-anchor="middle" fill="white" font-family="Georgia, serif" font-weight="900" font-style="italic" font-size="22">i</text>
+        </svg>
+        <span class="help-bubble-tip">${tooltipText}</span>`;
       bubble.addEventListener('click', (ev) => {
         ev.preventDefault();
         const target = document.getElementById(banner.id);
