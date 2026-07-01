@@ -38,6 +38,7 @@ const CAT_META = {
   'Voyages': { emoji: '✈️', color: '#4FC3F7' },
   'Divertissement': { emoji: '🎬', color: '#E76F51' },
   'Aide au logement': { emoji: '🏘️', color: '#7FB89E' },
+  'Paiement échelonné': { emoji: '💳', color: '#B79CD6' },
   'Autres': { emoji: '📌', color: '#A0AEC0' }
 };
 // Métadonnées des banques source (pastilles LCL / BoursoBank)
@@ -478,6 +479,7 @@ async function showApp(user) {
   populateCategorySelects();
   restoreHelpBanners();
   initHeaderAutoHide();
+  budgetStartupAlert();
 }
 
 async function loadGoals() {
@@ -882,6 +884,26 @@ function categorize(label, amount) {
   if (currentUser && (L.includes(currentUser.email.split('@')[0].toLowerCase()))) {
     return { category: 'Transactions', sub_category: 'Virement interne' };
   }
+  // Patterns connus mal classés auparavant
+  if (L.includes('action logement') || /versement\s+als/.test(L) || /\bals\d/.test(L)) {
+    return { category: 'Aide au logement', sub_category: null };
+  }
+  if (L.includes('crous') || L.includes('cvec')) {
+    return { category: 'Éducation', sub_category: 'CVEC' };
+  }
+  // Marchands connus (fiabilise les imports + corrige les erreurs récurrentes)
+  if (L.includes('aboitie')) return { category: 'Amis & Famille', sub_category: 'Famille' };
+  if (/\bassi\b/.test(L)) return { category: 'Transactions', sub_category: 'Virement interne' };
+  if (L.includes('pety')) return { category: 'Loyer', sub_category: null };
+  if (L.includes('predica') || L.includes('option system')) return { category: 'Investissements', sub_category: null };
+  if (L.includes('direction generale des finances') || L.includes('dgfip') || L.includes('finances pub')) return { category: 'Impôts', sub_category: null };
+  if (L.includes('caf du nord') || L.includes('caf nord')) return { category: 'Aide au logement', sub_category: 'CAF' };
+  if (L.includes('shein') || L.includes('zalando') || L.includes('asos') || L.includes('na-kd')) return { category: 'Mode', sub_category: null };
+  if (L.includes('klarna') || L.includes('scalapay')) return { category: 'Paiement échelonné', sub_category: null };
+  if (L.includes('sfr') || L.includes('bouygues telecom')) return { category: 'Abonnements', sub_category: 'Téléphone' };
+  if (L.includes('amouan') || L.includes('gnagne') || L.includes('mame diouf') || L.includes('saffo')) return { category: 'Amis & Famille', sub_category: null };
+  if (L.includes('deliveroo') || L.includes('franprix')) return { category: 'Alimentation', sub_category: null };
+  if (L.includes('flixbus') || L.includes('transpole')) return { category: 'Transport', sub_category: null };
   // Pass 1: rules spécifiques
   const specifics = rules.filter(r => !r.is_generic).sort((a, b) => b.priority - a.priority || b.pattern.length - a.pattern.length);
   for (const r of specifics) {
@@ -1170,6 +1192,10 @@ function renderDashboard() {
   if ($('dash-month-select')) $('dash-month-select').value = dashMonth;
   if ($('dash-year-select')) $('dash-year-select').value = dashYear;
 
+  // Indicateurs d'année/période affichés dans les titres des graphes
+  if ($('dash-evo-year')) set('dash-evo-year', isGlobalYear ? '· toutes années' : '· ' + dashYear);
+  if ($('dash-cat-period')) set('dash-cat-period', isGlobal ? '· Global' : '· ' + MONTHS[dashMonth] + ' ' + dashYear);
+
   // En mode global : on prend TOUTES les transactions
   let monthTx;
   if (isGlobalYear && isGlobalMonth) {
@@ -1201,6 +1227,9 @@ function renderDashboard() {
 
   // ═══ Widget "Prochain objectif" ═══
   renderDashGoalWidget();
+
+  // ═══ Suivi du budget du mois ═══
+  renderBudgetStatus('budget-alert-dash');
 
   // Évolution 12 mois : FIGÉE sur Jan-Déc / ou GLOBAL par année (2020→2026)
   const evoLabels = [];
@@ -1309,6 +1338,7 @@ function renderCatTrend() {
   }
   const scope = isGlobalYear ? transactions : transactions.filter(t => t.date_op.startsWith(String(dashYear)));
   const spend = scope.filter(t => t.type === 'sortie');
+  if ($('cat-trend-year')) set('cat-trend-year', isGlobalYear ? '· toutes années' : '· ' + dashYear);
 
   // Toutes les catégories de dépense (sur tout l'historique) → liste stable pour les puces
   const allTotals = {};
@@ -2946,7 +2976,7 @@ function renderPerfCards(currentKey, curIn, curOut, curBal) {
 
 // ═══ VUE ANNUELLE ══════════════════════════════════════════════
 const REV_CATS = ['Salaire', 'Tickets restaurant', 'Remboursements'];
-const EXP_CATS = ['Loyer', 'Alimentation', 'Transport', 'Maison & Logement', 'Cosmétique', 'Mode', 'Santé', 'Administratif', 'Vie quotidienne', 'Abonnements', 'Dîme', 'Dons', 'Investissements', 'Banque', 'Impôts', 'Transactions', 'Autres'];
+const EXP_CATS = ['Loyer', 'Alimentation', 'Transport', 'Maison & Logement', 'Cosmétique', 'Mode', 'Santé', 'Éducation', 'Administratif', 'Vie quotidienne', 'Abonnements', 'Paiement échelonné', 'Dîme', 'Dons', 'Investissements', 'Banque', 'Impôts', 'Transactions', 'Autres'];
 
 function renderVueAnnuelle() {
   if ($('annuelle-year')) annuelleYear = parseInt($('annuelle-year').value) || annuelleYear;
@@ -3032,6 +3062,83 @@ function renderVueAnnuelle() {
 }
 
 // ═══ BUDGET PRÉPA ══════════════════════════════════════════════
+
+// ─── Alerte budget : réel du mois en cours vs budget validé ───
+// Mapping explicite catégorie → bloc budgétaire (transparent et prévisible)
+const BUDGET_BLOCK = {
+  'Loyer': 'charges', 'Alimentation': 'charges', 'Transport': 'charges', 'Santé': 'charges',
+  'Abonnements': 'charges', 'Maison & Logement': 'charges', 'Administratif': 'charges',
+  'Impôts': 'charges', 'Banque': 'charges', 'Éducation': 'charges', 'Aide au logement': 'charges',
+  'Vie quotidienne': 'plaisir', 'Mode': 'plaisir', 'Cosmétique': 'plaisir', 'Dons': 'plaisir',
+  'Amis & Famille': 'plaisir', 'Divertissement': 'plaisir', 'Voyages': 'plaisir',
+  'Dîme': 'epargne', 'Investissements': 'epargne'
+};
+function computeBudgetStatus() {
+  const rev = budgetData.revenu_mensuel || 0;
+  const now = new Date();
+  const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const spent = { charges: 0, plaisir: 0, epargne: 0 };
+  transactions.forEach(t => {
+    if (t.type !== 'sortie' || !t.date_op.startsWith(key)) return;
+    const b = BUDGET_BLOCK[t.category];
+    if (b) spent[b] += Math.abs(Number(t.amount));
+  });
+  const budget = {
+    charges: Math.round(rev * (budgetData.pct_charges || 0) / 100),
+    plaisir: Math.round(rev * (budgetData.pct_plaisir || 0) / 100),
+    epargne: Math.round(rev * (budgetData.pct_epargne || 0) / 100)
+  };
+  return { rev, key, spent, budget };
+}
+function renderBudgetStatus(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const { rev, spent, budget } = computeBudgetStatus();
+  if (!rev) { el.innerHTML = '<div class="empty-sub">Renseigne ton revenu mensuel dans Prépa Budget pour activer le suivi du mois.</div>'; return; }
+  const blocks = [
+    { key: 'charges', label: '🏠 Charges', spend: true },
+    { key: 'plaisir', label: '🌸 Plaisir', spend: true },
+    { key: 'epargne', label: '🌱 Épargne', spend: false }
+  ];
+  el.innerHTML = blocks.map(b => {
+    const bud = budget[b.key], sp = spent[b.key];
+    const pct = bud > 0 ? Math.round(sp / bud * 100) : 0;
+    const w = Math.min(100, pct);
+    let color, status;
+    if (b.spend) {
+      if (pct >= 100) { color = '#E53935'; status = '⚠️ Budget dépassé'; }
+      else if (pct >= 80) { color = 'var(--gold)'; status = 'Tu approches de la limite'; }
+      else { color = 'var(--sage)'; status = 'Dans le budget'; }
+    } else {
+      if (pct >= 100) { color = 'var(--sage)'; status = '🎯 Objectif atteint'; }
+      else if (pct >= 80) { color = 'var(--gold)'; status = 'Presque !'; }
+      else { color = 'var(--muted)'; status = 'En cours'; }
+    }
+    return `
+      <div style="margin-bottom:13px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:5px">
+          <span style="font-weight:700">${b.label}</span>
+          <span style="font-family:var(--fm);color:${color};font-weight:700">${fmt(sp)} / ${fmt(bud)} · ${pct}%</span>
+        </div>
+        <div style="height:8px;background:var(--border-soft);border-radius:100px;overflow:hidden">
+          <div style="height:100%;width:${w}%;background:${color};border-radius:100px;transition:width .4s"></div>
+        </div>
+        <div style="font-size:11px;color:${color};margin-top:3px">${status}</div>
+      </div>`;
+  }).join('');
+}
+let _budgetAlertShown = false;
+function budgetStartupAlert() {
+  if (_budgetAlertShown) return;
+  _budgetAlertShown = true;
+  const { rev, spent, budget } = computeBudgetStatus();
+  if (!rev) return;
+  const over = [];
+  if (budget.charges > 0 && spent.charges > budget.charges) over.push('Charges');
+  if (budget.plaisir > 0 && spent.plaisir > budget.plaisir) over.push('Plaisir');
+  if (over.length) toast(`⚠️ Budget dépassé ce mois : ${over.join(' et ')}`, 'error');
+}
+
 function normalizeBudgetPct(changed) {
   const c = Math.max(0, Math.min(100, parseInt($('bud-pct-charges').value) || 0));
   const p = Math.max(0, Math.min(100, parseInt($('bud-pct-plaisir').value) || 0));
@@ -3071,6 +3178,7 @@ function renderBudget() {
 
   const rev = parseFloat($('bud-revenu').value) || 0;
   budgetData.revenu_mensuel = rev;
+  renderBudgetStatus('budget-alert-page');
   const c = budgetData.pct_charges;
   const p = budgetData.pct_plaisir;
   const e = budgetData.pct_epargne;

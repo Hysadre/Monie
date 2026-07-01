@@ -1143,6 +1143,11 @@ body::after {
   font-family: var(--fm);
 }
 .suivi-table td:first-child { font-family: var(--ff); font-weight: 600; text-align: left; color: var(--ink); }
+.suivi-copy-btn { font-size: 10px; font-weight: 700; color: var(--rose); background: var(--rose-soft); border: none; border-radius: 6px; padding: 2px 7px; cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+.suivi-copy-btn:hover { background: var(--rose); color: #fff; }
+/* Surlignage de ligne au survol (Mensuel + Annuel) */
+.suivi-table tbody tr:hover td { background: rgba(231,111,81,0.06); }
+.annuelle-table tbody tr:not(.total-row):not(.subtotal-row):hover td { background: rgba(231,111,81,0.06); }
 .suivi-inp {
   width: 100%;
   padding: 6px 8px;

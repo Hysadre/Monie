@@ -345,16 +345,27 @@
           </div>
         </div>
 
+        <div class="card">
+          <div class="card-hd"><div class="card-title">🎯 Budget du mois <span style="font-size:11px;font-weight:500;color:var(--muted)">— réel vs budget validé</span></div>
+            <button class="btn-ghost" onclick="showTab('budget')" style="padding:6px 10px;font-size:12px">Ajuster →</button></div>
+          <div id="budget-alert-dash"></div>
+        </div>
+
         <div class="grid-2-1">
           <div class="card">
-            <div class="card-hd"><div class="card-title">Évolution 12 mois</div></div>
+            <div class="card-hd"><div class="card-title">Évolution 12 mois <span id="dash-evo-year" style="font-size:12px;font-weight:700;color:var(--rose)"></span></div></div>
             <div style="height:220px"><canvas id="chart-evolution"></canvas></div>
           </div>
           <div class="card">
-            <div class="card-hd"><div class="card-title">Par catégorie</div></div>
+            <div class="card-hd"><div class="card-title">Par catégorie <span id="dash-cat-period" style="font-size:12px;font-weight:700;color:var(--rose)"></span></div></div>
             <div style="height:160px;display:flex;align-items:center;justify-content:center"><canvas id="chart-categories"></canvas></div>
             <div id="cat-legend" style="margin-top:12px"></div>
           </div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">Tendance des dépenses par catégorie <span id="cat-trend-year" style="font-size:12px;font-weight:700;color:var(--rose)"></span> <span style="font-size:11px;font-weight:500;color:var(--muted)">— clique pour choisir les catégories à comparer</span></div></div>
+          <div id="cat-trend-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+          <div style="height:240px"><canvas id="chart-cat-trend"></canvas></div>
         </div>
         <div class="card">
           <div class="card-hd"><div class="card-title">Top dépenses du mois</div></div>
@@ -497,6 +508,15 @@
           </div>
         </div>
 
+        <div class="card" id="suivi-chart-card">
+          <div class="card-hd"><div class="card-title">📈 Évolution de ton patrimoine</div></div>
+          <div style="height:210px"><canvas id="suivi-chart"></canvas></div>
+        </div>
+        <div id="suivi-chart-empty" class="empty" style="display:none">
+          <div class="empty-title">Ta courbe de patrimoine apparaîtra ici</div>
+          <div class="empty-sub">Saisis les soldes de tes comptes ci-dessous pour la voir se dessiner.</div>
+        </div>
+
         <div class="card">
           <div class="suivi-wrap">
             <table class="suivi-table">
@@ -556,6 +576,10 @@
           <div class="kpi kpi-rose"><div class="kpi-label">Dépenses année</div><div class="kpi-val kpi-val-rose" id="annuelle-dep">—</div><div class="kpi-hint" id="annuelle-dep-hint">—</div></div>
           <div class="kpi kpi-peach"><div class="kpi-label">Solde net</div><div class="kpi-val" id="annuelle-bal">—</div><div class="kpi-hint" id="annuelle-bal-hint">—</div></div>
         </div>
+        <div class="card" id="annuelle-chart-card">
+          <div class="card-hd"><div class="card-title">Revenus vs Dépenses par mois <span style="font-size:11px;font-weight:500;color:var(--muted)">— hors virements internes</span></div></div>
+          <div style="height:220px"><canvas id="annuelle-chart"></canvas></div>
+        </div>
         <div class="card">
           <div class="suivi-wrap">
             <table class="annuelle-table">
@@ -596,6 +620,10 @@
             </ul>
             <b>Comment utiliser :</b> Saisis ton salaire mensuel → Monie calcule automatiquement combien allouer à chaque bloc + détaille par sous-catégorie (Loyer, Alimentation, Mode…).
           </div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">📊 Où en es-tu ce mois-ci ? <span style="font-size:11px;font-weight:500;color:var(--muted)">— dépenses réelles vs budget</span></div></div>
+          <div id="budget-alert-page"></div>
         </div>
         <div class="grid-2">
           <div class="card">
