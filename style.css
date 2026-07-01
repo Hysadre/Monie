@@ -43,17 +43,21 @@ html, body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
-  overflow-y: auto;
   min-height: 100vh;
-  /* Fix iOS Safari overscroll rubber-band → bottom-nav glitch */
-  overscroll-behavior-y: none;
-  -webkit-overflow-scrolling: touch;
 }
-/* S'assurer que body peut scroller librement même quand un contenu très long est chargé */
+/* Le body doit pouvoir grandir avec son contenu */
 body {
   height: auto;
   min-height: 100vh;
   position: relative;
+}
+/* Fix iOS Safari overscroll rubber-band — MOBILE UNIQUEMENT
+   (sur desktop macOS ça casse le scroll trackpad) */
+@media (max-width: 900px) {
+  html, body {
+    overscroll-behavior-y: none;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 html { background: var(--bg); }
 /* Layer sous la bottom-nav pour cacher le contenu qui rebondit derrière */
