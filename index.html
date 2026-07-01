@@ -412,11 +412,11 @@
           <div class="card-hd tx-header-mobile">
             <div class="card-title">Toutes tes opérations <span id="tx-filter-count" style="font-size:11px;font-weight:500;color:var(--muted);margin-left:6px"></span></div>
             <div class="tx-filter-row">
-              <input class="inp" type="search" id="tx-search" placeholder="🔍 Rechercher..." oninput="renderTransactionsList()">
-              <select class="select" id="tx-filter-cat" onchange="renderTransactionsList()"><option value="all">Toutes catégories</option></select>
-              <select class="select" id="tx-filter-year" onchange="renderTransactionsList()"><option value="all">Toutes années</option></select>
-              <select class="select" id="tx-filter-month" onchange="renderTransactionsList()"><option value="all">Tous mois</option></select>
-              <input class="inp" type="date" id="tx-filter-date" onchange="renderTransactionsList()" title="Filtrer par date exacte">
+              <input class="inp" type="search" id="tx-search" placeholder="🔍 Rechercher..." oninput="onTxSearchInput()">
+              <select class="select" id="tx-filter-cat" onchange="onTxFilterChange()"><option value="all">Toutes catégories</option></select>
+              <select class="select" id="tx-filter-year" onchange="onTxFilterChange()"><option value="all">Toutes années</option></select>
+              <select class="select" id="tx-filter-month" onchange="onTxFilterChange()"><option value="all">Tous mois</option></select>
+              <input class="inp" type="date" id="tx-filter-date" onchange="onTxFilterChange()" title="Filtrer par date exacte">
               <button class="btn-ghost" onclick="clearTxFilters()" style="padding:8px 12px;font-size:12px" title="Effacer filtres">✕ Reset</button>
               <button class="btn-primary" onclick="exportTxCsv()" style="padding:8px 14px;font-size:12px" title="Exporter en CSV">📥 Exporter</button>
             </div>
@@ -479,21 +479,22 @@
           </div>
         </div>
 
-        <!-- Explainer -->
-        <div class="card" style="background:linear-gradient(135deg, var(--rose-soft), var(--peach-soft));border:none;margin-bottom:16px">
-          <div style="display:flex;gap:16px;align-items:flex-start">
-            <div style="font-size:32px;flex-shrink:0">📖</div>
-            <div style="flex:1;min-width:0">
-              <div style="font-weight:700;font-size:15px;color:var(--ink);margin-bottom:8px">Comment ça marche</div>
-              <div style="font-size:13px;color:var(--text);line-height:1.7">
-                <div style="margin-bottom:6px"><b style="color:var(--rose)">💎 Patrimoine (rose)</b> — Tu saisis toi-même le solde de chaque compte, à la fin du mois. Ces cases sont éditables.</div>
-                <div style="margin-bottom:6px"><b style="color:var(--sage)">💰 Revenus (vert)</b> — Automatiquement calculés depuis tes transactions (Salaire, Tickets, Remboursements). Colonne "Autres" éditable.</div>
-                <div><b style="color:var(--plum)">🎯 Épargne (mauve)</b> — Tu saisis ta cible d'épargne et ce que tu as réellement mis de côté ce mois-là.</div>
-                <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(231,111,81,0.15);font-size:12px;color:var(--muted)">
-                  🔒 <b>Rassuré·e :</b> ce que tu saisis n'est <b>jamais écrasé</b> par les imports de transactions. Ta saisie manuelle a toujours la priorité.
-                </div>
-              </div>
-            </div>
+        <!-- Explainer accordéon (comme les autres pages) -->
+        <div class="help-banner" id="help-suivi">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">📊</div>
+            <div class="help-banner-title">Comment ça marche — Suivi mensuel</div>
+            <button class="help-banner-close" onclick="closeHelp('help-suivi')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            <b>Tableau de suivi mois par mois</b> pour comparer ton patrimoine, tes revenus et ton évolution.
+            <ul>
+              <li><b style="color:var(--rose)">💎 Patrimoine (rose)</b> — Solde de chaque compte fin de mois <b>(éditable)</b></li>
+              <li><b style="color:var(--sage)">💰 Revenus (vert)</b> — Auto depuis tes transactions (Salaire, Tickets, Remboursements). "Autres" éditable</li>
+              <li><b>🧾 Total</b> — Patrimoine + Revenus du mois</li>
+              <li><b style="color:var(--gold)">📈 Évolution vs N-1</b> — Différence en € et % par rapport au mois précédent</li>
+              <li>🔒 <b>Rassuré·e</b> : ce que tu saisis n'est <b>jamais écrasé</b> par les imports. Ta saisie manuelle a toujours la priorité.</li>
+            </ul>
           </div>
         </div>
 
@@ -936,5 +937,11 @@
 </div>
 
 <script src="app.js"></script>
+<script>
+  // Enregistre le service worker (mode hors-ligne). Chemin relatif → marche sous /Monie/.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+</script>
 </body>
 </html>
