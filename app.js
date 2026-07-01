@@ -298,6 +298,41 @@ async function dbGuard(query, errMsg = 'Échec de la sauvegarde. Vérifie ta con
     return { ok: false, error: e, data: null };
   }
 }
+
+// Échappe le HTML pour tout texte venant de l'utilisateur ou d'un import (anti-XSS + évite de casser les attributs).
+const _ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => _ESC[c]); }
+
+// Toast avec bouton "Annuler" (undo). Auto-masqué après 5 s. Élément autonome, indépendant du toast classique.
+let _undoTimer = null;
+function showUndoToast(msg, onUndo) {
+  let el = $('undo-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'undo-toast';
+    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;background:var(--ink,#1B2340);color:#fff;padding:11px 14px;border-radius:12px;display:flex;align-items:center;gap:14px;box-shadow:0 8px 24px rgba(0,0,0,.28);font-size:14px;max-width:92vw';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = '<span class="undo-msg"></span><button type="button" style="background:var(--rose,#E76F51);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">Annuler</button>';
+  el.querySelector('.undo-msg').textContent = msg;
+  el.style.display = 'flex';
+  const hide = () => { el.style.display = 'none'; };
+  clearTimeout(_undoTimer);
+  el.querySelector('button').onclick = () => { clearTimeout(_undoTimer); hide(); onUndo(); };
+  _undoTimer = setTimeout(hide, 5000);
+}
+
+// Pagination + debounce de la liste de transactions
+const TX_PAGE = 300;
+let txRenderLimit = TX_PAGE;
+let _txSearchTimer = null;
+function onTxSearchInput() {
+  clearTimeout(_txSearchTimer);
+  _txSearchTimer = setTimeout(() => { txRenderLimit = TX_PAGE; renderTransactionsList(); }, 220);
+}
+function onTxFilterChange() { txRenderLimit = TX_PAGE; renderTransactionsList(); }
+function loadMoreTx() { txRenderLimit += TX_PAGE; renderTransactionsList(); }
+
 let _modalCb = null;
 function openModal(title, msg, cb, bodyHtml = '') {
   set('modal-title', title);
@@ -937,8 +972,8 @@ function selectDay(dateStr) {
       el.innerHTML = `
         <div class="day-tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
         <div class="day-tx-info">
-          <div class="day-tx-label">${t.label}${badge}</div>
-          <div class="day-tx-cat">${t.category}${t.sub_category ? ' · ' + t.sub_category : ''}</div>
+          <div class="day-tx-label">${esc(t.label)}${badge}</div>
+          <div class="day-tx-cat">${esc(t.category)}${t.sub_category ? ' · ' + esc(t.sub_category) : ''}</div>
         </div>
         <div class="day-tx-amt ${t.type === 'entree' ? 'amt-in' : 'amt-out'}">${t.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(Number(t.amount)))}</div>
       `;
@@ -1215,7 +1250,7 @@ function renderDashboard() {
       <div class="tx-row">
         <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}</div>
         <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
-        <div class="tx-info"><div class="tx-label">${t.label}</div><div class="tx-cat">${t.category}</div></div>
+        <div class="tx-info"><div class="tx-label">${esc(t.label)}</div><div class="tx-cat">${esc(t.category)}</div></div>
         <div class="tx-amt amt-out">-${fmtD(Math.abs(Number(t.amount)))}</div>
       </div>
     `).join('');
@@ -1259,7 +1294,7 @@ function renderTransactionsList() {
     if (search && !t.label.toLowerCase().includes(search)) return false;
     return true;
   });
-  const filtered = allFiltered.slice(0, 300);
+  const filtered = allFiltered.slice(0, txRenderLimit);
   // Sync compteur : combien de tx correspondent aux filtres
   set('tx-filter-count', `${allFiltered.length} tx filtrée(s)`);
   const list = $('tx-list-all');
@@ -1305,7 +1340,7 @@ function renderTransactionsList() {
           <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}<br><span style="font-size:10px">${t.date_op.slice(0, 4)}</span></div>
           <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
           <div class="tx-info">
-            <div class="tx-label">${t.label} ${bankBadge(t.bank_source)}</div>
+            <div class="tx-label">${esc(t.label)} ${bankBadge(t.bank_source)}</div>
             <select class="select" style="margin-top:4px;padding:4px 8px;font-size:11px;width:auto;min-width:180px" onchange="recategorizeTx('${t.id}', this.value)">
               ${catsSel}
             </select>
@@ -1313,7 +1348,8 @@ function renderTransactionsList() {
           <div class="tx-amt ${t.type === 'entree' ? 'amt-in' : 'amt-out'}">${t.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(Number(t.amount)))}</div>
           <button class="import-del-btn" onclick="deleteTx('${t.id}')" title="Supprimer">✕</button>
         </div>`;
-    }).join('')}`;
+    }).join('')}
+    ${allFiltered.length > txRenderLimit ? `<button type="button" onclick="loadMoreTx()" style="display:block;margin:16px auto;padding:10px 22px;border:none;border-radius:10px;background:var(--rose,#E76F51);color:#fff;font-weight:700;cursor:pointer">Charger plus (${allFiltered.length - txRenderLimit} restantes)</button>` : ''}`;
 }
 
 function toggleTxSelect(id, checked) {
@@ -1343,6 +1379,7 @@ function clearTxSelection() { txSelectedIds.clear(); renderTransactionsList(); }
 function clearTxFilters() {
   ['tx-search','tx-filter-date'].forEach(id => { if ($(id)) $(id).value = ''; });
   ['tx-filter-cat','tx-filter-year','tx-filter-month'].forEach(id => { if ($(id)) $(id).value = 'all'; });
+  txRenderLimit = TX_PAGE;
   renderTransactionsList();
   toast('✓ Filtres réinitialisés');
 }
@@ -1402,13 +1439,24 @@ async function recategorizeTx(id, newCat) {
 }
 
 async function deleteTx(id) {
-  openModal('Supprimer cette transaction ?', 'Cette action est irréversible.', async () => {
-    const { error } = await sb.from('transactions').delete().eq('id', id);
-    if (error) { toast('Erreur: ' + error.message, 'error'); return; }
-    transactions = transactions.filter(t => t.id !== id);
-    txSelectedIds.delete(id);
-    toast('✓ Supprimée', 'success');
+  const tx = transactions.find(t => t.id === id);
+  if (!tx) return;
+  const { error } = await sb.from('transactions').delete().eq('id', id);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  transactions = transactions.filter(t => t.id !== id);
+  txSelectedIds.delete(id);
+  renderTransactionsList();
+  // Undo : ré-insère la ligne telle quelle (même id) si l'utilisateur clique Annuler
+  showUndoToast('Transaction supprimée', async () => {
+    const restore = { ...tx };
+    delete restore.created_at;
+    delete restore.updated_at;
+    const { error: e2 } = await sb.from('transactions').insert(restore);
+    if (e2) { toast('Impossible d\'annuler : ' + e2.message, 'error'); return; }
+    transactions.push(restore);
+    transactions.sort((a, b) => a.date_op < b.date_op ? 1 : a.date_op > b.date_op ? -1 : 0);
     renderTransactionsList();
+    toast('Transaction restaurée', 'success');
   });
 }
 
@@ -1678,8 +1726,8 @@ function showImportPreview() {
     importMatches.forEach((m, i) => {
       html += `
         <div class="match-card">
-          <div class="match-tx"><span>📱 Toi : "${m.existing.label}" le ${m.existing.date_op}</span><span class="tx-amt ${m.existing.type === 'entree' ? 'amt-in' : 'amt-out'}">${m.existing.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(m.existing.amount))}</span></div>
-          <div class="match-tx"><span>🏦 Import : "${m.new.label}" le ${m.new.date_op}</span><span class="tx-amt ${m.new.type === 'entree' ? 'amt-in' : 'amt-out'}">${m.new.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(m.new.amount))}</span></div>
+          <div class="match-tx"><span>📱 Toi : "${esc(m.existing.label)}" le ${m.existing.date_op}</span><span class="tx-amt ${m.existing.type === 'entree' ? 'amt-in' : 'amt-out'}">${m.existing.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(m.existing.amount))}</span></div>
+          <div class="match-tx"><span>🏦 Import : "${esc(m.new.label)}" le ${m.new.date_op}</span><span class="tx-amt ${m.new.type === 'entree' ? 'amt-in' : 'amt-out'}">${m.new.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(m.new.amount))}</span></div>
           <div class="match-actions">
             <button class="btn-merge" onclick="mergeMatch(${i})">✓ Même transaction (fusionner)</button>
             <button class="btn-keep" onclick="keepBoth(${i})">✗ Deux dépenses distinctes</button>
@@ -1792,7 +1840,7 @@ function showImportPreview() {
       const noteHtml = isAutre ? `
         <div class="tx-note-wrap">
           <input type="text" class="tx-note-input" placeholder="✏️ Note : à quoi correspond cette transaction ?"
-                 value="${(t.comment || '').replace(/"/g, '&quot;')}"
+                 value="${esc(t.comment)}"
                  oninput="setImportTxNote(${globalIdx}, this.value)">
         </div>` : '';
       html += `
@@ -1801,7 +1849,7 @@ function showImportPreview() {
           <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}<br><span style="font-size:10px">${t.date_op.slice(0, 4)}</span></div>
           <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
           <div class="tx-info">
-            <div class="tx-label">${t.label} ${bankBadge(t.bank_source)}</div>
+            <div class="tx-label">${esc(t.label)} ${bankBadge(t.bank_source)}</div>
             <select class="select" style="margin-top:4px;padding:4px 8px;font-size:11px;width:auto;min-width:180px" onchange="recategorizeImportTx(${globalIdx}, this.value)">
               ${catsToShow}
             </select>
@@ -2334,10 +2382,10 @@ function renderGoalCard(g, isAchieved = false, isAbandoned = false) {
         <div class="goal-title-block">
           <div class="goal-emoji" style="background:${g.couleur ? g.couleur + '20' : 'var(--sage-soft)'}">${g.emoji || '🎯'}</div>
           <div style="min-width:0;flex:1">
-            <div class="goal-name">${g.nom}</div>
+            <div class="goal-name">${esc(g.nom)}</div>
             <div class="goal-sub">
               ${isAchieved ? `🏆 Atteint le ${dateAtteintStr}` : isAbandoned ? '💤 Abandonné' : `Depuis le ${new Date(g.date_debut).toLocaleDateString('fr-FR')}`}
-              ${g.note ? ' · ' + g.note : ''}
+              ${g.note ? ' · ' + esc(g.note) : ''}
             </div>
           </div>
         </div>
@@ -2507,7 +2555,7 @@ function openGoalForm(existing) {
     },
     `<div style="display:flex;flex-direction:column;gap:14px">
       <div class="auth-field"><label>Nom de l'objectif</label>
-        <input class="inp" id="goal-form-nom" value="${existing?.nom || ''}" placeholder="Ex: Vacances Bali, Fonds urgence, Nouvel ordi"></div>
+        <input class="inp" id="goal-form-nom" value="${esc(existing?.nom)}" placeholder="Ex: Vacances Bali, Fonds urgence, Nouvel ordi"></div>
       <div class="auth-field"><label>Emoji</label>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
           ${emojisChoice.map(e => `<button type="button" onclick="document.getElementById('goal-form-emoji').value='${e}';document.querySelectorAll('.emoji-choice').forEach(b=>b.style.background='var(--bg)');this.style.background='var(--rose-soft)'" class="emoji-choice" style="width:38px;height:38px;font-size:20px;border:1.5px solid var(--border);border-radius:10px;background:${existing?.emoji === e ? 'var(--rose-soft)' : 'var(--bg)'};cursor:pointer">${e}</button>`).join('')}
@@ -2527,7 +2575,7 @@ function openGoalForm(existing) {
       <div class="auth-field"><label>Date cible (optionnelle)</label>
         <input class="inp" type="date" id="goal-form-date" value="${existing?.date_cible || ''}"></div>
       <div class="auth-field"><label>Note (optionnel)</label>
-        <input class="inp" id="goal-form-note" value="${existing?.note || ''}" placeholder="Ex: pour août"></div>
+        <input class="inp" id="goal-form-note" value="${esc(existing?.note)}" placeholder="Ex: pour août"></div>
     </div>`
   );
 }
@@ -2955,7 +3003,7 @@ function renderBudget() {
             <div class="bud-sub-row">
               <div class="bud-sub-cat">
                 <span style="width:8px;height:8px;border-radius:50%;background:${catColor(it.cat)};display:inline-block"></span>
-                ${catIcon(it.cat)} ${it.cat}${it.note ? ` <span style="color:var(--muted);font-size:11px">${it.note}</span>` : ''}
+                ${catIcon(it.cat)} ${esc(it.cat)}${it.note ? ` <span style="color:var(--muted);font-size:11px">${esc(it.note)}</span>` : ''}
               </div>
               <input type="number" step="0.5" min="0" max="100" class="bud-sub-inp" value="${it.pct}"
                      onchange="updateSubBudget('${blocKey}',${i},this.value)">
@@ -3042,8 +3090,8 @@ function renderInvestissements() {
       <div class="inv-card" style="border-left-color:${inv.couleur || 'var(--sage)'}">
         <div class="inv-card-hd">
           <div>
-            <div class="inv-card-title">📈 ${inv.nom}</div>
-            <div class="inv-card-type">${inv.type}</div>
+            <div class="inv-card-title">📈 ${esc(inv.nom)}</div>
+            <div class="inv-card-type">${esc(inv.type)}</div>
           </div>
           <div>
             <span class="inv-perf-badge ${posClass}">${posSign}${gainPct}% (${posSign}${fmt(gain)})</span>
