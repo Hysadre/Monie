@@ -1130,7 +1130,11 @@ body::after {
   letter-spacing: 0.05em;
   border-bottom: 2px solid var(--border-soft);
 }
-.suivi-table th:first-child { text-align: left; }
+/* Seul l'en-tête « Mois » (1re ligne) est aligné à gauche ; les en-têtes de chiffres restent à droite comme leurs valeurs */
+.suivi-table thead tr:first-child th:first-child { text-align: left; }
+/* Titres de groupe centrés sur leurs colonnes (spécificité > .suivi-table th) */
+.suivi-table th.th-group-pat, .suivi-table th.th-group-rev, .suivi-table th.th-group-ep,
+.suivi-table th.th-group-total, .suivi-table th.th-group-evo { text-align: center; }
 .suivi-table td {
   padding: 8px;
   border-bottom: 1px solid var(--border-soft);

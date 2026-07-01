@@ -471,7 +471,7 @@
         <div class="page-hd">
           <div>
             <h1 class="page-title">Suivi mensuel</h1>
-            <p class="page-sub">Patrimoine · Revenus · Épargne — mois par mois</p>
+            <p class="page-sub">Le solde de tes comptes en fin de mois, mois par mois</p>
           </div>
           <div style="display:flex;gap:10px;align-items:center">
             <select class="select" id="suivi-year" onchange="renderSuivi()"></select>
@@ -487,11 +487,10 @@
             <button class="help-banner-close" onclick="closeHelp('help-suivi')">J'ai compris ✓</button>
           </div>
           <div class="help-banner-body">
-            <b>Tableau de suivi mois par mois</b> pour comparer ton patrimoine, tes revenus et ton évolution.
+            <b>Tableau de suivi mois par mois</b> pour voir combien il te reste sur tes comptes et son évolution.
             <ul>
-              <li><b style="color:var(--rose)">💎 Patrimoine (rose)</b> — Solde de chaque compte fin de mois <b>(éditable)</b></li>
-              <li><b style="color:var(--sage)">💰 Revenus (vert)</b> — Auto depuis tes transactions (Salaire, Tickets, Remboursements). "Autres" éditable</li>
-              <li><b>🧾 Total</b> — Patrimoine + Revenus du mois</li>
+              <li><b style="color:var(--rose)">💎 Patrimoine (rose)</b> — Solde de chaque compte en fin de mois <b>(à saisir)</b></li>
+              <li><b>🧾 Total</b> — La somme de tes comptes = ce qu'il te reste réellement en fin de mois</li>
               <li><b style="color:var(--gold)">📈 Évolution vs N-1</b> — Différence en € et % par rapport au mois précédent</li>
               <li>🔒 <b>Rassuré·e</b> : ce que tu saisis n'est <b>jamais écrasé</b> par les imports. Ta saisie manuelle a toujours la priorité.</li>
             </ul>
@@ -504,14 +503,11 @@
               <thead>
                 <tr>
                   <th rowspan="2">Mois</th>
-                  <th colspan="8" class="th-group-pat">💎 PATRIMOINE</th>
-                  <th colspan="5" class="th-group-rev">💰 REVENUS</th>
-                  <th rowspan="2" class="th-group-total">🧾 TOTAL</th>
+                  <th colspan="8" class="th-group-pat">💎 PATRIMOINE — ce qu'il te reste en fin de mois</th>
                   <th colspan="2" class="th-group-evo">📈 ÉVOLUTION vs N-1</th>
                 </tr>
                 <tr>
                   <th>LCL</th><th>Bourso</th><th>Espèces</th><th>Esalia</th><th>B. Postale</th><th>Invest.</th><th>Autre</th><th>Total</th>
-                  <th>Salaire</th><th>Tickets</th><th>Rembours.</th><th>Autres</th><th>Total</th>
                   <th>Valeur</th><th>%</th>
                 </tr>
               </thead>

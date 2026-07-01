@@ -2171,36 +2171,25 @@ async function renderSuivi() {
   const body = $('suivi-body');
   body.innerHTML = '';
   const now = new Date();
-  let prevGrandTotal = null; // pour évolution vs N-1
+  let prevPatTot = null; // pour évolution vs N-1 (sur le solde de fin de mois)
   for (let m = 0; m < 12; m++) {
     if (new Date(year, m, 1) > new Date(now.getFullYear(), now.getMonth() + 1, 1)) break;
     const key = `${year}-${String(m + 1).padStart(2, '0')}`;
     const r = suiviData[key] || {};
-    // Auto revenus depuis transactions
-    const monthTx = transactions.filter(t => t.date_op.startsWith(key));
-    const autoSal = monthTx.filter(t => t.category === 'Salaire').reduce((s, t) => s + Number(t.amount), 0);
-    const autoTic = monthTx.filter(t => t.category === 'Tickets restaurant').reduce((s, t) => s + Number(t.amount), 0);
-    const autoRem = monthTx.filter(t => t.category === 'Remboursements').reduce((s, t) => s + Number(t.amount), 0);
-    const salaire = r.salaire || autoSal || 0;
-    const tickets = r.tickets_resto || autoTic || 0;
-    const rembours = r.remboursements || autoRem || 0;
-    const autres = r.autres_revenus || 0;
+    // Solde total des comptes en fin de mois = « ce qui te reste »
     const patTot = (r.lcl || 0) + (r.bourso || 0) + (r.especes || 0) + (r.esalia || 0) + (r.banque_postale || 0) + (r.investissements || 0) + (r.autre || 0);
-    const revTot = salaire + tickets + rembours + autres;
-    const grandTotal = patTot + revTot;
 
-    // Évolution vs mois N-1
+    // Évolution vs mois N-1 (sur le solde de fin de mois)
     let evoValStr = '—', evoPctStr = '—', evoColor = 'var(--muted)';
-    if (prevGrandTotal !== null && prevGrandTotal > 0 && grandTotal > 0) {
-      const diff = grandTotal - prevGrandTotal;
-      const pct = (diff / prevGrandTotal) * 100;
+    if (prevPatTot !== null && prevPatTot > 0 && patTot > 0) {
+      const diff = patTot - prevPatTot;
+      const pct = (diff / prevPatTot) * 100;
       evoColor = diff >= 0 ? 'var(--sage)' : 'var(--tender-rose)';
       const sign = diff >= 0 ? '+' : '';
       evoValStr = `${sign}${fmt(diff)}`;
       evoPctStr = `${sign}${pct.toFixed(1)}%`;
     }
 
-    const autoStyle = 'style="color:var(--sage);background:var(--sage-soft);font-family:var(--fm);font-weight:600" title="Calculé auto depuis tes transactions"';
     body.innerHTML += `<tr data-month="${key}">
       <td>${MONTHS_SHORT[m]} ${year}</td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.lcl > 0 ? r.lcl : ''}" placeholder="0" oninput="saveSuivi('${key}','lcl',this.value)"></td>
@@ -2210,17 +2199,11 @@ async function renderSuivi() {
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.banque_postale > 0 ? r.banque_postale : ''}" placeholder="0" oninput="saveSuivi('${key}','banque_postale',this.value)"></td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.investissements > 0 ? r.investissements : ''}" placeholder="0" oninput="saveSuivi('${key}','investissements',this.value)"></td>
       <td><input class="suivi-inp" type="number" step="0.01" value="${r.autre > 0 ? r.autre : ''}" placeholder="0" oninput="saveSuivi('${key}','autre',this.value)"></td>
-      <td style="font-weight:700;color:var(--rose);background:var(--rose-soft)">${patTot > 0 ? fmt(patTot) : '—'}</td>
-      <td ${autoStyle}>${autoSal > 0 ? fmt(autoSal) : '—'}</td>
-      <td ${autoStyle}>${autoTic > 0 ? fmt(autoTic) : '—'}</td>
-      <td ${autoStyle}>${autoRem > 0 ? fmt(autoRem) : '—'}</td>
-      <td><input class="suivi-inp" type="number" step="0.01" value="${autres > 0 ? autres : ''}" placeholder="0" oninput="saveSuivi('${key}','autres_revenus',this.value)"></td>
-      <td style="font-weight:700;color:var(--sage);background:var(--sage-soft)">${revTot > 0 ? fmt(revTot) : '—'}</td>
-      <td style="font-weight:800;color:var(--ink);background:linear-gradient(135deg,#FFEDE5,#E7F3EC)">${grandTotal > 0 ? fmt(grandTotal) : '—'}</td>
+      <td style="font-weight:800;color:var(--ink);background:linear-gradient(135deg,#FFEDE5,#E7F3EC)" title="Solde total de tes comptes en fin de mois">${patTot > 0 ? fmt(patTot) : '—'}</td>
       <td style="font-weight:700;color:${evoColor}">${evoValStr}</td>
       <td style="font-weight:700;color:${evoColor}">${evoPctStr}</td>
     </tr>`;
-    if (grandTotal > 0) prevGrandTotal = grandTotal;
+    if (patTot > 0) prevPatTot = patTot;
   }
 }
 let suiviSaveTimers = {};
