@@ -1144,13 +1144,34 @@ let txSelectedIds = new Set();
 
 function renderTransactionsList() {
   set('tx-total-count', transactions.length);
-  const search = $('tx-search').value.toLowerCase();
-  const filtCat = $('tx-filter-cat').value;
-  const filtered = transactions.filter(t => {
+  const search = $('tx-search') ? $('tx-search').value.toLowerCase() : '';
+  const filtCat = $('tx-filter-cat') ? $('tx-filter-cat').value : 'all';
+  const filtYear = $('tx-filter-year') ? $('tx-filter-year').value : 'all';
+  const filtMonth = $('tx-filter-month') ? $('tx-filter-month').value : 'all';
+  const filtDate = $('tx-filter-date') ? $('tx-filter-date').value : '';
+
+  // Peuple les selects year/month à partir des données réelles
+  if ($('tx-filter-year') && $('tx-filter-year').options.length <= 1) {
+    const years = [...new Set(transactions.map(t => t.date_op.slice(0, 4)))].sort().reverse();
+    $('tx-filter-year').innerHTML = '<option value="all">Toutes années</option>' +
+      years.map(y => `<option value="${y}">${y}</option>`).join('');
+  }
+  if ($('tx-filter-month') && $('tx-filter-month').options.length <= 1) {
+    $('tx-filter-month').innerHTML = '<option value="all">Tous mois</option>' +
+      MONTHS.map((m, i) => `<option value="${String(i + 1).padStart(2, '0')}">${m}</option>`).join('');
+  }
+
+  const allFiltered = transactions.filter(t => {
     if (filtCat !== 'all' && t.category !== filtCat) return false;
+    if (filtYear !== 'all' && !t.date_op.startsWith(filtYear)) return false;
+    if (filtMonth !== 'all' && t.date_op.slice(5, 7) !== filtMonth) return false;
+    if (filtDate && t.date_op !== filtDate) return false;
     if (search && !t.label.toLowerCase().includes(search)) return false;
     return true;
-  }).slice(0, 300);
+  });
+  const filtered = allFiltered.slice(0, 300);
+  // Sync compteur : combien de tx correspondent aux filtres
+  set('tx-filter-count', `${allFiltered.length} tx filtrée(s)`);
   const list = $('tx-list-all');
   const cats = Object.keys(CAT_META);
   const catOptions = cats.map(c => `<option value="${c}">${catIcon(c)} ${c}</option>`).join('');
@@ -1211,10 +1232,16 @@ function toggleTxSelect(id, checked) {
   renderTransactionsList();
 }
 function toggleAllTxVisible(checked) {
-  const search = $('tx-search').value.toLowerCase();
-  const filtCat = $('tx-filter-cat').value;
+  const search = $('tx-search') ? $('tx-search').value.toLowerCase() : '';
+  const filtCat = $('tx-filter-cat') ? $('tx-filter-cat').value : 'all';
+  const filtYear = $('tx-filter-year') ? $('tx-filter-year').value : 'all';
+  const filtMonth = $('tx-filter-month') ? $('tx-filter-month').value : 'all';
+  const filtDate = $('tx-filter-date') ? $('tx-filter-date').value : '';
   const filtered = transactions.filter(t => {
     if (filtCat !== 'all' && t.category !== filtCat) return false;
+    if (filtYear !== 'all' && !t.date_op.startsWith(filtYear)) return false;
+    if (filtMonth !== 'all' && t.date_op.slice(5, 7) !== filtMonth) return false;
+    if (filtDate && t.date_op !== filtDate) return false;
     if (search && !t.label.toLowerCase().includes(search)) return false;
     return true;
   }).slice(0, 300);
@@ -1222,6 +1249,56 @@ function toggleAllTxVisible(checked) {
   renderTransactionsList();
 }
 function clearTxSelection() { txSelectedIds.clear(); renderTransactionsList(); }
+
+function clearTxFilters() {
+  ['tx-search','tx-filter-date'].forEach(id => { if ($(id)) $(id).value = ''; });
+  ['tx-filter-cat','tx-filter-year','tx-filter-month'].forEach(id => { if ($(id)) $(id).value = 'all'; });
+  renderTransactionsList();
+  toast('✓ Filtres réinitialisés');
+}
+
+function exportTxCsv() {
+  const search = $('tx-search') ? $('tx-search').value.toLowerCase() : '';
+  const filtCat = $('tx-filter-cat') ? $('tx-filter-cat').value : 'all';
+  const filtYear = $('tx-filter-year') ? $('tx-filter-year').value : 'all';
+  const filtMonth = $('tx-filter-month') ? $('tx-filter-month').value : 'all';
+  const filtDate = $('tx-filter-date') ? $('tx-filter-date').value : '';
+  const filtered = transactions.filter(t => {
+    if (filtCat !== 'all' && t.category !== filtCat) return false;
+    if (filtYear !== 'all' && !t.date_op.startsWith(filtYear)) return false;
+    if (filtMonth !== 'all' && t.date_op.slice(5, 7) !== filtMonth) return false;
+    if (filtDate && t.date_op !== filtDate) return false;
+    if (search && !t.label.toLowerCase().includes(search)) return false;
+    return true;
+  });
+  if (!filtered.length) { toast('Aucune transaction à exporter', 'error'); return; }
+  // CSV headers
+  const headers = ['Date','Libellé','Banque','Moyen paiement','Type','Montant','Catégorie','Sous-catégorie','Note'];
+  const rows = filtered.map(t => [
+    t.date_op,
+    (t.label || '').replace(/"/g, '""'),
+    t.bank_source || '',
+    t.payment_method || '',
+    t.type === 'entree' ? 'Entrée' : 'Sortie',
+    (t.type === 'entree' ? '+' : '-') + Math.abs(Number(t.amount)).toFixed(2).replace('.', ','),
+    t.category || '',
+    t.sub_category || '',
+    (t.comment || '').replace(/"/g, '""')
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\r\n');
+  // BOM pour Excel UTF-8
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const date = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `monie_transactions_${date}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast(`✓ ${filtered.length} tx exportées`, 'success');
+}
 
 async function recategorizeTx(id, newCat) {
   const tx = transactions.find(t => t.id === id);

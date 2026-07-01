@@ -384,10 +384,15 @@
         </div>
         <div class="card">
           <div class="card-hd tx-header-mobile">
-            <div class="card-title">Toutes tes opérations</div>
+            <div class="card-title">Toutes tes opérations <span id="tx-filter-count" style="font-size:11px;font-weight:500;color:var(--muted);margin-left:6px"></span></div>
             <div class="tx-filter-row">
               <input class="inp" type="search" id="tx-search" placeholder="🔍 Rechercher..." oninput="renderTransactionsList()">
               <select class="select" id="tx-filter-cat" onchange="renderTransactionsList()"><option value="all">Toutes catégories</option></select>
+              <select class="select" id="tx-filter-year" onchange="renderTransactionsList()"><option value="all">Toutes années</option></select>
+              <select class="select" id="tx-filter-month" onchange="renderTransactionsList()"><option value="all">Tous mois</option></select>
+              <input class="inp" type="date" id="tx-filter-date" onchange="renderTransactionsList()" title="Filtrer par date exacte">
+              <button class="btn-ghost" onclick="clearTxFilters()" style="padding:8px 12px;font-size:12px" title="Effacer filtres">✕ Reset</button>
+              <button class="btn-primary" onclick="exportTxCsv()" style="padding:8px 14px;font-size:12px" title="Exporter en CSV">📥 Exporter</button>
             </div>
           </div>
           <div id="tx-list-all" class="tx-list"></div>
