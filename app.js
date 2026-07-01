@@ -271,6 +271,14 @@ function openModal(title, msg, cb, bodyHtml = '') {
   const m = $('modal');
   m.classList.add('show');
   m.style.display = 'flex';
+  // Wire-up "clic dans le vide" pour fermer (une seule fois)
+  if (!m.dataset.backdropWired) {
+    m.dataset.backdropWired = '1';
+    m.addEventListener('click', (e) => {
+      // Ne ferme que si le clic est sur le fond (overlay), pas sur la modal box
+      if (e.target === m) closeModal();
+    });
+  }
 }
 function closeModal() {
   const m = $('modal');
@@ -278,6 +286,13 @@ function closeModal() {
   m.style.display = 'none';
   _modalCb = null;
 }
+// Fermeture au clavier (Échap)
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const m = $('modal');
+    if (m && m.style.display === 'flex') closeModal();
+  }
+});
 async function confirmModal() {
   if (!_modalCb) { closeModal(); return; }
   const btn = $('modal-confirm');
