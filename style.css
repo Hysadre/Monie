@@ -28,8 +28,8 @@
   --radius: 16px;
   --radius-sm: 10px;
   --radius-xs: 6px;
-  --ff: 'Optima', 'Optima Nova', Candara, Corbel, 'Segoe UI', 'Trebuchet MS', 'Inter', sans-serif;
-  --fm: 'Optima', Candara, Corbel, 'Inter', sans-serif;
+  --ff: 'Nunito', 'Poppins', 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --fm: 'Nunito', 'Poppins', 'Inter', sans-serif;
   --nav-h: 64px;
   --sidebar-w: 240px;
 }
@@ -277,7 +277,10 @@ html, body {
   margin-bottom: 24px;
   flex-wrap: wrap;
 }
-.page-title { font-size: 26px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; }
+.page-title { font-size: 28px; font-weight: 900; color: var(--ink); letter-spacing: -0.8px; }
+.brand-name, .brand-name-sm { font-weight: 900; letter-spacing: -0.5px; }
+.brand-logo, .brand-logo-sm { font-weight: 900; }
+.kpi-val, .perf-val, .cal-summary-val { font-weight: 800; letter-spacing: -0.3px; }
 .page-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
 /* ─── MOBILE HEADER + BOTTOM NAV ─── */
@@ -860,6 +863,31 @@ html, body {
 .empty-emoji { font-size: 40px; margin-bottom: 12px; opacity: 0.6; }
 .empty-title { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
 .empty-sub { font-size: 12px; }
+
+/* ─── IMPORT DELETE BUTTON ─── */
+.import-del-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+.import-del-btn:hover {
+  border-color: var(--tender-rose);
+  background: var(--tender-rose-soft);
+  color: var(--tender-rose);
+  transform: scale(1.1);
+}
 
 /* ─── DEDUP MATCHES ─── */
 .match-card {

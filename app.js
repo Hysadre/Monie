@@ -728,6 +728,7 @@ function showImportPreview() {
           </select>
         </div>
         <div class="tx-amt ${t.type === 'entree' ? 'amt-in' : 'amt-out'}">${t.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(t.amount))}</div>
+        <button class="import-del-btn" onclick="deleteImportTx(${globalIdx})" title="Supprimer de l'import (n'apparaîtra pas ce mois-ci)">✕</button>
       </div>`;
   });
 
@@ -739,6 +740,18 @@ function showImportPreview() {
   if (wrap.scrollIntoView && previewFilterYear === 'all' && previewFilterMonth === 'all' && previewFilterCat === 'all') {
     wrap.scrollIntoView({ behavior: 'smooth' });
   }
+}
+
+function deleteImportTx(idx) {
+  if (idx < 0 || idx >= importPreviewData.length) return;
+  const t = importPreviewData[idx];
+  const dateStr = t.date_op ? new Date(t.date_op).toLocaleDateString('fr-FR') : '';
+  // Retire la transaction
+  importPreviewData.splice(idx, 1);
+  // Retire aussi des matches si présent
+  importMatches = importMatches.filter(m => m.new !== t);
+  toast(`"${t.label.substring(0, 30)}..." retirée de l'import`, 'success');
+  showImportPreview();
 }
 
 function setPreviewFilter(kind, val) {
