@@ -803,6 +803,10 @@ body::after {
 /* ─── SUIVI MENSUEL TABLE ─── */
 .suivi-wrap { overflow-x: auto; }
 .suivi-table { width: 100%; border-collapse: collapse; min-width: 900px; }
+
+/* Header + filtres pour "Toutes tes opérations" (desktop par défaut) */
+.tx-filter-row { display: flex; gap: 8px; align-items: center; }
+.tx-filter-row .inp { width: 200px; }
 .suivi-table th {
   padding: 10px 8px;
   text-align: right;
@@ -1940,8 +1944,17 @@ body::after {
   /* ─── SUIVI MENSUEL : scroll horizontal fluide + colonne mois sticky ─── */
   .suivi-wrap {
     -webkit-overflow-scrolling: touch;
-    margin: 0 -14px -14px;
-    padding: 0 14px 14px;
+    overflow-x: auto;
+    margin: 0;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    /* Petite ombre pour indiquer qu'on peut scroller à droite */
+    background:
+      linear-gradient(to right, var(--card) 30%, rgba(255,255,255,0)) left center / 20px 100% no-repeat,
+      linear-gradient(to left, var(--card) 30%, rgba(255,255,255,0)) right center / 20px 100% no-repeat,
+      radial-gradient(farthest-side at 0 50%, rgba(45,55,72,0.15), transparent) left center / 10px 100% no-repeat,
+      radial-gradient(farthest-side at 100% 50%, rgba(45,55,72,0.15), transparent) right center / 10px 100% no-repeat;
+    background-attachment: local, local, scroll, scroll;
   }
   .suivi-table { min-width: 900px; font-size: 11px; }
   .suivi-table th, .suivi-table td { padding: 6px 4px; font-size: 10px; }
@@ -1953,8 +1966,41 @@ body::after {
     z-index: 3;
     box-shadow: 2px 0 4px rgba(45,55,72,0.06);
     padding-right: 8px;
+    min-width: 60px;
+    max-width: 60px;
   }
   .suivi-inp { font-size: 11px; padding: 4px 6px; min-width: 55px; }
+  /* Idem pour la table annuelle */
+  .annuelle-table { min-width: 900px; font-size: 11px; }
+  .annuelle-table th, .annuelle-table td { padding: 6px 4px; font-size: 10px; }
+  .annuelle-table th:first-child,
+  .annuelle-table td:first-child {
+    position: sticky;
+    left: 0;
+    background: var(--card);
+    z-index: 3;
+    box-shadow: 2px 0 4px rgba(45,55,72,0.06);
+    padding-right: 8px;
+    min-width: 90px;
+    max-width: 120px;
+  }
+
+  /* ─── OPS (Transactions) : header en colonne sur mobile ─── */
+  .tx-header-mobile {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tx-filter-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+  .tx-filter-row .inp,
+  .tx-filter-row .select {
+    width: 100%;
+    min-height: 40px;
+  }
 
   /* ─── TRANSACTIONS LIST : mobile, libellé sur plusieurs lignes ─── */
   .tx-row {
