@@ -97,6 +97,9 @@
     </aside>
 
     <header class="mobile-header">
+      <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+      </button>
       <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">
         <img src="favicon.svg" class="brand-logo-sm" alt="M">
         <div style="min-width:0;overflow:hidden">
@@ -108,6 +111,9 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </button>
     </header>
+
+    <!-- Overlay pour fermer la sidebar mobile -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
     <main class="main">
       <!-- 📅 CALENDRIER -->
@@ -124,6 +130,22 @@
               <button onclick="changeCalMonth(-1)" aria-label="Mois précédent">‹</button>
               <button onclick="changeCalMonth(1)" aria-label="Mois suivant">›</button>
             </div>
+          </div>
+        </div>
+
+        <div class="help-banner" id="help-calendar">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">📅</div>
+            <div class="help-banner-title">Comment ça marche — Calendrier</div>
+            <button class="help-banner-close" onclick="closeHelp('help-calendar')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            Vue calendaire de ton budget : chaque case = 1 jour avec ses <b>entrées (vert)</b> et <b>sorties (rose)</b>.
+            <ul>
+              <li><b>Clique un jour</b> pour voir le détail des transactions + saisir manuellement une nouvelle dépense</li>
+              <li><b>Change de mois</b> avec les sélecteurs (Mois / Année) ou les flèches ‹ ›</li>
+              <li>Les résumés du mois s'affichent en haut</li>
+            </ul>
           </div>
         </div>
 
@@ -182,6 +204,23 @@
             </div>
           </div>
         </div>
+        <div class="help-banner" id="help-dashboard">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">📊</div>
+            <div class="help-banner-title">Comment ça marche — Dashboard</div>
+            <button class="help-banner-close" onclick="closeHelp('help-dashboard')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            Ton résumé financier <b>mois par mois</b>, calculé automatiquement depuis tes transactions importées.
+            <ul>
+              <li><b>4 KPIs</b> en haut : Revenus, Dépenses, Solde net, Nombre d'ops</li>
+              <li><b>2 cartes performance</b> : compare ta gestion & ton épargne <b>vs le mois précédent</b></li>
+              <li><b>Courbe évolution</b> : tes revenus et dépenses sur 12 mois</li>
+              <li><b>Répartition</b> : ta consommation par catégorie (donut)</li>
+            </ul>
+          </div>
+        </div>
+
         <div class="kpi-grid">
           <div class="kpi kpi-sage"><div class="kpi-label">Revenus mois</div><div class="kpi-val kpi-val-sage" id="dash-rev">—</div><div class="kpi-hint" id="dash-rev-hint">Ce mois</div></div>
           <div class="kpi kpi-rose"><div class="kpi-label">Dépenses mois</div><div class="kpi-val kpi-val-rose" id="dash-dep">—</div><div class="kpi-hint" id="dash-dep-hint">Ce mois</div></div>
@@ -255,6 +294,21 @@
             <p class="page-sub"><span id="tx-total-count">0</span> opérations enregistrées</p>
           </div>
         </div>
+        <div class="help-banner" id="help-transactions">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">💸</div>
+            <div class="help-banner-title">Comment ça marche — Transactions</div>
+            <button class="help-banner-close" onclick="closeHelp('help-transactions')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            La <b>liste complète</b> de tes opérations, toutes années confondues.
+            <ul>
+              <li><b>Recherche</b> par mot-clé (ex: "shein", "uber") pour retrouver une transaction précise</li>
+              <li><b>Filtre par catégorie</b> pour voir toutes tes dépenses "Mode" par exemple</li>
+              <li>Chaque ligne montre : date · catégorie · libellé · montant coloré (entrée vert / sortie rose)</li>
+            </ul>
+          </div>
+        </div>
         <div class="card">
           <div class="card-hd">
             <div class="card-title">Toutes tes opérations</div>
@@ -273,6 +327,23 @@
           <div>
             <h1 class="page-title">Import</h1>
             <p class="page-sub">Balance ton relevé, on catégorise tout</p>
+          </div>
+        </div>
+        <div class="help-banner" id="help-import">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">📤</div>
+            <div class="help-banner-title">Comment ça marche — Import</div>
+            <button class="help-banner-close" onclick="closeHelp('help-import')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            Glisse ton relevé bancaire (<b>CSV, PDF ou JSON</b>) et Monie s'occupe de tout.
+            <ul>
+              <li><b>Catégorisation auto</b> : Monie reconnaît les marchands connus (SFR, Netflix, Carrefour…) et les classe</li>
+              <li><b>3 onglets</b> : "À vérifier" (non reconnus) / "Catégorisées" (par toi) / "Auto" (par Monie)</li>
+              <li><b>Change une catégorie</b> pour enseigner à Monie — elle appliquera la règle aux transactions similaires</li>
+              <li><b>Détection de doublons</b> : si tu as saisi la même transaction manuellement, Monie te propose de fusionner</li>
+              <li><b>Supprimer</b> (✕) une transaction pour l'exclure de cet import (elle reviendra au prochain)</li>
+            </ul>
           </div>
         </div>
         <div class="drop-zone" id="drop-zone" onclick="document.getElementById('import-file').click()">
@@ -349,6 +420,23 @@
             <select class="select" id="annuelle-year" onchange="renderVueAnnuelle()"></select>
           </div>
         </div>
+        <div class="help-banner" id="help-annuelle">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">📊</div>
+            <div class="help-banner-title">Comment ça marche — Vue annuelle</div>
+            <button class="help-banner-close" onclick="closeHelp('help-annuelle')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            <b>Tableau croisé catégories × mois</b> pour voir ta répartition annuelle en un coup d'œil.
+            <ul>
+              <li>Section <b>Revenus (vert)</b> : Salaire, Tickets resto, Remboursements</li>
+              <li>Section <b>Dépenses (rose)</b> : toutes tes catégories de sorties</li>
+              <li><b>Solde net</b> mensuel en bas (Revenus - Dépenses)</li>
+              <li>La colonne <b>TOTAL</b> à droite = ton cumul annuel par catégorie</li>
+              <li>Change l'année dans le sélecteur en haut à droite</li>
+            </ul>
+          </div>
+        </div>
         <div class="kpi-grid kpi-row-3" style="grid-template-columns:repeat(3,1fr)">
           <div class="kpi kpi-sage"><div class="kpi-label">Revenus année</div><div class="kpi-val kpi-val-sage" id="annuelle-rev">—</div><div class="kpi-hint" id="annuelle-rev-hint">—</div></div>
           <div class="kpi kpi-rose"><div class="kpi-label">Dépenses année</div><div class="kpi-val kpi-val-rose" id="annuelle-dep">—</div><div class="kpi-hint" id="annuelle-dep-hint">—</div></div>
@@ -379,16 +467,20 @@
             <p class="page-sub">Répartis intelligemment ton revenu mensuel</p>
           </div>
         </div>
-        <div class="card" style="background:linear-gradient(135deg, var(--rose-soft), var(--peach-soft));border:none">
-          <div style="display:flex;gap:16px;align-items:flex-start">
-            <div style="font-size:32px;flex-shrink:0">💡</div>
-            <div style="flex:1;min-width:0">
-              <div style="font-weight:800;font-size:16px;color:var(--ink);margin-bottom:8px">La règle 50/30/20</div>
-              <div style="font-size:13px;color:var(--text);line-height:1.6">
-                Une règle simple et efficace pour gérer son argent :<br>
-                <b style="color:var(--tender-rose)">50% Charges</b> (loyer, factures, alim.) · <b style="color:var(--peach)">30% Plaisir</b> (sorties, mode) · <b style="color:var(--sage)">20% Épargne</b>
-              </div>
-            </div>
+        <div class="help-banner" id="help-budget">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">💡</div>
+            <div class="help-banner-title">Comment ça marche — Prépa budget</div>
+            <button class="help-banner-close" onclick="closeHelp('help-budget')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            Utilise la <b>règle 50/30/20</b> pour répartir ton revenu de façon saine :
+            <ul>
+              <li><b style="color:var(--tender-rose)">50% Charges</b> (loyer, alimentation, transports, santé, factures)</li>
+              <li><b style="color:var(--peach)">30% Plaisir</b> (sorties, restos, mode, cosmétique, loisirs)</li>
+              <li><b style="color:var(--sage)">20% Épargne</b> (Livret A, PEA, dîme, objectifs perso)</li>
+            </ul>
+            <b>Comment utiliser :</b> Saisis ton salaire mensuel → Monie calcule automatiquement combien allouer à chaque bloc + détaille par sous-catégorie (Loyer, Alimentation, Mode…).
           </div>
         </div>
         <div class="grid-2">
@@ -443,6 +535,23 @@
           </div>
           <button class="btn-primary" onclick="openInvestForm()">+ Ajouter</button>
         </div>
+        <div class="help-banner" id="help-invest">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">📈</div>
+            <div class="help-banner-title">Comment ça marche — Investissements</div>
+            <button class="help-banner-close" onclick="closeHelp('help-invest')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            Trace tes <b>placements financiers</b> (PEA, Trading 212, Livret A, LDDS, Assurance vie, Crypto…) et suis ta performance globale.
+            <ul>
+              <li><b>Clique "+ Ajouter"</b> pour renseigner un placement : nom, type, montant investi, valeur actuelle, date d'ouverture</li>
+              <li>Monie calcule automatiquement la <b>performance en %</b> (gain ou perte)</li>
+              <li>3 KPIs globaux en haut : <b>Total investi</b> (ton apport), <b>Valeur actuelle</b> (portefeuille), <b>Performance</b> (%)</li>
+              <li><b>Mets à jour</b> la valeur actuelle régulièrement pour suivre l'évolution</li>
+              <li>Ex : "PEA Bourso" — 5 000 € investis → 5 340 € actuel → <b>+6,8%</b></li>
+            </ul>
+          </div>
+        </div>
         <div class="kpi-grid kpi-row-3" style="grid-template-columns:repeat(3,1fr)">
           <div class="kpi kpi-sage"><div class="kpi-label">Total investi</div><div class="kpi-val kpi-val-sage" id="inv-total-inv">—</div><div class="kpi-hint">apport cumulé</div></div>
           <div class="kpi kpi-peach"><div class="kpi-label">Valeur actuelle</div><div class="kpi-val" id="inv-total-val">—</div><div class="kpi-hint">portefeuille</div></div>
@@ -459,6 +568,23 @@
             <p class="page-sub">Tes objectifs & ta capacité</p>
           </div>
           <button class="btn-primary" onclick="openGoalForm()">+ Nouvel objectif</button>
+        </div>
+        <div class="help-banner" id="help-epargne">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">🎯</div>
+            <div class="help-banner-title">Comment ça marche — Épargne</div>
+            <button class="help-banner-close" onclick="closeHelp('help-epargne')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            <b>Définis tes objectifs</b> (vacances, ordi, fonds d'urgence…) et suis ta progression au fil du temps.
+            <ul>
+              <li><b>Clique "+ Nouvel objectif"</b> pour créer une cible : nom, emoji, couleur, montant, date cible</li>
+              <li>Chaque objectif a une <b>jauge de progression</b> colorée + le rythme mensuel requis pour tenir la deadline</li>
+              <li><b>"+ Contribuer"</b> pour ajouter un montant à ton épargne (avec shortcuts +10€, +50€, +100€…)</li>
+              <li><b>🏆 Atteint !</b> quand tu remplis 100% → passe dans l'historique</li>
+              <li><b>💤 Abandonner</b> si tu changes d'avis (réactivable plus tard)</li>
+            </ul>
+          </div>
         </div>
         <div class="kpi-grid">
           <div class="kpi kpi-sage"><div class="kpi-label">Épargné année</div><div class="kpi-val kpi-val-sage" id="ep-year">—</div><div class="kpi-hint" id="ep-year-hint">—</div></div>

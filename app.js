@@ -59,6 +59,22 @@ let goalsList = [];
 let showAchieved = false;
 let showAbandoned = false;
 
+// ═══ MOBILE SIDEBAR ════════════════════════════════════════════
+function toggleSidebar() {
+  const sb = document.querySelector('.sidebar');
+  const ov = $('sidebar-overlay');
+  const isOpen = sb.classList.contains('open');
+  if (isOpen) { sb.classList.remove('open'); ov.classList.remove('show'); document.body.style.overflow = ''; }
+  else { sb.classList.add('open'); ov.classList.add('show'); document.body.style.overflow = 'hidden'; }
+}
+function closeSidebar() {
+  const sb = document.querySelector('.sidebar');
+  const ov = $('sidebar-overlay');
+  sb.classList.remove('open');
+  ov.classList.remove('show');
+  document.body.style.overflow = '';
+}
+
 // ═══ HELP BANNERS ══════════════════════════════════════════════
 function closeHelp(id) {
   const el = document.getElementById(id);
@@ -218,6 +234,8 @@ function showTab(name) {
   document.querySelectorAll('.nav-btn, .bnav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   const el = $('tab-' + name);
   if (el) el.classList.add('active');
+  // Ferme la sidebar mobile après avoir choisi un onglet
+  closeSidebar();
   if (name === 'calendar') renderCalendar();
   if (name === 'dashboard') renderDashboard();
   if (name === 'transactions') renderTransactionsList();
