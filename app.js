@@ -2483,10 +2483,32 @@ function copySuiviPrevMonth(key) {
   renderSuivi();
   toast(`Soldes de ${prevKey} recopiés — ajuste si besoin`, 'success');
 }
+// Recalcule en direct les colonnes calculées (Total ép. / Total / Évolution) sans toucher aux inputs (pas de perte de focus)
+function refreshSuiviTotals() {
+  let prevPatTot = null;
+  document.querySelectorAll('#suivi-body tr[data-month]').forEach(row => {
+    const r = suiviData[row.dataset.month] || {};
+    const epargneTot = (r.livret_a || 0) + (r.ldds || 0) + (r.assurance_vie || 0) + (r.esalia || 0) + (r.investissements || 0);
+    const patTot = (r.lcl || 0) + (r.bourso || 0) + (r.especes || 0) + (r.banque_postale || 0) + (r.autre || 0) + epargneTot;
+    const c = row.querySelectorAll('td');
+    if (c[11]) c[11].textContent = epargneTot > 0 ? fmt(epargneTot) : '—';
+    if (c[12]) c[12].textContent = patTot > 0 ? fmt(patTot) : '—';
+    let evoVal = '—', evoPct = '—', evoColor = 'var(--muted)';
+    if (prevPatTot !== null && prevPatTot > 0 && patTot > 0) {
+      const diff = patTot - prevPatTot, pct = diff / prevPatTot * 100, sign = diff >= 0 ? '+' : '';
+      evoColor = diff >= 0 ? 'var(--sage)' : 'var(--tender-rose)';
+      evoVal = `${sign}${fmt(diff)}`; evoPct = `${sign}${pct.toFixed(1)}%`;
+    }
+    if (c[13]) { c[13].textContent = evoVal; c[13].style.color = evoColor; }
+    if (c[14]) { c[14].textContent = evoPct; c[14].style.color = evoColor; }
+    if (patTot > 0) prevPatTot = patTot;
+  });
+}
 let suiviSaveTimers = {};
 async function saveSuivi(key, col, val) {
   if (!suiviData[key]) suiviData[key] = { month: key + '-01' };
   suiviData[key][col] = parseFloat(val) || 0;
+  refreshSuiviTotals();
   clearTimeout(suiviSaveTimers[key]);
   suiviSaveTimers[key] = setTimeout(async () => {
     const payload = { user_id: currentUser.id, month: key + '-01' };

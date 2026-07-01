@@ -2,7 +2,7 @@
 // Stratégie : cache-first pour le "shell" de l'app (HTML/CSS/JS/icônes),
 // réseau direct pour Supabase (données live jamais mises en cache).
 // Bump la version du cache à chaque déploiement pour forcer la mise à jour.
-const CACHE = 'monie-v3-16';
+const CACHE = 'monie-v3-18';
 // Fichiers locaux (doivent tous être mis en cache)
 const ASSETS = [
   './',
@@ -50,20 +50,32 @@ self.addEventListener('fetch', e => {
   // Ne jamais mettre en cache les appels backend (Supabase Auth / DB / Storage)
   if (url.hostname.includes('supabase')) return;
 
+  // Code de l'app (HTML/CSS/JS local) = RÉSEAU D'ABORD → les mises à jour s'appliquent tout de suite.
+  // Le reste (icônes, CDN) = CACHE D'ABORD → rapide et hors-ligne.
+  const isAppCode = url.origin === location.origin && /\.(html|js|css)$|\/$/.test(url.pathname);
+
   e.respondWith((async () => {
     const cached = await caches.match(req);
+    if (isAppCode) {
+      // Réseau d'abord, cache en secours (hors-ligne)
+      try {
+        const res = await fetch(req);
+        if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
+        return res;
+      } catch (err) {
+        return cached || caches.match('./index.html');
+      }
+    }
+    // Cache d'abord pour tout le reste
     if (cached) return cached;
     try {
       const res = await fetch(req);
-      // Met en cache toute ressource statique réussie (locale + CDN Chart.js/supabase/pdf.js)
-      // → l'app démarre hors-ligne. (Supabase est déjà exclu plus haut.)
       if (res && res.ok) {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(req, copy));
       }
       return res;
     } catch (err) {
-      // Hors-ligne : on renvoie le cache si dispo, sinon la home
       return cached || caches.match('./index.html');
     }
   })());
