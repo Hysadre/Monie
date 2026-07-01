@@ -52,6 +52,9 @@ let selectedDay = null;
 let charts = {};
 let importPreviewData = [];
 let importMatches = [];
+let annuelleYear = new Date().getFullYear();
+let budgetData = { revenu_mensuel: 0, pct_charges: 50, pct_plaisir: 30, pct_epargne: 20 };
+let investissements = [];
 
 // ═══ TOAST + MODAL ═════════════════════════════════════════════
 function toast(msg, type = '') {
@@ -150,10 +153,23 @@ async function showApp(user) {
   set('dash-greeting', `${greet}, ${capitalized} 🌸`);
   set('mobile-greeting', `${greet}, ${capitalized} 🌸`);
   await loadAllData();
+  await loadBudgetPrep();
+  await loadInvestissements();
   populateYearSelect();
+  populateDateSelects();
   renderCalendar();
   renderDashboard();
   populateCategorySelects();
+}
+
+async function loadBudgetPrep() {
+  const { data } = await sb.from('budget_prep').select('*').eq('user_id', currentUser.id).maybeSingle();
+  if (data) budgetData = data;
+}
+
+async function loadInvestissements() {
+  const { data } = await sb.from('investissements').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+  investissements = data || [];
 }
 async function loadAllData() {
   const [txRes, rulesRes] = await Promise.all([
@@ -176,7 +192,48 @@ function showTab(name) {
   if (name === 'transactions') renderTransactionsList();
   if (name === 'suivi') renderSuivi();
   if (name === 'epargne') renderEpargne();
+  if (name === 'annuelle') renderVueAnnuelle();
+  if (name === 'budget') renderBudget();
+  if (name === 'invest') renderInvestissements();
   if (name === 'import') { $('import-preview').style.display = 'none'; }
+}
+
+// ─── Populate sélecteurs Calendrier/Dashboard/Annuelle ────────
+function populateDateSelects() {
+  const years = [];
+  const now = new Date().getFullYear();
+  for (let y = now + 1; y >= 2020; y--) years.push(y);
+
+  const buildMonthOpts = (selected) => MONTHS.map((m, i) => `<option value="${i}" ${i === selected ? 'selected' : ''}>${m}</option>`).join('');
+  const buildYearOpts = (selected) => years.map(y => `<option value="${y}" ${y === selected ? 'selected' : ''}>${y}</option>`).join('');
+
+  if ($('cal-month-select')) $('cal-month-select').innerHTML = buildMonthOpts(calMonth);
+  if ($('cal-year-select')) $('cal-year-select').innerHTML = buildYearOpts(calYear);
+  if ($('dash-month-select')) $('dash-month-select').innerHTML = buildMonthOpts(dashMonth);
+  if ($('dash-year-select')) $('dash-year-select').innerHTML = buildYearOpts(dashYear);
+  if ($('annuelle-year')) {
+    $('annuelle-year').innerHTML = '';
+    years.forEach(y => {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y;
+      if (y === annuelleYear) o.selected = true;
+      $('annuelle-year').appendChild(o);
+    });
+  }
+}
+
+function setCalDate() {
+  calMonth = parseInt($('cal-month-select').value);
+  calYear = parseInt($('cal-year-select').value);
+  selectedDay = null;
+  $('day-detail-card').style.display = 'none';
+  renderCalendar();
+}
+
+function setDashDate() {
+  dashMonth = parseInt($('dash-month-select').value);
+  dashYear = parseInt($('dash-year-select').value);
+  renderDashboard();
 }
 
 // ═══ CATEGORIZE ════════════════════════════════════════════════
@@ -227,6 +284,8 @@ function changeCalMonth(dir) {
 }
 function renderCalendar() {
   set('cal-month-lbl', MONTHS[calMonth] + ' ' + calYear);
+  if ($('cal-month-select')) $('cal-month-select').value = calMonth;
+  if ($('cal-year-select')) $('cal-year-select').value = calYear;
   const first = new Date(calYear, calMonth, 1);
   const last = new Date(calYear, calMonth + 1, 0);
   const startDow = (first.getDay() + 6) % 7; // Lundi = 0
@@ -361,6 +420,8 @@ function changeDashMonth(dir) {
 }
 function renderDashboard() {
   set('dash-month-lbl', MONTHS[dashMonth] + ' ' + dashYear);
+  if ($('dash-month-select')) $('dash-month-select').value = dashMonth;
+  if ($('dash-year-select')) $('dash-year-select').value = dashYear;
   const monthPrefix = `${dashYear}-${String(dashMonth + 1).padStart(2, '0')}`;
   const monthTx = transactions.filter(t => t.date_op.startsWith(monthPrefix));
   const totalIn = monthTx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
@@ -1164,6 +1225,289 @@ function renderPerfCards(currentKey, curIn, curOut, curBal) {
   }, {
     scales: { x: { display: false }, y: { display: false } },
     plugins: { legend: { display: false }, tooltip: { enabled: false } }
+  });
+}
+
+// ═══ VUE ANNUELLE ══════════════════════════════════════════════
+const REV_CATS = ['Salaire', 'Tickets restaurant', 'Remboursements'];
+const EXP_CATS = ['Loyer', 'Alimentation', 'Transport', 'Maison & Logement', 'Cosmétique', 'Mode', 'Santé', 'Administratif', 'Vie quotidienne', 'Abonnements', 'Dîme', 'Dons', 'Investissements', 'Banque', 'Impôts', 'Transactions', 'Autres'];
+
+function renderVueAnnuelle() {
+  if ($('annuelle-year')) annuelleYear = parseInt($('annuelle-year').value) || annuelleYear;
+  const yearTx = transactions.filter(t => t.date_op.startsWith(String(annuelleYear)));
+
+  // Compute par cat × mois
+  const catByMonth = {};
+  yearTx.forEach(t => {
+    const m = parseInt(t.date_op.slice(5, 7)) - 1;
+    if (!catByMonth[t.category]) catByMonth[t.category] = new Array(12).fill(0);
+    catByMonth[t.category][m] += t.type === 'entree' ? Number(t.amount) : Math.abs(Number(t.amount));
+  });
+
+  const body = $('annuelle-body');
+  if (!body) return;
+  body.innerHTML = '';
+
+  const buildRow = (label, values, opts = {}) => {
+    const total = values.reduce((s, v) => s + v, 0);
+    const color = opts.color || '';
+    const trClass = opts.trClass || '';
+    const cells = values.map(v => `<td style="color:${color}">${v > 0 ? fmt(v) : '<span class="annuelle-empty">—</span>'}</td>`).join('');
+    body.innerHTML += `<tr class="${trClass}"><td>${opts.emoji ? opts.emoji + ' ' : ''}${label}</td>${cells}<td style="color:${color};font-weight:800">${total > 0 ? fmt(total) : '—'}</td></tr>`;
+  };
+
+  // Revenus
+  let totalRev = new Array(12).fill(0);
+  REV_CATS.forEach(cat => {
+    const vals = catByMonth[cat] || new Array(12).fill(0);
+    vals.forEach((v, i) => totalRev[i] += v);
+    buildRow(cat, vals, { color: 'var(--sage)', emoji: catIcon(cat) });
+  });
+  buildRow('Total Revenus', totalRev, { trClass: 'total-row' });
+
+  // Dépenses
+  let totalExp = new Array(12).fill(0);
+  EXP_CATS.forEach(cat => {
+    const vals = catByMonth[cat] || new Array(12).fill(0);
+    vals.forEach((v, i) => totalExp[i] += v);
+    if (vals.some(v => v > 0)) {
+      buildRow(cat, vals, { color: catColor(cat), emoji: catIcon(cat) });
+    }
+  });
+  buildRow('Total dépenses', totalExp, { trClass: 'total-row', color: 'var(--tender-rose)' });
+
+  // Solde net
+  const solde = totalRev.map((r, i) => r - totalExp[i]);
+  buildRow('Solde net', solde, { trClass: 'subtotal-row' });
+
+  // KPIs année
+  const sumRev = totalRev.reduce((s, v) => s + v, 0);
+  const sumExp = totalExp.reduce((s, v) => s + v, 0);
+  const sumBal = sumRev - sumExp;
+  set('annuelle-rev', fmt(sumRev));
+  set('annuelle-dep', fmt(sumExp));
+  const balEl = $('annuelle-bal');
+  balEl.textContent = (sumBal >= 0 ? '+' : '') + fmt(sumBal);
+  balEl.style.color = sumBal >= 0 ? 'var(--sage)' : 'var(--tender-rose)';
+  const monthsWithData = totalRev.filter(v => v > 0).length;
+  set('annuelle-rev-hint', monthsWithData > 0 ? `${Math.round(sumRev / monthsWithData)} €/mois` : '—');
+  set('annuelle-dep-hint', monthsWithData > 0 ? `${Math.round(sumExp / monthsWithData)} €/mois` : '—');
+  set('annuelle-bal-hint', monthsWithData > 0 ? `${Math.round(sumBal / monthsWithData)} €/mois` : '—');
+}
+
+// ═══ BUDGET PRÉPA ══════════════════════════════════════════════
+function normalizeBudgetPct(changed) {
+  const c = Math.max(0, Math.min(100, parseInt($('bud-pct-charges').value) || 0));
+  const p = Math.max(0, Math.min(100, parseInt($('bud-pct-plaisir').value) || 0));
+  const e = Math.max(0, Math.min(100, parseInt($('bud-pct-epargne').value) || 0));
+  budgetData.pct_charges = c;
+  budgetData.pct_plaisir = p;
+  budgetData.pct_epargne = e;
+  const total = c + p + e;
+  const totalEl = $('bud-total-pct');
+  totalEl.textContent = total + '%';
+  totalEl.style.color = total === 100 ? 'var(--sage)' : total > 100 ? 'var(--tender-rose)' : 'var(--peach)';
+  renderBudget();
+  saveBudgetPrep();
+}
+
+let budgetSaveTimer = null;
+async function saveBudgetPrep() {
+  clearTimeout(budgetSaveTimer);
+  budgetSaveTimer = setTimeout(async () => {
+    const rev = parseFloat($('bud-revenu').value) || 0;
+    budgetData.revenu_mensuel = rev;
+    await sb.from('budget_prep').upsert({
+      user_id: currentUser.id,
+      revenu_mensuel: budgetData.revenu_mensuel,
+      pct_charges: budgetData.pct_charges,
+      pct_plaisir: budgetData.pct_plaisir,
+      pct_epargne: budgetData.pct_epargne
+    }, { onConflict: 'user_id' });
+  }, 1000);
+}
+
+function renderBudget() {
+  if ($('bud-revenu').value === '' && budgetData.revenu_mensuel) $('bud-revenu').value = budgetData.revenu_mensuel;
+  if (budgetData.pct_charges) $('bud-pct-charges').value = budgetData.pct_charges;
+  if (budgetData.pct_plaisir) $('bud-pct-plaisir').value = budgetData.pct_plaisir;
+  if (budgetData.pct_epargne) $('bud-pct-epargne').value = budgetData.pct_epargne;
+
+  const rev = parseFloat($('bud-revenu').value) || 0;
+  budgetData.revenu_mensuel = rev;
+  const c = budgetData.pct_charges;
+  const p = budgetData.pct_plaisir;
+  const e = budgetData.pct_epargne;
+  const total = c + p + e;
+  $('bud-total-pct').textContent = total + '%';
+  $('bud-total-pct').style.color = total === 100 ? 'var(--sage)' : total > 100 ? 'var(--tender-rose)' : 'var(--peach)';
+
+  const revCharges = Math.round(rev * c / 100);
+  const revPlaisir = Math.round(rev * p / 100);
+  const revEpargne = Math.round(rev * e / 100);
+
+  $('bud-breakdown').innerHTML = `
+    <div class="bud-breakdown-item charges">
+      <div class="bud-breakdown-title">🏠 Charges & Nécessités (${c}%)</div>
+      <div class="bud-breakdown-val">${fmt(revCharges)}</div>
+      <div class="bud-breakdown-sub">Loyer, factures, alimentation, transport, santé</div>
+    </div>
+    <div class="bud-breakdown-item plaisir">
+      <div class="bud-breakdown-title">🌸 Plaisir & Envies (${p}%)</div>
+      <div class="bud-breakdown-val">${fmt(revPlaisir)}</div>
+      <div class="bud-breakdown-sub">Sorties, mode, cosmétique, loisirs, abonnements</div>
+    </div>
+    <div class="bud-breakdown-item epargne">
+      <div class="bud-breakdown-title">🌱 Épargne & Investissement (${e}%)</div>
+      <div class="bud-breakdown-val">${fmt(revEpargne)}</div>
+      <div class="bud-breakdown-sub">Livret A, PEA, dîme, objectifs perso</div>
+    </div>
+  `;
+
+  // Suggestions par catégorie
+  const suggestions = [
+    { bloc: 'charges', cat: 'Loyer', pct: 30 },
+    { bloc: 'charges', cat: 'Alimentation', pct: 10 },
+    { bloc: 'charges', cat: 'Transport', pct: 5 },
+    { bloc: 'charges', cat: 'Santé', pct: 3 },
+    { bloc: 'charges', cat: 'Abonnements', pct: 2 },
+    { bloc: 'plaisir', cat: 'Vie quotidienne', pct: 10 },
+    { bloc: 'plaisir', cat: 'Mode', pct: 5 },
+    { bloc: 'plaisir', cat: 'Cosmétique', pct: 5 },
+    { bloc: 'plaisir', cat: 'Alimentation', pct: 5, note: '(restaurants)' },
+    { bloc: 'plaisir', cat: 'Dons', pct: 5 },
+    { bloc: 'epargne', cat: 'Dîme', pct: 10 },
+    { bloc: 'epargne', cat: 'Investissements', pct: 5 },
+    { bloc: 'epargne', cat: 'Épargne libre', pct: 5 }
+  ];
+
+  const bp = { charges: c, plaisir: p, epargne: e };
+  $('bud-suggestions').innerHTML = suggestions.map(s => {
+    // % de son bloc → % du revenu total
+    const globalPct = Math.round(s.pct);
+    const amt = Math.round(rev * globalPct / 100);
+    return `
+      <div class="bud-sugg-item">
+        <div class="bud-sugg-cat">
+          <span class="cat-dot" style="width:8px;height:8px;border-radius:50%;background:${catColor(s.cat)};display:inline-block"></span>
+          <span>${catIcon(s.cat)} ${s.cat}${s.note ? ' <span style="color:var(--muted);font-size:11px">' + s.note + '</span>' : ''}</span>
+        </div>
+        <div class="bud-sugg-amt">${fmt(amt)}</div>
+        <div class="bud-sugg-pct">${globalPct}%</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ═══ INVESTISSEMENTS ═══════════════════════════════════════════
+function renderInvestissements() {
+  const totInv = investissements.reduce((s, i) => s + Number(i.montant_investi || 0), 0);
+  const totVal = investissements.reduce((s, i) => s + Number(i.valeur_actuelle || 0), 0);
+  const perf = totInv > 0 ? ((totVal - totInv) / totInv * 100) : 0;
+  set('inv-total-inv', fmt(totInv));
+  set('inv-total-val', fmt(totVal));
+  const perfEl = $('inv-perf');
+  perfEl.textContent = (perf >= 0 ? '+' : '') + perf.toFixed(1) + '%';
+  perfEl.style.color = perf >= 0 ? 'var(--sage)' : 'var(--tender-rose)';
+  set('inv-perf-hint', totVal - totInv >= 0 ? '+' + fmt(totVal - totInv) : fmt(totVal - totInv));
+
+  const list = $('inv-list');
+  if (!investissements.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-emoji">📈</div><div class="empty-title">Aucun investissement</div><div class="empty-sub">Ajoute ton premier placement pour commencer</div></div>';
+    return;
+  }
+  list.innerHTML = investissements.map(inv => {
+    const gain = Number(inv.valeur_actuelle || 0) - Number(inv.montant_investi || 0);
+    const gainPct = inv.montant_investi > 0 ? (gain / inv.montant_investi * 100).toFixed(1) : '0';
+    const posClass = gain >= 0 ? 'up' : 'down';
+    const posSign = gain >= 0 ? '+' : '';
+    return `
+      <div class="inv-card" style="border-left-color:${inv.couleur || 'var(--sage)'}">
+        <div class="inv-card-hd">
+          <div>
+            <div class="inv-card-title">📈 ${inv.nom}</div>
+            <div class="inv-card-type">${inv.type}</div>
+          </div>
+          <div>
+            <span class="inv-perf-badge ${posClass}">${posSign}${gainPct}% (${posSign}${fmt(gain)})</span>
+          </div>
+        </div>
+        <div class="inv-card-body">
+          <div class="inv-card-cell"><div class="inv-card-lbl">Investi</div><div class="inv-card-val">${fmt(inv.montant_investi || 0)}</div></div>
+          <div class="inv-card-cell"><div class="inv-card-lbl">Valeur actuelle</div><div class="inv-card-val">${fmt(inv.valeur_actuelle || 0)}</div></div>
+          <div class="inv-card-cell"><div class="inv-card-lbl">Ouverture</div><div class="inv-card-val" style="font-size:14px">${inv.date_ouverture ? new Date(inv.date_ouverture).toLocaleDateString('fr-FR') : '—'}</div></div>
+        </div>
+        <div class="inv-actions">
+          <button class="btn-ghost" onclick="editInvest('${inv.id}')">✏️ Modifier</button>
+          <button class="btn-ghost" onclick="deleteInvest('${inv.id}')" style="color:var(--tender-rose);border-color:var(--tender-rose-soft)">🗑️ Supprimer</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openInvestForm(inv) {
+  const isEdit = !!inv;
+  openModal(
+    isEdit ? '✏️ Modifier investissement' : '📈 Nouvel investissement',
+    'Renseigne les infos de ton placement',
+    async () => {
+      const nom = $('inv-form-nom').value.trim();
+      const type = $('inv-form-type').value;
+      const invested = parseFloat($('inv-form-invested').value) || 0;
+      const current = parseFloat($('inv-form-current').value) || 0;
+      const date = $('inv-form-date').value || null;
+      if (!nom) { toast('Nom requis', 'error'); return; }
+      const payload = {
+        user_id: currentUser.id,
+        nom,
+        type,
+        montant_investi: invested,
+        valeur_actuelle: current,
+        date_ouverture: date
+      };
+      if (isEdit) {
+        await sb.from('investissements').update(payload).eq('id', inv.id);
+      } else {
+        await sb.from('investissements').insert(payload);
+      }
+      await loadInvestissements();
+      renderInvestissements();
+      toast(isEdit ? 'Mis à jour !' : 'Ajouté !', 'success');
+    },
+    `
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="auth-field"><label>Nom</label><input class="inp" id="inv-form-nom" value="${inv?.nom || ''}" placeholder="Ex: PEA Bourso"></div>
+        <div class="auth-field"><label>Type</label>
+          <select class="select" id="inv-form-type">
+            <option value="PEA" ${inv?.type === 'PEA' ? 'selected' : ''}>PEA</option>
+            <option value="Trading 212" ${inv?.type === 'Trading 212' ? 'selected' : ''}>Trading 212</option>
+            <option value="Livret A" ${inv?.type === 'Livret A' ? 'selected' : ''}>Livret A</option>
+            <option value="LDDS" ${inv?.type === 'LDDS' ? 'selected' : ''}>LDDS</option>
+            <option value="Assurance vie" ${inv?.type === 'Assurance vie' ? 'selected' : ''}>Assurance vie</option>
+            <option value="Crypto" ${inv?.type === 'Crypto' ? 'selected' : ''}>Crypto</option>
+            <option value="Autre" ${inv?.type === 'Autre' ? 'selected' : ''}>Autre</option>
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="auth-field"><label>Montant investi (€)</label><input class="inp" type="number" step="0.01" id="inv-form-invested" value="${inv?.montant_investi || ''}" placeholder="0"></div>
+          <div class="auth-field"><label>Valeur actuelle (€)</label><input class="inp" type="number" step="0.01" id="inv-form-current" value="${inv?.valeur_actuelle || ''}" placeholder="0"></div>
+        </div>
+        <div class="auth-field"><label>Date d'ouverture</label><input class="inp" type="date" id="inv-form-date" value="${inv?.date_ouverture || ''}"></div>
+      </div>
+    `
+  );
+}
+function editInvest(id) {
+  const inv = investissements.find(i => i.id === id);
+  if (inv) openInvestForm(inv);
+}
+async function deleteInvest(id) {
+  openModal('Supprimer', 'Supprimer cet investissement ?', async () => {
+    await sb.from('investissements').delete().eq('id', id);
+    await loadInvestissements();
+    renderInvestissements();
+    toast('Supprimé', 'success');
   });
 }
 

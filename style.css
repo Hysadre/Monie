@@ -76,11 +76,9 @@ html, body {
 .brand-logo {
   width: 48px; height: 48px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--rose), var(--tender-rose));
-  color: white;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 800; font-size: 24px;
   box-shadow: 0 8px 20px rgba(231,111,81,0.30);
+  object-fit: cover;
+  display: block;
 }
 .brand-name { font-size: 26px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; }
 .auth-title { font-size: 22px; font-weight: 700; color: var(--ink); text-align: center; margin-bottom: 8px; }
@@ -188,11 +186,9 @@ html, body {
 .brand-logo-sm {
   width: 36px; height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--rose), var(--tender-rose));
-  color: white;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 800; font-size: 18px;
   box-shadow: 0 4px 12px rgba(231,111,81,0.24);
+  object-fit: cover;
+  display: block;
 }
 .brand-name-sm { font-size: 17px; font-weight: 800; color: var(--ink); letter-spacing: -0.3px; }
 .nav {
@@ -852,6 +848,169 @@ html, body {
   width: 90px !important;
   height: 44px !important;
   flex-shrink: 0;
+}
+
+/* ─── VUE ANNUELLE TABLE ─── */
+.annuelle-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--ff);
+  font-size: 12px;
+  min-width: 1000px;
+}
+.annuelle-table th {
+  padding: 10px 8px;
+  text-align: right;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--border-soft);
+  background: var(--card);
+}
+.annuelle-table th:first-child {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background: var(--card);
+  z-index: 2;
+  padding-left: 12px;
+}
+.annuelle-table th:last-child { color: var(--ink); font-weight: 900; }
+.annuelle-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border-soft);
+  text-align: right;
+  font-family: var(--fm);
+  font-weight: 600;
+}
+.annuelle-table td:first-child {
+  text-align: left;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--card);
+  position: sticky;
+  left: 0;
+  padding-left: 12px;
+  z-index: 1;
+}
+.annuelle-table td:last-child { font-weight: 800; color: var(--ink); }
+.annuelle-table tr.total-row td {
+  background: var(--ink);
+  color: white;
+  font-weight: 800;
+  padding: 12px 8px;
+  border: none;
+}
+.annuelle-table tr.total-row td:first-child { background: var(--ink); color: white; }
+.annuelle-table tr.subtotal-row td { background: var(--rose-soft); font-weight: 700; }
+.annuelle-table tr.subtotal-row td:first-child { background: var(--rose-soft); color: var(--rose); }
+.annuelle-table .cat-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; }
+.annuelle-empty { color: var(--dim); }
+
+/* ─── BUDGET PRÉPA ─── */
+.field-group {
+  padding: 0;
+}
+.field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+.bud-slider-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 14px;
+  font-weight: 600;
+}
+.bud-slider-row:last-child { border-bottom: none; }
+.bud-slider-row .dot-col { width: 12px; height: 12px; border-radius: 50%; }
+.bud-breakdown-item {
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  border-left: 3px solid;
+}
+.bud-breakdown-item.charges { background: var(--tender-rose-soft); border-color: var(--tender-rose); }
+.bud-breakdown-item.plaisir { background: var(--peach-soft); border-color: var(--peach); }
+.bud-breakdown-item.epargne { background: var(--sage-soft); border-color: var(--sage); }
+.bud-breakdown-title {
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.bud-breakdown-val {
+  font-family: var(--fm);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+.bud-breakdown-sub {
+  font-size: 11px;
+  opacity: 0.75;
+  margin-top: 4px;
+}
+.bud-sugg-item {
+  display: grid;
+  grid-template-columns: 1fr 100px 60px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+}
+.bud-sugg-item:last-child { border-bottom: none; }
+.bud-sugg-item .bud-sugg-cat { display: flex; align-items: center; gap: 8px; }
+.bud-sugg-amt { font-family: var(--fm); font-weight: 700; text-align: right; color: var(--ink); }
+.bud-sugg-pct { font-size: 11px; color: var(--muted); text-align: right; }
+
+/* ─── INVESTISSEMENTS ─── */
+.inv-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-soft);
+  border-left: 4px solid var(--sage);
+  transition: all 0.15s;
+}
+.inv-card:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.inv-card-hd { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.inv-card-title { font-size: 16px; font-weight: 800; color: var(--ink); }
+.inv-card-type { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 100px; background: var(--sage-soft); color: var(--sage); }
+.inv-card-body { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.inv-card-cell { }
+.inv-card-lbl { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.inv-card-val { font-family: var(--fm); font-size: 18px; font-weight: 800; color: var(--ink); }
+.inv-perf-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 100px;
+  margin-top: 6px;
+}
+.inv-perf-badge.up { background: var(--sage-soft); color: var(--sage); }
+.inv-perf-badge.down { background: var(--tender-rose-soft); color: var(--tender-rose); }
+.inv-actions { display: flex; gap: 8px; margin-top: 16px; }
+.inv-actions .btn-ghost { flex: 1; font-size: 12px; padding: 8px 12px; }
+
+@media (max-width: 900px) {
+  .bud-slider-row { grid-template-columns: 12px 1fr auto auto; font-size: 13px; }
+  .bud-breakdown-val { font-size: 20px; }
+  .inv-card-body { grid-template-columns: 1fr; gap: 8px; }
+  .inv-card-body .inv-card-cell { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--border-soft); }
 }
 
 /* ─── EMPTY STATE ─── */
