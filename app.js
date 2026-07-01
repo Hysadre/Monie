@@ -1016,6 +1016,38 @@ async function quickAddTx() {
   if (typeof renderDashboard === 'function') renderDashboard();
 }
 
+// Toggle affichage/masquage du formulaire de saisie rapide (calendrier)
+function toggleQuickAdd() {
+  const form = $('quick-add-form-wrap');
+  const chev = $('quick-add-chevron');
+  if (!form) return;
+  const isOpen = form.style.display !== 'none';
+  if (isOpen) {
+    form.style.display = 'none';
+    if (chev) chev.style.transform = 'rotate(-90deg)';
+    try { localStorage.setItem('monie_quick_add_open', '0'); } catch (e) {}
+  } else {
+    form.style.display = '';
+    if (chev) chev.style.transform = '';
+    try { localStorage.setItem('monie_quick_add_open', '1'); } catch (e) {}
+  }
+}
+// Applique l'état sauvegardé au chargement
+(function restoreQuickAddState() {
+  try {
+    const open = localStorage.getItem('monie_quick_add_open');
+    if (open === '0') {
+      // Attendre que le DOM soit prêt
+      document.addEventListener('DOMContentLoaded', () => {
+        const form = document.getElementById('quick-add-form-wrap');
+        const chev = document.getElementById('quick-add-chevron');
+        if (form) form.style.display = 'none';
+        if (chev) chev.style.transform = 'rotate(-90deg)';
+      });
+    }
+  } catch (e) {}
+})();
+
 // Helper : icône pour un moyen de paiement (utilisé aussi dans Transactions)
 function payMethodIcon(pm) {
   const map = {

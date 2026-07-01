@@ -186,9 +186,12 @@
             </div>
           </div>
           <div id="day-tx-list"></div>
-          <div class="quick-add">
-            <div class="quick-add-hd">➕ Saisir une opération pour ce jour</div>
-            <div class="qa-form-v2">
+          <div class="quick-add" id="quick-add-box">
+            <div class="quick-add-hd" onclick="toggleQuickAdd()" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span>➕ Saisir une opération pour ce jour</span>
+              <span id="quick-add-chevron" style="color:var(--rose);font-weight:900;transition:transform 0.25s">▾</span>
+            </div>
+            <div class="qa-form-v2" id="quick-add-form-wrap">
               <!-- Étape 1 : Sortie / Entrée -->
               <div class="qa-field">
                 <label class="qa-label">1️⃣ Type d'opération</label>
