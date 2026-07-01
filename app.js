@@ -114,9 +114,8 @@ function restoreHelpBanners() {
     if (!hd || banner.dataset.wired) return;
     banner.dataset.wired = '1';
 
-    // Récupérer titre + emoji du banner pour construire le tooltip
+    // Récupérer titre pour tooltip
     const titleEl = banner.querySelector('.help-banner-title');
-    const iconEl = banner.querySelector('.help-banner-icon');
     const tooltipText = titleEl ? titleEl.textContent.trim() : 'Voir l\'aide';
 
     // Ajouter chevron si pas déjà présent
@@ -126,6 +125,15 @@ function restoreHelpBanners() {
       chev.textContent = '▾';
       hd.appendChild(chev);
     }
+
+    // Remplacer "J'ai compris ✓" par une croix ×
+    const closeBtn = hd.querySelector('.help-banner-close');
+    if (closeBtn && closeBtn.textContent.trim() !== '×') {
+      closeBtn.innerHTML = '&times;';
+      closeBtn.setAttribute('aria-label', 'Masquer cette aide');
+      closeBtn.setAttribute('title', 'Masquer cette aide (bulle ℹ️ à gauche pour la rouvrir)');
+    }
+
     hd.addEventListener('click', (e) => {
       if (e.target.closest('.help-banner-close')) return;
       toggleHelp(banner.id);
@@ -136,28 +144,36 @@ function restoreHelpBanners() {
       const bubble = document.createElement('button');
       bubble.className = 'help-bubble';
       bubble.setAttribute('data-target', banner.id);
-      bubble.setAttribute('data-tooltip', tooltipText);
       bubble.setAttribute('aria-label', tooltipText);
-      bubble.innerHTML = 'ℹ️';
+      // Structure : lettre "i" + queue speech-bubble + tooltip
+      bubble.innerHTML = `i<span class="help-bubble-tail"></span><span class="help-bubble-tip">${tooltipText}</span>`;
       bubble.addEventListener('click', (ev) => {
         ev.preventDefault();
         const target = document.getElementById(banner.id);
         if (!target) return;
-        // Retirer .hidden si masqué + ouvrir + retirer du localStorage hidden
-        target.classList.remove('hidden');
-        target.classList.add('open');
-        try {
-          const hidden = JSON.parse(localStorage.getItem('monie_help_hidden') || '[]');
-          const filtered = hidden.filter(x => x !== banner.id);
-          localStorage.setItem('monie_help_hidden', JSON.stringify(filtered));
-          const openIds = JSON.parse(localStorage.getItem('monie_help_open') || '[]');
-          if (!openIds.includes(banner.id)) {
-            openIds.push(banner.id);
-            localStorage.setItem('monie_help_open', JSON.stringify(openIds));
-          }
-        } catch (e) {}
-        // Scroll doux vers le banner
-        target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        const isVisible = !target.classList.contains('hidden') && target.classList.contains('open');
+        if (isVisible) {
+          // Fermer
+          target.classList.remove('open');
+          try {
+            const openIds = JSON.parse(localStorage.getItem('monie_help_open') || '[]');
+            localStorage.setItem('monie_help_open', JSON.stringify(openIds.filter(x => x !== banner.id)));
+          } catch (e) {}
+        } else {
+          // Ouvrir (et démasquer si nécessaire)
+          target.classList.remove('hidden');
+          target.classList.add('open');
+          try {
+            const hidden = JSON.parse(localStorage.getItem('monie_help_hidden') || '[]');
+            localStorage.setItem('monie_help_hidden', JSON.stringify(hidden.filter(x => x !== banner.id)));
+            const openIds = JSON.parse(localStorage.getItem('monie_help_open') || '[]');
+            if (!openIds.includes(banner.id)) {
+              openIds.push(banner.id);
+              localStorage.setItem('monie_help_open', JSON.stringify(openIds));
+            }
+          } catch (e) {}
+          target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
       });
       banner.parentNode.insertBefore(bubble, banner);
     }
