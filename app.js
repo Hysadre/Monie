@@ -59,6 +59,22 @@ let goalsList = [];
 let showAchieved = false;
 let showAbandoned = false;
 
+// ═══ HELP BANNERS ══════════════════════════════════════════════
+function closeHelp(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('hidden');
+  try {
+    const hidden = JSON.parse(localStorage.getItem('monie_help_hidden') || '[]');
+    if (!hidden.includes(id)) { hidden.push(id); localStorage.setItem('monie_help_hidden', JSON.stringify(hidden)); }
+  } catch (e) {}
+}
+function restoreHelpBanners() {
+  try {
+    const hidden = JSON.parse(localStorage.getItem('monie_help_hidden') || '[]');
+    hidden.forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+  } catch (e) {}
+}
+
 // ═══ TOAST + MODAL ═════════════════════════════════════════════
 function toast(msg, type = '') {
   const t = $('toast');
@@ -164,6 +180,7 @@ async function showApp(user) {
   renderCalendar();
   renderDashboard();
   populateCategorySelects();
+  restoreHelpBanners();
 }
 
 async function loadGoals() {
@@ -563,6 +580,7 @@ async function handleImportFile(file) {
   previewFilterYear = 'all';
   previewFilterMonth = 'all';
   previewFilterCat = 'all';
+  selectedIndexes.clear();
   toast('Analyse de ' + file.name + '…');
   try {
     let parsed = [];
@@ -719,6 +737,8 @@ let previewTab = 'todo'; // 'todo' | 'done' | 'auto'
 let previewPage = 1;
 const PREVIEW_PAGE_SIZE = 50;
 let preservedScroll = 0;
+let selectedIndexes = new Set();
+let bulkCategory = '';
 
 function showImportPreview() {
   preservedScroll = window.scrollY;
@@ -827,6 +847,41 @@ function showImportPreview() {
 
   html += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;padding:8px 12px;background:var(--bg);border-radius:8px">${tipMsg}</div>`;
 
+  // Bulk action bar (si des transactions sont sélectionnées)
+  const visibleIndexes = displayed.map(t => importPreviewData.indexOf(t));
+  const selectedInView = visibleIndexes.filter(i => selectedIndexes.has(i));
+  if (selectedIndexes.size > 0) {
+    const catOptions = cats.map(c => `<option value="${c}">${catIcon(c)} ${c}</option>`).join('');
+    html += `
+      <div class="bulk-bar">
+        <span class="bulk-bar-count">${selectedIndexes.size}</span>
+        <span class="bulk-bar-label">sélectionnée(s)</span>
+        <div class="bulk-bar-actions">
+          <select class="bulk-select" id="bulk-cat-select">
+            <option value="">Choisir une catégorie…</option>
+            ${catOptions}
+          </select>
+          <button class="bulk-btn" onclick="applyBulkCategory()">✓ Appliquer</button>
+          <button class="bulk-btn danger" onclick="deleteBulkSelection()">🗑️ Supprimer</button>
+          <button class="bulk-btn" onclick="clearSelection()">Annuler</button>
+        </div>
+      </div>`;
+  }
+
+  // Select all bar (si il y a des transactions à afficher)
+  if (displayed.length > 0) {
+    const allChecked = visibleIndexes.every(i => selectedIndexes.has(i));
+    const someChecked = visibleIndexes.some(i => selectedIndexes.has(i));
+    html += `
+      <div class="select-all-bar">
+        <label>
+          <input type="checkbox" class="tx-checkbox" onchange="toggleAllVisible(this.checked)" ${allChecked ? 'checked' : ''}>
+          <span>${allChecked ? 'Tout désélectionner sur cette page' : 'Tout sélectionner sur cette page'}</span>
+        </label>
+        ${selectedIndexes.size > 0 ? `<span style="margin-left:auto;font-weight:700;color:var(--rose)">${selectedIndexes.size} sélectionnée(s)</span>` : ''}
+      </div>`;
+  }
+
   if (!filtered.length) {
     html += previewTab === 'todo'
       ? `<div class="empty"><div class="empty-emoji">✨</div><div class="empty-title">Bravo, tout est catégorisé !</div><div class="empty-sub">Tu peux valider l'import ci-dessus</div></div>`
@@ -834,11 +889,11 @@ function showImportPreview() {
   } else {
     displayed.forEach(t => {
       const globalIdx = importPreviewData.indexOf(t);
-      const catsToShow = previewTab === 'done' || previewTab === 'auto'
-        ? cats.map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('')
-        : cats.map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('');
+      const isSelected = selectedIndexes.has(globalIdx);
+      const catsToShow = cats.map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('');
       html += `
-        <div class="tx-row" style="border-bottom:1px solid var(--border-soft)" data-tx-idx="${globalIdx}">
+        <div class="tx-row ${isSelected ? 'selected' : ''}" style="border-bottom:1px solid var(--border-soft)" data-tx-idx="${globalIdx}">
+          <input type="checkbox" class="tx-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelectTx(${globalIdx}, this.checked)" title="Sélectionner">
           <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}<br><span style="font-size:10px">${t.date_op.slice(0, 4)}</span></div>
           <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
           <div class="tx-info">
@@ -879,6 +934,7 @@ function setPreviewTab(tab) {
   previewTab = tab;
   previewPage = 1;
   previewFilterCat = 'all';
+  selectedIndexes.clear();
   showImportPreview();
 }
 
@@ -891,6 +947,127 @@ function changePreviewPage(dir) {
     const wrap = $('import-preview');
     if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
+}
+
+// ─── BULK ACTIONS ─────────────────────────────────────────────
+function toggleSelectTx(idx, checked) {
+  preservedScroll = window.scrollY;
+  if (checked) selectedIndexes.add(idx);
+  else selectedIndexes.delete(idx);
+  showImportPreview();
+}
+
+function toggleAllVisible(checked) {
+  preservedScroll = window.scrollY;
+  // Recompute filtered list (même logique que dans showImportPreview)
+  const active = importPreviewData.filter(t => !t._duplicate);
+  const todo = active.filter(t => t.category === 'Autres' && !t._userCategorized);
+  const done = active.filter(t => t._userCategorized);
+  const auto = active.filter(t => t.category !== 'Autres' && !t._userCategorized);
+  let filtered = previewTab === 'todo' ? todo : previewTab === 'done' ? done : auto;
+  if (previewFilterYear !== 'all') filtered = filtered.filter(t => t.date_op.startsWith(previewFilterYear));
+  if (previewFilterMonth !== 'all') filtered = filtered.filter(t => t.date_op.slice(5, 7) === previewFilterMonth);
+  if (previewFilterCat !== 'all') filtered = filtered.filter(t => t.category === previewFilterCat);
+  const startIdx = (previewPage - 1) * PREVIEW_PAGE_SIZE;
+  const displayed = filtered.slice(startIdx, startIdx + PREVIEW_PAGE_SIZE);
+  displayed.forEach(t => {
+    const idx = importPreviewData.indexOf(t);
+    if (checked) selectedIndexes.add(idx);
+    else selectedIndexes.delete(idx);
+  });
+  showImportPreview();
+}
+
+function clearSelection() {
+  selectedIndexes.clear();
+  showImportPreview();
+}
+
+async function applyBulkCategory() {
+  const newCat = $('bulk-cat-select').value;
+  if (!newCat) { toast('Choisis une catégorie d\'abord', 'error'); return; }
+  if (selectedIndexes.size === 0) { toast('Rien de sélectionné', 'error'); return; }
+
+  preservedScroll = window.scrollY;
+  const selectedTxs = [...selectedIndexes].map(i => importPreviewData[i]).filter(Boolean);
+
+  // Créer les règles marchandes pour chaque libellé unique
+  const rulesToCreate = new Map(); // pattern -> {category}
+  for (const t of selectedTxs) {
+    t.category = newCat;
+    t.sub_category = null;
+    t._userTaught = true;
+    t._userCategorized = true;
+    const key = t.merchant_key || merchantKey(t.label);
+    const words = key.split(' ').filter(w => w.length > 3);
+    const pattern = words.slice(0, 2).join(' ') || key.substring(0, 20);
+    if (pattern.length >= 3 && !rulesToCreate.has(pattern)) {
+      rulesToCreate.set(pattern, newCat);
+    }
+  }
+
+  // Persister les règles en batch
+  const ruleRows = [...rulesToCreate.entries()].map(([pattern, cat]) => ({
+    user_id: currentUser.id,
+    pattern: pattern.toLowerCase(),
+    category: cat,
+    sub_category: null,
+    priority: 200,
+    is_generic: false
+  }));
+  if (ruleRows.length > 0) {
+    try {
+      await sb.from('merchant_rules').upsert(ruleRows, { onConflict: 'pattern' });
+      // Ajouter au state local
+      ruleRows.forEach(r => {
+        rules = rules.filter(existing => existing.pattern !== r.pattern);
+        rules.push(r);
+      });
+    } catch (e) {
+      console.error('bulk rules', e);
+    }
+  }
+
+  // Appliquer les règles nouvellement créées aux transactions similaires dans l'import (non déjà catégorisées)
+  let cascadeCount = 0;
+  for (const pattern of rulesToCreate.keys()) {
+    importPreviewData.forEach(other => {
+      if (other._userCategorized || other._duplicate) return;
+      if (other.merchant_key && other.merchant_key.includes(pattern)) {
+        other.category = newCat;
+        other.sub_category = null;
+        other._userCategorized = true;
+        cascadeCount++;
+      }
+    });
+  }
+
+  toast(`✓ ${selectedTxs.length} catégorisée(s) en ${newCat}${cascadeCount > 0 ? ` (+ ${cascadeCount} similaires)` : ''}`, 'success');
+  selectedIndexes.clear();
+  bulkCategory = '';
+  showImportPreview();
+}
+
+function deleteBulkSelection() {
+  if (selectedIndexes.size === 0) return;
+  const n = selectedIndexes.size;
+  openModal(
+    `Supprimer ${n} transaction(s) ?`,
+    `Ces transactions seront exclues de l'import (elles ne seront pas ajoutées à Supabase).`,
+    () => {
+      preservedScroll = window.scrollY;
+      // Trier index décroissant pour éviter shift indices
+      const sorted = [...selectedIndexes].sort((a, b) => b - a);
+      sorted.forEach(i => {
+        const t = importPreviewData[i];
+        importMatches = importMatches.filter(m => m.new !== t);
+        importPreviewData.splice(i, 1);
+      });
+      selectedIndexes.clear();
+      toast(`${n} transaction(s) supprimée(s)`, 'success');
+      showImportPreview();
+    }
+  );
 }
 
 function deleteImportTx(idx) {

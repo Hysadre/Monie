@@ -631,8 +631,8 @@ html, body {
   padding: 14px 16px;
   border-radius: var(--radius-sm);
   transition: background 0.15s;
-  cursor: pointer;
 }
+.tx-row .tx-checkbox { margin-right: 4px; }
 .tx-row:hover { background: var(--bg); }
 .tx-row + .tx-row { border-top: 1px solid var(--border-soft); }
 .tx-date {
@@ -1182,6 +1182,64 @@ html, body {
   .goal-meta-lbl { margin-bottom: 0; }
 }
 
+/* ─── HELP BANNER (Comment ça marche) ─── */
+.help-banner {
+  background: linear-gradient(135deg, var(--rose-soft), var(--peach-soft));
+  border: 1.5px solid rgba(231, 111, 81, 0.15);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  position: relative;
+  animation: slideDown 0.3s ease;
+}
+@keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.help-banner-hd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.help-banner-icon {
+  width: 32px; height: 32px;
+  border-radius: 10px;
+  background: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.help-banner-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink);
+  flex: 1;
+}
+.help-banner-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 100px;
+  font-family: var(--ff);
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.help-banner-close:hover { background: white; color: var(--rose); }
+.help-banner-body {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+}
+.help-banner-body b { color: var(--rose); font-weight: 800; }
+.help-banner-body ul {
+  padding-left: 24px;
+  margin-top: 6px;
+}
+.help-banner-body li { margin-bottom: 4px; }
+.help-banner.hidden { display: none; }
+
 /* ─── EMPTY STATE ─── */
 .empty {
   text-align: center;
@@ -1191,6 +1249,126 @@ html, body {
 .empty-emoji { font-size: 40px; margin-bottom: 12px; opacity: 0.6; }
 .empty-title { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
 .empty-sub { font-size: 12px; }
+
+/* ─── BULK ACTIONS BAR ─── */
+.bulk-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: linear-gradient(135deg, var(--rose), var(--tender-rose));
+  color: white;
+  padding: 14px 20px;
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  box-shadow: 0 8px 24px rgba(231,111,81,0.35);
+  animation: slideDown 0.25s ease;
+}
+.bulk-bar-count {
+  background: white;
+  color: var(--rose);
+  font-family: var(--fm);
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 100px;
+  font-size: 13px;
+}
+.bulk-bar-label {
+  font-weight: 700;
+  font-size: 14px;
+  flex: 1;
+  min-width: 120px;
+}
+.bulk-bar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bulk-select {
+  padding: 10px 14px;
+  background: white;
+  color: var(--ink);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--ff);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 40px;
+  min-width: 200px;
+}
+.bulk-btn {
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.2);
+  border: 1.5px solid rgba(255,255,255,0.4);
+  color: white;
+  border-radius: var(--radius-sm);
+  font-family: var(--ff);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-height: 40px;
+}
+.bulk-btn:hover { background: white; color: var(--rose); }
+.bulk-btn.danger { background: rgba(0,0,0,0.15); }
+.bulk-btn.danger:hover { background: white; color: var(--tender-rose); }
+
+/* ─── CHECKBOX CUSTOM ─── */
+.tx-checkbox {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.tx-checkbox:hover { border-color: var(--rose); }
+.tx-checkbox:checked {
+  background: var(--rose);
+  border-color: var(--rose);
+}
+.tx-checkbox:checked::after {
+  content: '✓';
+  position: absolute;
+  color: white;
+  font-size: 14px;
+  font-weight: 900;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.tx-row.selected { background: var(--rose-soft); }
+.tx-row.selected:hover { background: var(--rose-soft); }
+
+/* Select all header */
+.select-all-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.select-all-bar label {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
 
 /* ─── IMPORT TABS ─── */
 .import-tabs {
