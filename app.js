@@ -429,11 +429,24 @@ async function loadInvestissements() {
   investissements = data || [];
 }
 async function loadAllData() {
-  const [txRes, rulesRes] = await Promise.all([
-    sb.from('transactions').select('*').eq('user_id', currentUser.id).order('date_op', { ascending: false }).limit(20000),
-    sb.from('merchant_rules').select('*').or(`user_id.eq.${currentUser.id},user_id.is.null`).order('priority', { ascending: false })
-  ]);
-  transactions = txRes.data || [];
+  // Supabase limite à 1000 rows par requête → on paginate en batches
+  const BATCH = 1000;
+  let allTx = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await sb.from('transactions')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('date_op', { ascending: false })
+      .range(from, from + BATCH - 1);
+    if (error) { console.error('loadAllData batch', error); break; }
+    if (!data || data.length === 0) break;
+    allTx = allTx.concat(data);
+    if (data.length < BATCH) break; // dernier batch atteint
+    from += BATCH;
+  }
+  transactions = allTx;
+  const rulesRes = await sb.from('merchant_rules').select('*').or(`user_id.eq.${currentUser.id},user_id.is.null`).order('priority', { ascending: false });
   rules = rulesRes.data || [];
   await loadProfile();
   console.log(`📊 ${transactions.length} transactions, ${rules.length} règles, profil chargé`);
@@ -1047,18 +1060,31 @@ function renderDashboard() {
   // ═══ Widget "Prochain objectif" ═══
   renderDashGoalWidget();
 
-  // Évolution 12 mois se termine au mois sélectionné
+  // Évolution 12 mois : FIGÉE sur Jan-Déc de l'année sélectionnée
   const evoLabels = [];
   const evoIn = [];
   const evoOut = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(dashYear, dashMonth - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    evoLabels.push(MONTHS_SHORT[d.getMonth()] + ' ' + String(d.getFullYear()).slice(2));
+  for (let m = 0; m < 12; m++) {
+    const key = `${dashYear}-${String(m + 1).padStart(2, '0')}`;
+    evoLabels.push(MONTHS_SHORT[m]);
     const mtx = transactions.filter(t => t.date_op.startsWith(key));
     evoIn.push(mtx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0));
     evoOut.push(mtx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0));
   }
+  // Totaux annuels
+  const yearTx = transactions.filter(t => t.date_op.startsWith(String(dashYear)));
+  const yearIn = yearTx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
+  const yearOut = yearTx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const yearBal = yearIn - yearOut;
+  // MAJ des labels pour afficher aussi les totaux annuels
+  if ($('dash-year-total-rev')) set('dash-year-total-rev', fmt(yearIn));
+  if ($('dash-year-total-dep')) set('dash-year-total-dep', fmt(yearOut));
+  if ($('dash-year-total-bal')) {
+    const el = $('dash-year-total-bal');
+    el.textContent = (yearBal >= 0 ? '+' : '') + fmt(yearBal);
+    el.style.color = yearBal >= 0 ? 'var(--sage)' : 'var(--tender-rose)';
+  }
+  if ($('dash-year-display')) set('dash-year-display', dashYear);
   updateChart('chart-evolution', 'line', {
     labels: evoLabels,
     datasets: [
@@ -1113,6 +1139,9 @@ function updateChart(id, type, data, opts = {}) {
 }
 
 // ═══ TRANSACTIONS LIST ═════════════════════════════════════════
+// ═══ ÉDITION DES TRANSACTIONS (page "Transactions") ═════════════
+let txSelectedIds = new Set();
+
 function renderTransactionsList() {
   set('tx-total-count', transactions.length);
   const search = $('tx-search').value.toLowerCase();
@@ -1123,18 +1152,124 @@ function renderTransactionsList() {
     return true;
   }).slice(0, 300);
   const list = $('tx-list-all');
-  if (!filtered.length) { list.innerHTML = '<div class="empty"><div class="empty-title">Aucune transaction</div></div>'; return; }
-  list.innerHTML = filtered.map(t => `
-    <div class="tx-row">
-      <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}<br><span style="font-size:10px">${t.date_op.slice(0, 4)}</span></div>
-      <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
-      <div class="tx-info">
-        <div class="tx-label">${t.label} ${bankBadge(t.bank_source)}</div>
-        <div class="tx-cat">${t.category}${t.sub_category ? ' · ' + t.sub_category : ''}</div>
-      </div>
-      <div class="tx-amt ${t.type === 'entree' ? 'amt-in' : 'amt-out'}">${t.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(Number(t.amount)))}</div>
+  const cats = Object.keys(CAT_META);
+  const catOptions = cats.map(c => `<option value="${c}">${catIcon(c)} ${c}</option>`).join('');
+
+  // Bulk bar si sélection
+  let bulkHtml = '';
+  if (txSelectedIds.size > 0) {
+    bulkHtml = `
+      <div class="bulk-bar floating">
+        <span class="bulk-bar-count">${txSelectedIds.size}</span>
+        <span class="bulk-bar-label">sélectionnée(s)</span>
+        <div class="bulk-bar-actions">
+          <select class="bulk-select" id="tx-bulk-cat">
+            <option value="">Choisir une catégorie…</option>
+            ${catOptions}
+          </select>
+          <button class="bulk-btn" onclick="applyTxBulkCategory()">✓ Appliquer</button>
+          <button class="bulk-btn danger" onclick="deleteTxBulkSelection()">🗑 Supprimer</button>
+          <button class="bulk-btn" onclick="clearTxSelection()">Annuler</button>
+        </div>
+      </div>`;
+  }
+
+  if (!filtered.length) { list.innerHTML = bulkHtml + '<div class="empty"><div class="empty-title">Aucune transaction</div></div>'; return; }
+
+  const allChecked = filtered.every(t => txSelectedIds.has(t.id));
+  list.innerHTML = bulkHtml + `
+    <div class="select-all-bar">
+      <label>
+        <input type="checkbox" class="tx-checkbox" onchange="toggleAllTxVisible(this.checked)" ${allChecked ? 'checked' : ''}>
+        <span>${allChecked ? 'Tout désélectionner' : 'Tout sélectionner sur cette page'}</span>
+      </label>
+      ${txSelectedIds.size > 0 ? `<span style="margin-left:auto;font-weight:700;color:var(--rose)">${txSelectedIds.size} sélectionnée(s)</span>` : ''}
     </div>
-  `).join('');
+    ${filtered.map(t => {
+      const isSelected = txSelectedIds.has(t.id);
+      const catsSel = cats.map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('');
+      return `
+        <div class="tx-row ${isSelected ? 'selected' : ''}">
+          <input type="checkbox" class="tx-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleTxSelect('${t.id}', this.checked)">
+          <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}<br><span style="font-size:10px">${t.date_op.slice(0, 4)}</span></div>
+          <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
+          <div class="tx-info">
+            <div class="tx-label">${t.label} ${bankBadge(t.bank_source)}</div>
+            <select class="select" style="margin-top:4px;padding:4px 8px;font-size:11px;width:auto;min-width:180px" onchange="recategorizeTx('${t.id}', this.value)">
+              ${catsSel}
+            </select>
+          </div>
+          <div class="tx-amt ${t.type === 'entree' ? 'amt-in' : 'amt-out'}">${t.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(Number(t.amount)))}</div>
+          <button class="import-del-btn" onclick="deleteTx('${t.id}')" title="Supprimer">✕</button>
+        </div>`;
+    }).join('')}`;
+}
+
+function toggleTxSelect(id, checked) {
+  if (checked) txSelectedIds.add(id);
+  else txSelectedIds.delete(id);
+  renderTransactionsList();
+}
+function toggleAllTxVisible(checked) {
+  const search = $('tx-search').value.toLowerCase();
+  const filtCat = $('tx-filter-cat').value;
+  const filtered = transactions.filter(t => {
+    if (filtCat !== 'all' && t.category !== filtCat) return false;
+    if (search && !t.label.toLowerCase().includes(search)) return false;
+    return true;
+  }).slice(0, 300);
+  filtered.forEach(t => checked ? txSelectedIds.add(t.id) : txSelectedIds.delete(t.id));
+  renderTransactionsList();
+}
+function clearTxSelection() { txSelectedIds.clear(); renderTransactionsList(); }
+
+async function recategorizeTx(id, newCat) {
+  const tx = transactions.find(t => t.id === id);
+  if (!tx) return;
+  const { error } = await sb.from('transactions').update({ category: newCat, sub_category: null }).eq('id', id);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  tx.category = newCat;
+  tx.sub_category = null;
+  toast('✓ Catégorie mise à jour', 'success');
+  renderTransactionsList();
+}
+
+async function deleteTx(id) {
+  openModal('Supprimer cette transaction ?', 'Cette action est irréversible.', async () => {
+    const { error } = await sb.from('transactions').delete().eq('id', id);
+    if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+    transactions = transactions.filter(t => t.id !== id);
+    txSelectedIds.delete(id);
+    toast('✓ Supprimée', 'success');
+    renderTransactionsList();
+  });
+}
+
+async function applyTxBulkCategory() {
+  const newCat = $('tx-bulk-cat').value;
+  if (!newCat) { toast('Choisis une catégorie', 'error'); return; }
+  const ids = [...txSelectedIds];
+  if (!ids.length) return;
+  const { error } = await sb.from('transactions').update({ category: newCat, sub_category: null }).in('id', ids);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  transactions.forEach(t => { if (ids.includes(t.id)) { t.category = newCat; t.sub_category = null; } });
+  toast(`✓ ${ids.length} tx catégorisées`, 'success');
+  txSelectedIds.clear();
+  renderTransactionsList();
+}
+
+async function deleteTxBulkSelection() {
+  const n = txSelectedIds.size;
+  if (!n) return;
+  openModal(`Supprimer ${n} transaction(s) ?`, 'Action irréversible.', async () => {
+    const ids = [...txSelectedIds];
+    const { error } = await sb.from('transactions').delete().in('id', ids);
+    if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+    transactions = transactions.filter(t => !ids.includes(t.id));
+    txSelectedIds.clear();
+    toast(`✓ ${n} tx supprimées`, 'success');
+    renderTransactionsList();
+  });
 }
 
 // ═══ IMPORT ════════════════════════════════════════════════════
