@@ -462,6 +462,12 @@
 
       <!-- 📈 SUIVI MENSUEL -->
       <div id="tab-suivi" class="tab">
+        <!-- 🎯 Navigation entre les 3 vues -->
+        <div class="dash-view-tabs">
+          <button class="dash-view-btn" onclick="showTab('dashboard')">🌍 Global</button>
+          <button class="dash-view-btn active">📊 Mensuel</button>
+          <button class="dash-view-btn" onclick="showTab('annuelle')">📅 Annuel</button>
+        </div>
         <div class="page-hd">
           <div>
             <h1 class="page-title">Suivi mensuel</h1>
@@ -515,6 +521,12 @@
 
       <!-- 📊 VUE ANNUELLE -->
       <div id="tab-annuelle" class="tab">
+        <!-- 🎯 Navigation entre les 3 vues -->
+        <div class="dash-view-tabs">
+          <button class="dash-view-btn" onclick="showTab('dashboard')">🌍 Global</button>
+          <button class="dash-view-btn" onclick="showTab('suivi')">📊 Mensuel</button>
+          <button class="dash-view-btn active">📅 Annuel</button>
+        </div>
         <div class="page-hd">
           <div>
             <h1 class="page-title">Vue annuelle</h1>
