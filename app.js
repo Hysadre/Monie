@@ -376,6 +376,9 @@ function renderDashboard() {
   set('dash-rev-hint', `${monthTx.filter(t => t.type === 'entree').length} entrées`);
   set('dash-dep-hint', `${monthTx.filter(t => t.type === 'sortie').length} sorties`);
 
+  // ═══ Performance vs M-1 ═══
+  renderPerfCards(monthPrefix, totalIn, totalOut, bal);
+
   // Évolution 12 mois se termine au mois sélectionné
   const evoLabels = [];
   const evoIn = [];
@@ -932,6 +935,143 @@ function renderEpargne() {
 }
 function addGoal() {
   toast('Bientôt disponible 🌸');
+}
+
+// ═══ PERFORMANCE CARDS vs M-1 ═════════════════════════════════
+function renderPerfCards(currentKey, curIn, curOut, curBal) {
+  // Mois précédent
+  const prevD = new Date(dashYear, dashMonth - 1, 1);
+  const prevKey = `${prevD.getFullYear()}-${String(prevD.getMonth() + 1).padStart(2, '0')}`;
+  const prevTx = transactions.filter(t => t.date_op.startsWith(prevKey));
+  const prevIn = prevTx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
+  const prevOut = prevTx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const prevBal = prevIn - prevOut;
+
+  // ─── 1. Gestion globale : Solde net (In - Out) ───
+  const moneyVal = $('perf-money-val');
+  moneyVal.textContent = (curBal >= 0 ? '+' : '') + fmt(curBal);
+  moneyVal.className = 'perf-val ' + (curBal >= 0 ? 'positive' : 'negative');
+  const moneyCard = $('perf-money');
+  moneyCard.classList.toggle('negative', curBal < 0);
+
+  // Delta
+  const deltaMoney = curBal - prevBal;
+  const badgeMoney = $('perf-money-badge');
+  const arrowMoney = badgeMoney.querySelector('.perf-badge-arrow');
+  const deltaMoneyEl = $('perf-money-delta');
+  if (prevBal !== 0 || curBal !== 0) {
+    const pct = prevBal !== 0 ? Math.round(Math.abs(deltaMoney / prevBal * 100)) : (curBal > 0 ? 100 : -100);
+    if (deltaMoney > 0) {
+      badgeMoney.className = 'perf-badge up';
+      arrowMoney.textContent = '↗';
+      deltaMoneyEl.textContent = `+${fmt(deltaMoney)} (+${pct}%)`;
+    } else if (deltaMoney < 0) {
+      badgeMoney.className = 'perf-badge down';
+      arrowMoney.textContent = '↘';
+      deltaMoneyEl.textContent = `${fmt(deltaMoney)} (-${pct}%)`;
+    } else {
+      badgeMoney.className = 'perf-badge neutral';
+      arrowMoney.textContent = '—';
+      deltaMoneyEl.textContent = 'Stable';
+    }
+  } else {
+    badgeMoney.className = 'perf-badge neutral';
+    arrowMoney.textContent = '—';
+    deltaMoneyEl.textContent = 'Pas de data';
+  }
+  $('perf-money-icon').textContent = curBal >= 0 ? '📈' : '📉';
+
+  // Sparkline gestion : 6 derniers mois de soldes
+  const sparkMoney = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(dashYear, dashMonth - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const mtx = transactions.filter(t => t.date_op.startsWith(key));
+    const mi = mtx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
+    const mo = mtx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+    sparkMoney.push(mi - mo);
+  }
+  updateChart('perf-money-chart', 'line', {
+    labels: sparkMoney.map(() => ''),
+    datasets: [{
+      data: sparkMoney,
+      borderColor: curBal >= 0 ? '#7FB89E' : '#DD7B85',
+      backgroundColor: (curBal >= 0 ? 'rgba(127,184,158,0.15)' : 'rgba(221,123,133,0.15)'),
+      borderWidth: 2,
+      tension: 0.4,
+      fill: true,
+      pointRadius: 0,
+      pointHoverRadius: 4
+    }]
+  }, {
+    scales: { x: { display: false }, y: { display: false } },
+    plugins: { legend: { display: false }, tooltip: { enabled: false } }
+  });
+
+  // ─── 2. Épargne du mois : transactions vers épargne + tracker_mensuel epargne_reel ───
+  // Sources d'épargne : Investissements + tracker_mensuel[month].epargne_reel
+  const invTx = transactions.filter(t => t.date_op.startsWith(currentKey) && t.category === 'Investissements');
+  const curInvest = invTx.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const curTrackerEp = (suiviData[currentKey]?.epargne_reel) || 0;
+  const curSavings = Math.max(curInvest, curTrackerEp); // prend le plus grand (évite double compte)
+
+  const prevInvTx = transactions.filter(t => t.date_op.startsWith(prevKey) && t.category === 'Investissements');
+  const prevInvest = prevInvTx.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const prevTrackerEp = (suiviData[prevKey]?.epargne_reel) || 0;
+  const prevSavings = Math.max(prevInvest, prevTrackerEp);
+
+  const savingsVal = $('perf-savings-val');
+  savingsVal.textContent = fmt(curSavings);
+  savingsVal.className = 'perf-val ' + (curSavings > 0 ? 'positive' : '');
+
+  const deltaSavings = curSavings - prevSavings;
+  const badgeSavings = $('perf-savings-badge');
+  const arrowSavings = badgeSavings.querySelector('.perf-badge-arrow');
+  const deltaSavEl = $('perf-savings-delta');
+  if (prevSavings !== 0 || curSavings !== 0) {
+    const pct = prevSavings !== 0 ? Math.round(Math.abs(deltaSavings / prevSavings * 100)) : 100;
+    if (deltaSavings > 0) {
+      badgeSavings.className = 'perf-badge up';
+      arrowSavings.textContent = '↗';
+      deltaSavEl.textContent = `+${fmt(deltaSavings)} (+${pct}%)`;
+    } else if (deltaSavings < 0) {
+      badgeSavings.className = 'perf-badge down';
+      arrowSavings.textContent = '↘';
+      deltaSavEl.textContent = `${fmt(deltaSavings)} (-${pct}%)`;
+    } else {
+      badgeSavings.className = 'perf-badge neutral';
+      arrowSavings.textContent = '—';
+      deltaSavEl.textContent = 'Stable';
+    }
+  } else {
+    badgeSavings.className = 'perf-badge neutral';
+    arrowSavings.textContent = '—';
+    deltaSavEl.textContent = 'Pas encore saisie';
+  }
+  $('perf-savings-icon').textContent = curSavings > 0 ? '🌱' : '🎯';
+
+  // Sparkline épargne : 6 derniers mois
+  const sparkSav = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(dashYear, dashMonth - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const inv = transactions.filter(t => t.date_op.startsWith(key) && t.category === 'Investissements').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+    const tr = (suiviData[key]?.epargne_reel) || 0;
+    sparkSav.push(Math.max(inv, tr));
+  }
+  updateChart('perf-savings-chart', 'bar', {
+    labels: sparkSav.map(() => ''),
+    datasets: [{
+      data: sparkSav,
+      backgroundColor: sparkSav.map((_, i) => i === sparkSav.length - 1 ? '#7C3F58' : '#D8B4DD'),
+      borderRadius: 3,
+      borderSkipped: false,
+      barPercentage: 0.7
+    }]
+  }, {
+    scales: { x: { display: false }, y: { display: false } },
+    plugins: { legend: { display: false }, tooltip: { enabled: false } }
+  });
 }
 
 // ═══ FAB ═══════════════════════════════════════════════════════

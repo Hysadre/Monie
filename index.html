@@ -170,6 +170,48 @@
           <div class="kpi kpi-peach"><div class="kpi-label">Solde mois</div><div class="kpi-val" id="dash-bal">—</div><div class="kpi-hint" id="dash-bal-hint">—</div></div>
           <div class="kpi kpi-gold"><div class="kpi-label">Nb opérations</div><div class="kpi-val kpi-val-gold" id="dash-count">—</div><div class="kpi-hint">transactions</div></div>
         </div>
+
+        <!-- 🌸 Performance cards vs M-1 -->
+        <div class="perf-grid">
+          <div class="perf-card" id="perf-money">
+            <div class="perf-header">
+              <div>
+                <div class="perf-label">💰 Gestion globale</div>
+                <div class="perf-val" id="perf-money-val">—</div>
+              </div>
+              <div class="perf-icon sage" id="perf-money-icon">📊</div>
+            </div>
+            <div class="perf-body">
+              <div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:2px">vs mois précédent</div>
+                <span class="perf-badge neutral" id="perf-money-badge">
+                  <span class="perf-badge-arrow">—</span>
+                  <span id="perf-money-delta">—</span>
+                </span>
+              </div>
+              <canvas class="perf-mini" id="perf-money-chart"></canvas>
+            </div>
+          </div>
+          <div class="perf-card" id="perf-savings">
+            <div class="perf-header">
+              <div>
+                <div class="perf-label">🎯 Épargne</div>
+                <div class="perf-val" id="perf-savings-val">—</div>
+              </div>
+              <div class="perf-icon lavender" id="perf-savings-icon">🌱</div>
+            </div>
+            <div class="perf-body">
+              <div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:2px">vs mois précédent</div>
+                <span class="perf-badge neutral" id="perf-savings-badge">
+                  <span class="perf-badge-arrow">—</span>
+                  <span id="perf-savings-delta">—</span>
+                </span>
+              </div>
+              <canvas class="perf-mini" id="perf-savings-chart"></canvas>
+            </div>
+          </div>
+        </div>
         <div class="grid-2-1">
           <div class="card">
             <div class="card-hd"><div class="card-title">Évolution 12 mois</div></div>
