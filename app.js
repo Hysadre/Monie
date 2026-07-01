@@ -89,10 +89,14 @@ function openModal(title, msg, cb, bodyHtml = '') {
   set('modal-msg', msg);
   $('modal-body').innerHTML = bodyHtml;
   _modalCb = cb;
-  $('modal').classList.add('show');
+  const m = $('modal');
+  m.classList.add('show');
+  m.style.display = 'flex';
 }
 function closeModal() {
-  $('modal').classList.remove('show');
+  const m = $('modal');
+  m.classList.remove('show');
+  m.style.display = 'none';
   _modalCb = null;
 }
 function confirmModal() {
