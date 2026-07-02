@@ -38,6 +38,7 @@ const CAT_META = {
   'Divertissement': { emoji: '🎬', color: '#E76F51' },
   'Aide au logement': { emoji: '🏘️', color: '#7FB89E' },
   'Paiement échelonné': { emoji: '💳', color: '#B79CD6' },
+  'Épargne': { emoji: '🐷', color: '#7FB89E' },
   'Autres': { emoji: '📌', color: '#A0AEC0' }
 };
 // Métadonnées des banques source (pastilles LCL / BoursoBank)
@@ -1513,10 +1514,10 @@ function renderAnalyse() {
   const months = new Set(scope.map(t => t.date_op.slice(0, 7))).size || 1;
 
   // ── KPIs éducatifs ──
-  // Épargne = ce qui est réellement mis de côté (Investissements). La Dîme et les Dons = des dons, PAS de l'épargne.
-  const epargne = exp.filter(t => t.category === 'Investissements').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
-  const solde = totalIn - totalOut;
-  const tauxEp = totalIn > 0 ? Math.round((Math.max(0, solde) + epargne) / totalIn * 100) : 0;
+  // Épargne = les transactions de TYPE « épargne » (ce qui rentre vraiment en épargne). Ni dépense, ni revenu.
+  const epargne = scope.filter(t => t.type === 'epargne').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const solde = totalIn - totalOut - epargne;
+  const tauxEp = totalIn > 0 ? Math.round(epargne / totalIn * 100) : 0;
   set('an-taux', tauxEp + '%');
   set('an-taux-hint', tauxEp >= 20 ? 'Excellent 🎯' : tauxEp >= 10 ? 'Correct' : 'À muscler');
   set('an-rav', fmt(Math.round(solde / months)));
@@ -1792,6 +1793,7 @@ function openTxEdit(id) {
         <div class="auth-field"><label>Type</label><select class="select" id="txedit-type">
           <option value="sortie" ${t.type === 'sortie' ? 'selected' : ''}>Dépense</option>
           <option value="entree" ${t.type === 'entree' ? 'selected' : ''}>Entrée</option>
+          <option value="epargne" ${t.type === 'epargne' ? 'selected' : ''}>🐷 Épargne</option>
         </select></div>
         <div class="auth-field"><label>Montant (€)</label><input class="inp" type="number" step="0.01" id="txedit-amount" value="${Math.abs(Number(t.amount))}"></div>
       </div>
@@ -3249,6 +3251,7 @@ function renderVueAnnuelle() {
   // Compute par cat × mois
   const catByMonth = {};
   yearTx.forEach(t => {
+    if (t.type === 'epargne') return; // l'épargne n'est ni revenu ni dépense
     const m = parseInt(t.date_op.slice(5, 7)) - 1;
     if (!catByMonth[t.category]) catByMonth[t.category] = new Array(12).fill(0);
     catByMonth[t.category][m] += t.type === 'entree' ? Number(t.amount) : Math.abs(Number(t.amount));
@@ -3346,8 +3349,10 @@ function computeBudgetStatus() {
   const spent = { charges: 0, plaisir: 0, epargne: 0 };
   const spentByCat = {};
   transactions.forEach(t => {
-    if (t.type !== 'sortie' || !t.date_op.startsWith(key)) return;
+    if (!t.date_op.startsWith(key)) return;
     const a = Math.abs(Number(t.amount));
+    if (t.type === 'epargne') { spent.epargne += a; return; } // l'épargne = un type à part
+    if (t.type !== 'sortie') return;
     spentByCat[t.category] = (spentByCat[t.category] || 0) + a;
     const bl = BUDGET_BLOCK[t.category];
     if (bl) spent[bl] += a;
@@ -3516,7 +3521,7 @@ const DEFAULT_SUB_PCT = {
     { cat: 'Alimentation', pct: 5, note: '(restos)' }, { cat: 'Dons', pct: 2 }, { cat: 'Amis & Famille', pct: 3 }, { cat: 'Divertissement', pct: 2 }
   ],
   epargne: [
-    { cat: 'Investissements', pct: 5 }, { cat: 'Épargne libre', pct: 5 }
+    { cat: 'Épargne', pct: 15 }, { cat: 'Investissements', pct: 5 }
   ]
 };
 function renderBudget() {

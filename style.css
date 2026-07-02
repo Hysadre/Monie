@@ -781,7 +781,7 @@ body::after {
 }
 .qa-type-toggle {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 .qa-type-btn {
@@ -812,6 +812,12 @@ body::after {
   color: white;
   border-color: var(--sage);
   box-shadow: 0 4px 12px rgba(127,184,158,0.25);
+}
+.qa-type-btn.qa-type-save:has(input:checked) {
+  background: linear-gradient(135deg, #B79CD6, #9B7FC0);
+  color: white;
+  border-color: #B79CD6;
+  box-shadow: 0 4px 12px rgba(183,156,214,0.25);
 }
 .qa-form-v2 .inp,
 .qa-form-v2 .select {
