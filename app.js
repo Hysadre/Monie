@@ -1530,18 +1530,29 @@ function renderAnalyse() {
   catTx.forEach(t => { const s = t.sub_category || '(sans sous-catégorie)'; subTotals[s] = (subTotals[s] || 0) + Math.abs(Number(t.amount)); });
   const subEntries = Object.entries(subTotals).sort((a, b) => b[1] - a[1]);
   const catTotal = subEntries.reduce((s, e) => s + e[1], 0);
+  // Répartition par moyen de paiement (pour cette catégorie)
+  const PM_FR = { carte: '💳 Carte', especes: '💵 Espèces', ticket_resto: '🎫 Ticket resto', cheque: '📃 Chèque', prelevement: '🔁 Prélèvement', virement: '➡️ Virement', autre: '❔ Non précisé' };
+  const pmTotals = {};
+  catTx.forEach(t => { const pm = t.payment_method || 'autre'; pmTotals[pm] = (pmTotals[pm] || 0) + Math.abs(Number(t.amount)); });
+  const pmEntries = Object.entries(pmTotals).sort((a, b) => b[1] - a[1]);
   updateChart('analyse-donut', 'doughnut', {
     labels: subEntries.map(e => e[0]),
     datasets: [{ data: subEntries.map(e => e[1]), backgroundColor: subEntries.map((e, i) => ANALYSE_PALETTE[i % ANALYSE_PALETTE.length]), borderWidth: 0 }]
   }, { plugins: { legend: { display: false } }, cutout: '60%' });
-  $('analyse-sublist').innerHTML = `<div style="font-weight:800;font-size:15px;margin-bottom:10px">${catIcon(cat)} ${esc(cat)} — ${fmt(catTotal)}</div>` +
-    (subEntries.map(([s, v], i) => `
+  const subHtml = subEntries.map(([s, v], i) => `
       <div style="display:flex;align-items:center;gap:8px;padding:7px 0;font-size:13px;border-bottom:1px solid var(--border-soft)">
         <span style="width:10px;height:10px;border-radius:2px;background:${ANALYSE_PALETTE[i % ANALYSE_PALETTE.length]};flex-shrink:0"></span>
         <span style="flex:1">${esc(s)}</span>
         <span style="font-family:var(--fm);font-weight:700">${fmt(v)}</span>
         <span style="color:var(--muted);font-size:11px;min-width:40px;text-align:right">${catTotal > 0 ? Math.round(v / catTotal * 100) : 0}%</span>
-      </div>`).join('') || '<div class="empty-sub">Aucune dépense sur cette période</div>');
+      </div>`).join('') || '<div class="empty-sub">Aucune dépense sur cette période</div>';
+  const pmHtml = pmEntries.length ? `<div style="font-weight:800;font-size:13px;margin:16px 0 6px">💳 Par moyen de paiement</div>` + pmEntries.map(([pm, v]) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border-soft)">
+        <span style="flex:1">${PM_FR[pm] || ('❔ ' + esc(pm))}</span>
+        <span style="font-family:var(--fm);font-weight:700">${fmt(v)}</span>
+        <span style="color:var(--muted);font-size:11px;min-width:40px;text-align:right">${catTotal > 0 ? Math.round(v / catTotal * 100) : 0}%</span>
+      </div>`).join('') : '';
+  $('analyse-sublist').innerHTML = `<div style="font-weight:800;font-size:15px;margin-bottom:10px">${catIcon(cat)} ${esc(cat)} — ${fmt(catTotal)}</div>` + subHtml + pmHtml;
 
   // ── Conseils éducatifs (basés sur les vraies données) ──
   const tips = [];
@@ -1622,6 +1633,8 @@ function renderTransactionsList() {
             ${catOptions}
           </select>
           <button class="bulk-btn" onclick="applyTxBulkCategory()">✓ Appliquer</button>
+          <input type="date" class="bulk-select" id="tx-bulk-date" title="Nouvelle date pour la sélection" style="min-width:auto">
+          <button class="bulk-btn" onclick="applyTxBulkDate()">📅 Dater</button>
           <button class="bulk-btn danger" onclick="deleteTxBulkSelection()">🗑 Supprimer</button>
           <button class="bulk-btn" onclick="clearTxSelection()">Annuler</button>
         </div>
@@ -1820,6 +1833,22 @@ async function applyTxBulkCategory() {
   toast(`✓ ${ids.length} tx catégorisées`, 'success');
   txSelectedIds.clear();
   renderTransactionsList();
+}
+// Change la date de toutes les transactions sélectionnées
+async function applyTxBulkDate() {
+  const newDate = $('tx-bulk-date') ? $('tx-bulk-date').value : '';
+  if (!newDate) { toast('Choisis une date', 'error'); return; }
+  const ids = [...txSelectedIds];
+  if (!ids.length) return;
+  const { error } = await sb.from('transactions').update({ date_op: newDate }).in('id', ids);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  transactions.forEach(t => { if (ids.includes(t.id)) t.date_op = newDate; });
+  transactions.sort((a, b) => a.date_op < b.date_op ? 1 : a.date_op > b.date_op ? -1 : 0);
+  toast(`✓ ${ids.length} tx datées au ${newDate}`, 'success');
+  txSelectedIds.clear();
+  renderTransactionsList();
+  if (typeof renderCalendar === 'function') renderCalendar();
+  if (typeof renderDashboard === 'function') renderDashboard();
 }
 
 async function deleteTxBulkSelection() {
@@ -3322,17 +3351,19 @@ function computeBudgetStatus() {
     plaisir: Math.round(rev * (b.pct_plaisir || 0) / 100),
     epargne: Math.round(rev * (b.pct_epargne || 0) / 100)
   };
-  return { rev, key, spent, spentByCat, budgetByCat, budget };
+  // Dépenses "à prévoir" du mois (loyer, factures que tu sais devoir payer) → à retirer du disponible
+  const aPrevoir = (b.events || []).reduce((s, e) => s + Number(e.amount || 0), 0);
+  return { rev, key, spent, spentByCat, budgetByCat, budget, aPrevoir };
 }
 // compact=true (dashboard) : n'affiche que les postes à surveiller. Sinon : tous les postes.
 function renderBudgetStatus(containerId, compact) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  const { rev, spent, spentByCat, budgetByCat, budget } = computeBudgetStatus();
+  const { rev, spent, spentByCat, budgetByCat, budget, aPrevoir } = computeBudgetStatus();
   if (!rev) { el.innerHTML = '<div class="empty-sub">Renseigne ton revenu mensuel dans Gestion du budget pour activer le suivi du mois.</div>'; return; }
   const totalBudgetDep = budget.charges + budget.plaisir;
   const totalSpentDep = spent.charges + spent.plaisir;
-  const reste = totalBudgetDep - totalSpentDep;
+  const reste = totalBudgetDep - totalSpentDep - aPrevoir;
   let rows = [...new Set([...Object.keys(budgetByCat), ...Object.keys(spentByCat).filter(c => BUDGET_BLOCK[c] === 'charges' || BUDGET_BLOCK[c] === 'plaisir')])]
     .map(cat => {
       const bud = Math.round(budgetByCat[cat] || 0);
@@ -3361,7 +3392,7 @@ function renderBudgetStatus(containerId, compact) {
     <div style="text-align:center;padding:12px;border-radius:12px;background:${reste >= 0 ? 'rgba(127,184,158,0.12)' : 'rgba(229,57,53,0.1)'};margin-bottom:14px">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Reste à dépenser ce mois</div>
       <div style="font-size:26px;font-weight:900;color:${reste >= 0 ? 'var(--sage)' : '#E53935'};font-family:var(--fm)">${fmt(reste)}</div>
-      <div style="font-size:11px;color:var(--muted)">${fmt(totalSpentDep)} dépensés sur ${fmt(totalBudgetDep)} de budget</div>
+      <div style="font-size:11px;color:var(--muted)">${fmt(totalSpentDep)} dépensés${aPrevoir > 0 ? ' · ' + fmt(aPrevoir) + ' à prévoir' : ''} · budget ${fmt(totalBudgetDep)}</div>
     </div>
     ${compact && !rows.length ? '<div class="empty-sub" style="text-align:center">👍 Tout est dans le budget pour l\'instant</div>' : ''}
     ${rows.map(bar).join('')}
