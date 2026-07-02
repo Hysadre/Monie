@@ -1010,6 +1010,17 @@ function categorize(label, amount) {
 function merchantKey(label) {
   return String(label || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim().substring(0, 40);
 }
+// Détecte le moyen de paiement depuis le libellé (retourne null si indéterminé)
+function detectPaymentMethod(label) {
+  const L = (label || '').toLowerCase();
+  if (/swile|edenred|bimpli|ticket rest|titre.?resto|resto flash|up d\b|sodexo|pluxee/.test(L)) return 'ticket_resto';
+  if (/retrait|\bdab\b|distributeur|gab /.test(L)) return 'especes';
+  if (/prlv|prelevement|prélèvement/.test(L)) return 'prelevement';
+  if (/vir sepa|virement|vir inst|vir\.perm|vir\b/.test(L)) return 'virement';
+  if (/ch[eè]que/.test(L)) return 'cheque';
+  if (/^carte|\bcb\b|cb\*|paiement cb/.test(L)) return 'carte';
+  return null;
+}
 
 // ═══ CALENDRIER ════════════════════════════════════════════════
 function changeCalMonth(dir) {
@@ -1659,7 +1670,7 @@ function renderTransactionsList() {
         <div class="tx-row ${isSelected ? 'selected' : ''}">
           <input type="checkbox" class="tx-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleTxSelect('${t.id}', this.checked)">
           <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}<br><span style="font-size:10px">${t.date_op.slice(0, 4)}</span></div>
-          <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
+          <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}" title="${esc(t.payment_method || 'moyen non précisé')}">${payMethodIcon(t.payment_method) || catIcon(t.category)}</div>
           <div class="tx-info">
             <div class="tx-label">${esc(t.label)} ${bankBadge(t.bank_source)}</div>
             <select class="select" style="margin-top:4px;padding:4px 8px;font-size:11px;width:auto;min-width:180px" onchange="recategorizeTx('${t.id}', this.value)">
@@ -2508,7 +2519,7 @@ async function confirmImport() {
     merchant_key: t.merchant_key,
     account: t.account || 'Compte courant',
     comment: t.comment || null,
-    payment_method: t.payment_method || null,
+    payment_method: t.payment_method || detectPaymentMethod(t.label),
     bank_source: t.bank_source || null
   }));
   if (!toAdd.length) { toast('Rien à importer', 'error'); return; }
