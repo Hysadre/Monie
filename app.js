@@ -1493,6 +1493,28 @@ function openKpiList(kind) {
 }
 function closeKpiList() { const m = $('kpi-modal'); if (m) m.style.display = 'none'; }
 
+// Liste éditable des dépenses d'UNE catégorie sur UN mois (clic sur une barre du budget)
+function openCatMonthList(cat, monthKey) {
+  let scope = transactions.filter(t => t.type === 'sortie' && t.category === cat && (!monthKey || t.date_op.startsWith(monthKey)));
+  scope = scope.slice().sort((a, b) => (a.date_op < b.date_op ? 1 : a.date_op > b.date_op ? -1 : 0));
+  const total = scope.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const mLbl = monthKey ? `${MONTHS[parseInt(monthKey.slice(5, 7)) - 1]} ${monthKey.slice(0, 4)}` : 'toutes périodes';
+  set('kpi-modal-title', `${catIcon(cat)} ${cat}`);
+  set('kpi-modal-sub', `${mLbl} · ${scope.length} opération(s) · ${fmt(total)} au total`);
+  const list = $('kpi-modal-list');
+  if (!scope.length) {
+    list.innerHTML = '<div class="empty-sub" style="padding:20px;text-align:center">Aucune opération dans cette catégorie ce mois.</div>';
+  } else {
+    list.innerHTML = scope.map(t => `<div class="day-tx-item" style="cursor:pointer" onclick="closeKpiList();openTxEdit('${t.id}')" title="Cliquer pour modifier / recatégoriser">
+        <div class="day-tx-icon" style="background:${catColor(t.category)}18;color:${catColor(t.category)}">${catIcon(t.category)}</div>
+        <div class="day-tx-info"><div class="tx-label">${esc(t.label)}</div><div class="tx-cat">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)} · ${esc(t.sub_category || 'sans sous-catégorie')}</div></div>
+        <div class="day-tx-amt amt-out">-${fmtD(Math.abs(Number(t.amount)))}</div>
+        <span style="color:var(--rose);font-size:14px;margin-left:6px">✏️</span>
+      </div>`).join('');
+  }
+  $('kpi-modal').style.display = 'flex';
+}
+
 function renderDashboard() {
   const isGlobalYear = dashYear === -1;
   const isGlobalMonth = dashMonth === -1;
@@ -3802,9 +3824,9 @@ function renderBudgetStatus(containerId, compact, monthKey) {
     const color = r.over ? '#E53935' : r.pct >= 80 ? 'var(--gold)' : 'var(--sage)';
     const w = Math.min(100, r.pct);
     return `
-      <div style="margin-bottom:10px">
+      <div style="margin-bottom:10px;cursor:pointer" onclick="openCatMonthList('${esc(r.cat)}','${key}')" title="Voir les opérations ${esc(r.cat)} de ce mois">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-          <span style="font-weight:600">${catIcon(r.cat)} ${esc(r.cat)}</span>
+          <span style="font-weight:600">${catIcon(r.cat)} ${esc(r.cat)} ›</span>
           <span style="font-family:var(--fm);color:${color};font-weight:700">${fmt(r.sp)} / ${fmt(r.bud)}</span>
         </div>
         <div style="height:6px;background:var(--border-soft);border-radius:100px;overflow:hidden">
