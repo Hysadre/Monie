@@ -1500,12 +1500,29 @@ function openCatMonthList(cat, monthKey) {
   const total = scope.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
   const mLbl = monthKey ? `${MONTHS[parseInt(monthKey.slice(5, 7)) - 1]} ${monthKey.slice(0, 4)}` : 'toutes périodes';
   set('kpi-modal-title', `${catIcon(cat)} ${cat}`);
-  set('kpi-modal-sub', `${mLbl} · ${scope.length} opération(s) · ${fmt(total)} au total`);
+  set('kpi-modal-sub', `${mLbl} · ${scope.length} opération(s) · ${fmt(total)} dépensés`);
+
+  // Composition du BUDGET de cette catégorie (peut venir de plusieurs sous-lignes)
+  const bsrc = (monthKey && budgetByMonth[monthKey]) ? budgetByMonth[monthKey] : (typeof budgetData !== 'undefined' ? budgetData : null);
+  const sub = (bsrc && bsrc.sub_budget) ? bsrc.sub_budget : DEFAULT_SUB_PCT;
+  const brev = (bsrc && bsrc.revenu_mensuel) ? bsrc.revenu_mensuel : 0;
+  const budLines = [];
+  ['charges', 'plaisir', 'epargne'].forEach(blk => (sub[blk] || []).forEach(it => { if (it.cat === cat) budLines.push(it); }));
+  const budTotal = budLines.reduce((s, it) => s + brev * (it.pct || 0) / 100, 0);
+  let budHtml = '';
+  if (budLines.length > 1 && brev > 0) {
+    budHtml = `<div style="background:var(--peach-soft);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.6">
+      <div style="font-weight:800;margin-bottom:3px">💡 Ton budget ${esc(cat)} = ${budLines.length} lignes additionnées :</div>
+      ${budLines.map(it => `<div style="display:flex;justify-content:space-between"><span>• ${it.note ? esc(it.note) : 'ligne principale'} (${it.pct}%)</span><b style="font-family:var(--fm)">${fmt(brev * it.pct / 100)}</b></div>`).join('')}
+      <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(0,0,0,0.08);margin-top:4px;padding-top:4px"><b>Total budget ${esc(cat)}</b><b style="font-family:var(--fm)">${fmt(budTotal)}</b></div>
+    </div>`;
+  }
+
   const list = $('kpi-modal-list');
   if (!scope.length) {
-    list.innerHTML = '<div class="empty-sub" style="padding:20px;text-align:center">Aucune opération dans cette catégorie ce mois.</div>';
+    list.innerHTML = budHtml + '<div class="empty-sub" style="padding:20px;text-align:center">Aucune dépense dans cette catégorie ce mois.</div>';
   } else {
-    list.innerHTML = scope.map(t => `<div class="day-tx-item" style="cursor:pointer" onclick="closeKpiList();openTxEdit('${t.id}')" title="Cliquer pour modifier / recatégoriser">
+    list.innerHTML = budHtml + `<div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:4px 2px 8px">Dépenses réelles (${fmt(total)})</div>` + scope.map(t => `<div class="day-tx-item" style="cursor:pointer" onclick="closeKpiList();openTxEdit('${t.id}')" title="Cliquer pour modifier / recatégoriser">
         <div class="day-tx-icon" style="background:${catColor(t.category)}18;color:${catColor(t.category)}">${catIcon(t.category)}</div>
         <div class="day-tx-info"><div class="tx-label">${esc(t.label)}</div><div class="tx-cat">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)} · ${esc(t.sub_category || 'sans sous-catégorie')}</div></div>
         <div class="day-tx-amt amt-out">-${fmtD(Math.abs(Number(t.amount)))}</div>
