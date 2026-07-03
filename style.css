@@ -1692,13 +1692,18 @@ body::after {
 }
 .bud-sub-row {
   display: grid;
-  grid-template-columns: 1fr 70px auto 90px;
+  grid-template-columns: 1fr 70px auto 90px 30px;
   gap: 10px;
   align-items: center;
   padding: 6px 0;
   border-bottom: 1px solid var(--border-soft);
   font-size: 13px;
 }
+.bud-sub-del {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--muted); font-size: 14px; padding: 4px; border-radius: 6px; line-height: 1;
+}
+.bud-sub-del:hover { color: var(--tender-rose); background: var(--tender-rose-soft); }
 .bud-sub-row:last-child { border-bottom: none; }
 .bud-sub-cat { display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bud-sub-inp {
@@ -1748,7 +1753,7 @@ body::after {
 }
 @media (max-width: 900px) {
   .bud-sub-row {
-    grid-template-columns: 1fr 60px auto 80px;
+    grid-template-columns: 1fr 60px auto 80px 26px;
     gap: 6px;
     font-size: 12px;
   }

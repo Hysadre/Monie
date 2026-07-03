@@ -4095,6 +4095,7 @@ function renderBudget() {
                        style="width:58px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
                 <span style="font-size:11px;color:var(--muted)">€</span>
               </div>
+              <button class="bud-sub-del" onclick="deleteSubBudgetLine('${blocKey}',${i})" title="Supprimer cette ligne">🗑</button>
             </div>`;
         }).join('')}
         <div class="bud-sub-total">
@@ -4139,6 +4140,21 @@ function updateSubBudget(blocKey, index, newPct) {
     budgetData.sub_budget = subBudget;
     saveBudgetPrep();          // enregistre dans budget_mensuel (mois affiché)
     renderBudget();
+  } catch (e) { console.error(e); }
+}
+// Supprime une ligne de la répartition détaillée (ex : fusionner « restos » dans Alimentation)
+function deleteSubBudgetLine(blocKey, index) {
+  try {
+    let subBudget = budgetData.sub_budget;
+    if (!subBudget) subBudget = JSON.parse(JSON.stringify(DEFAULT_SUB_PCT));
+    if (subBudget[blocKey] && subBudget[blocKey][index]) {
+      const removed = subBudget[blocKey][index];
+      subBudget[blocKey].splice(index, 1);
+      budgetData.sub_budget = subBudget;
+      saveBudgetPrep();
+      renderBudget();
+      toast(`✓ Ligne « ${removed.cat}${removed.note ? ' ' + removed.note : ''} » supprimée`, 'success');
+    }
   } catch (e) { console.error(e); }
 }
 // Saisie du MONTANT en € → convertit en % automatiquement
