@@ -2744,3 +2744,60 @@ body::after {
   .cal-day { min-height: 40px; }
   .cal-day-num { font-size: 11px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ✨ MICRO-ANIMATIONS (intégrées, ciblées, sûres)
+   Aucune boucle JS, aucun overlay qui bloque les clics.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Boutons : petit enfoncement au clic (ressenti tactile) */
+.btn-primary:active,
+.btn-ghost:active,
+.btn-auth:active,
+.dash-view-btn:active,
+.goal-btn:active,
+.bnav-btn:active { transform: scale(0.96); }
+
+/* Cartes KPI : léger soulèvement au survol (transition douce) */
+.kpi { transition: transform 0.18s cubic-bezier(.34,1.4,.64,1), box-shadow 0.18s, border-color 0.15s; }
+.kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+
+/* Onglet actif dans la nav : petit rebond du libellé */
+.nav-btn.active { animation: navPop 0.3s ease; }
+@keyframes navPop { from { transform: translateX(-3px); } to { transform: translateX(0); } }
+
+/* Jour de calendrier fraîchement sélectionné : « pop » (classe posée par le JS) */
+.cal-day.day-pop { animation: dayPop 0.32s cubic-bezier(.34,1.56,.64,1); }
+@keyframes dayPop { 0% { transform: scale(0.8); } 55% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+/* Compteurs animés : chiffres à chasse fixe pour éviter le tremblement */
+.counting { font-variant-numeric: tabular-nums; }
+
+/* Jauge d'objectif : reflet lumineux qui balaie (CSS pur, ciblé) */
+#dash-goal-fill { position: relative; overflow: hidden; }
+#dash-goal-fill::after {
+  content: ''; position: absolute; inset: 0;
+  width: 40px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
+  transform: translateX(-160%);
+  animation: barSheen 2.8s ease-in-out 1s infinite;
+  pointer-events: none;
+}
+@keyframes barSheen { 0% { transform: translateX(-160%); } 55%, 100% { transform: translateX(360%); } }
+
+/* Modales : apparition douce (le voile ET la boîte) */
+.modal-overlay { animation: overlayIn 0.2s ease; }
+.modal-overlay .modal-box { animation: boxIn 0.28s cubic-bezier(.34,1.5,.64,1); }
+@keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes boxIn { from { opacity: 0; transform: translateY(14px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+/* Lignes de tableau / listes : apparition douce (sans stagger coûteux) */
+.day-tx-item { transition: background 0.15s, transform 0.12s; }
+.day-tx-item:active { transform: scale(0.99); }
+
+/* Respecte le réglage système « réduire les animations » */
+@media (prefers-reduced-motion: reduce) {
+  .nav-btn.active, .cal-day.day-pop, #dash-goal-fill::after,
+  .modal-overlay, .modal-overlay .modal-box { animation: none !important; }
+  .kpi, .btn-primary, .btn-ghost { transition: none !important; }
+}

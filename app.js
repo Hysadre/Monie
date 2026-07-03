@@ -7,6 +7,30 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const $ = id => document.getElementById(id);
 const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+
+// Compteur animé SÛR : requestAnimationFrame, annulable par token, aucun MutationObserver
+// (donc aucune boucle possible). render(v) transforme le nombre courant en texte.
+const _prefersReduce = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function animateNumber(el, to, render) {
+  if (!el) return;
+  to = Number(to) || 0;
+  const token = (el.__animToken || 0) + 1;
+  el.__animToken = token;
+  const from = (typeof el.__animVal === 'number') ? el.__animVal : to; // 1re fois : pas d'animation
+  el.__animVal = to;
+  if (_prefersReduce() || from === to) { el.textContent = render(to); return; }
+  el.classList.add('counting');
+  const dur = 600, t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  function step(now) {
+    if (el.__animToken !== token) return; // une valeur plus récente a pris le relais → on abandonne
+    let p = Math.min(1, (now - t0) / dur);
+    p = 1 - Math.pow(1 - p, 3);
+    el.textContent = render(from + (to - from) * p);
+    if (p < 1) requestAnimationFrame(step);
+    else { el.textContent = render(to); el.classList.remove('counting'); }
+  }
+  requestAnimationFrame(step);
+}
 const fmt = n => (n < 0 ? '-' : '') + Math.abs(Math.round(n)).toLocaleString('fr-FR') + ' €';
 const fmtD = n => (n < 0 ? '-' : '') + Math.abs(n).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' €';
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -1179,6 +1203,7 @@ function renderCalendar() {
     const isToday = day === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
     const d = document.createElement('div');
     d.className = 'cal-day' + (isToday ? ' today' : '') + (selectedDay === dateStr ? ' selected' : '');
+    d.dataset.date = dateStr;
     d.onclick = () => selectDay(dateStr);
     d.innerHTML = `<div class="cal-day-num">${day}</div>` +
       (dIn > 0 ? `<div class="cal-day-in">+${Math.round(dIn)}</div>` : '') +
@@ -1189,6 +1214,9 @@ function renderCalendar() {
 function selectDay(dateStr) {
   selectedDay = dateStr;
   renderCalendar();
+  // Petit « pop » sur le jour fraîchement sélectionné (après re-render)
+  const cell = document.querySelector(`.cal-day[data-date="${dateStr}"]`);
+  if (cell) { cell.classList.remove('day-pop'); void cell.offsetWidth; cell.classList.add('day-pop'); }
   const [y, m, d] = dateStr.split('-');
   const dayLbl = `${parseInt(d)} ${MONTHS[parseInt(m) - 1]} ${y}`;
   set('day-detail-date', dayLbl);
@@ -1495,13 +1523,13 @@ function renderDashboard() {
   const totalIn = monthTx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
   const totalOut = monthTx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
   const bal = totalIn - totalOut;
-  set('dash-rev', fmt(totalIn));
-  set('dash-dep', fmt(totalOut));
+  animateNumber($('dash-rev'), totalIn, v => fmt(v));
+  animateNumber($('dash-dep'), totalOut, v => fmt(v));
   const balEl = $('dash-bal');
-  balEl.textContent = (bal >= 0 ? '+' : '') + fmt(bal);
+  animateNumber(balEl, bal, v => (v >= 0 ? '+' : '') + fmt(v));
   balEl.style.color = bal >= 0 ? 'var(--sage)' : 'var(--tender-rose)';
   set('dash-bal-hint', isGlobal ? (bal >= 0 ? 'Global positif' : 'Global négatif') : (bal >= 0 ? 'Positif ce mois' : 'Négatif ce mois'));
-  set('dash-count', monthTx.length);
+  animateNumber($('dash-count'), monthTx.length, v => String(Math.round(v)));
   set('dash-rev-hint', `${monthTx.filter(t => t.type === 'entree').length} entrées`);
   set('dash-dep-hint', `${monthTx.filter(t => t.type === 'sortie').length} sorties`);
 
