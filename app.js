@@ -1367,7 +1367,7 @@ async function quickAddTx() {
   selectDay(selectedDay);
   if (typeof renderTransactionsList === 'function') renderTransactionsList();
   if (typeof renderDashboard === 'function') renderDashboard();
-  if (typeof renderBudgetStatus === 'function') renderBudgetStatus('budget-alert-page');
+  if (typeof renderBudgetStatus === 'function') renderBudgetStatus('budget-alert-page', false, (typeof budgetKey === 'function' ? budgetKey() : undefined));
   if (typeof renderEpargne === 'function') renderEpargne();
 }
 // Ajoute un montant à un objectif d'épargne (met à jour la jauge + trace la contribution)
@@ -3781,10 +3781,10 @@ function computeBudgetStatus(monthKey) {
   return { rev, key, spent, spentByCat, budgetByCat, budget, aPrevoir };
 }
 // compact=true (dashboard) : n'affiche que les postes à surveiller. Sinon : tous les postes.
-function renderBudgetStatus(containerId, compact) {
+function renderBudgetStatus(containerId, compact, monthKey) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  const { rev, spent, spentByCat, budgetByCat, budget, aPrevoir } = computeBudgetStatus();
+  const { rev, spent, spentByCat, budgetByCat, budget, aPrevoir, key } = computeBudgetStatus(monthKey);
   if (!rev) { el.innerHTML = '<div class="empty-sub">Renseigne ton revenu mensuel dans Gestion du budget pour activer le suivi du mois.</div>'; return; }
   const totalBudgetDep = budget.charges + budget.plaisir;
   const totalSpentDep = spent.charges + spent.plaisir;
@@ -3815,13 +3815,18 @@ function renderBudgetStatus(containerId, compact) {
   };
   el.innerHTML = `
     <div style="text-align:center;padding:12px;border-radius:12px;background:${reste >= 0 ? 'rgba(127,184,158,0.12)' : 'rgba(229,57,53,0.1)'};margin-bottom:14px">
-      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Reste à dépenser ce mois</div>
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Reste à dépenser · ${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}</div>
       <div style="font-size:26px;font-weight:900;color:${reste >= 0 ? 'var(--sage)' : '#E53935'};font-family:var(--fm)">${fmt(reste)}</div>
       <div style="font-size:11px;color:var(--muted)">${fmt(totalSpentDep)} dépensés${aPrevoir > 0 ? ' · ' + fmt(aPrevoir) + ' à prévoir' : ''} · budget ${fmt(totalBudgetDep)}</div>
     </div>
     ${compact && !rows.length ? '<div class="empty-sub" style="text-align:center">👍 Tout est dans le budget pour l\'instant</div>' : ''}
     ${rows.map(bar).join('')}
-    ${!compact ? '<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px">🌱 Épargne visée : ' + fmt(budget.epargne) + '/mois</div>' : ''}`;
+    ${!compact ? `<div style="margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--sage-soft);font-size:12px;line-height:1.6">
+      <div style="font-weight:800;margin-bottom:2px">🌱 Épargne — ${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}</div>
+      <div style="display:flex;justify-content:space-between"><span>🎯 Cible (${rev > 0 ? Math.round(budget.epargne / rev * 100) : 0}% de tes revenus)</span><b style="font-family:var(--fm)">${fmt(budget.epargne)}</b></div>
+      <div style="display:flex;justify-content:space-between"><span>✅ Réel mis de côté ce mois</span><b style="font-family:var(--fm);color:${spent.epargne >= budget.epargne ? 'var(--sage)' : 'var(--ink)'}">${fmt(spent.epargne)}</b></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">${spent.epargne >= budget.epargne ? '🎉 Tu dépasses ta cible d\'épargne, bravo !' : 'Il te manque ' + fmt(budget.epargne - spent.epargne) + ' pour atteindre ta cible.'}</div>
+    </div>` : ''}`;
 }
 let _budgetAlertShown = false;
 function budgetStartupAlert() {
@@ -3959,7 +3964,7 @@ function renderBudget() {
 
   const rev = parseFloat($('bud-revenu').value) || 0;
   budgetData.revenu_mensuel = rev;
-  renderBudgetStatus('budget-alert-page');
+  renderBudgetStatus('budget-alert-page', false, budgetKey());
   renderBudgetEvents();
   const c = budgetData.pct_charges;
   const p = budgetData.pct_plaisir;
@@ -4033,6 +4038,7 @@ function renderBudget() {
             Alloué : ${totalBlocPct}% ${blocOK ? '✓' : '⚠'}
           </div>
         </div>
+        ${!blocOK ? `<div style="font-size:11px;color:#B7791F;background:rgba(232,184,77,0.16);padding:7px 10px;border-radius:8px;margin-bottom:10px;line-height:1.5">⚠ Ta répartition détaillée fait <b>${totalBlocPct}%</b> (${fmt(totalBlocAmt)}) alors que ta cible ${blocLabel.replace(/^[^ ]+ /, '').toLowerCase()} est <b>${blocPct}%</b> (${fmt(blocAmt)}). Ajuste les % ci-dessous pour retomber sur ${blocPct}%, ou modifie ta cible en haut de page.</div>` : ''}
         ${items.map((it, i) => {
           const amt = Math.round(rev * it.pct / 100);
           return `
