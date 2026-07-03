@@ -1,0 +1,80 @@
+/* ═══════════════════════════════════════════════════════════════
+   MONIE BOOST — feuille d'animations à ajouter à ta plateforme
+   À inclure APRÈS style.css :
+     <link rel="stylesheet" href="monie-boost.css">
+   Aucune classe existante n'est cassée : on ne fait qu'ajouter.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ---- Keyframes ---- */
+@keyframes mb-shimmer { 0% { background-position:-500px 0; } 100% { background-position:500px 0; } }
+@keyframes mb-sheen   { 0% { transform:translateX(-140%); } 55%,100% { transform:translateX(320%); } }
+@keyframes mb-pop     { 0% { transform:scale(.55); opacity:0; } 60% { transform:scale(1.12); } 100% { transform:scale(1); opacity:1; } }
+@keyframes mb-float   { 0% { opacity:0; transform:translate(-50%,0) scale(.9); } 20% { opacity:1; } 100% { opacity:0; transform:translate(-50%,-48px) scale(1.05); } }
+@keyframes mb-toastIn { from { opacity:0; transform:translate(-50%,14px) scale(.96); } to { opacity:1; transform:translate(-50%,0) scale(1); } }
+
+/* ---- Micro-interactions : les boutons « s'enfoncent » au clic ---- */
+.btn-primary, .btn-ghost, .btn-auth, .nav-btn, .bnav-btn, .dash-view-btn, .cal-day, .kpi-click {
+  transition: transform .12s cubic-bezier(.34,1.56,.64,1), background .15s, box-shadow .15s, border-color .15s, color .15s;
+}
+.btn-primary:active, .btn-auth:active, .dash-view-btn:active { transform: scale(.95) !important; }
+.btn-ghost:active { transform: scale(.96) !important; }
+
+/* ---- Cartes qui se soulèvent au survol ---- */
+.kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+.card { transition: box-shadow .2s, transform .2s; }
+
+/* ---- Jour de calendrier sélectionné : petit « pop » ---- */
+.cal-day.mb-just-selected { animation: mb-pop .3s ease; }
+
+/* ---- Onglet actif : le libellé glisse doucement (renforce fadeUp existant) ---- */
+.nav-btn.active { animation: mb-navpop .3s ease; }
+@keyframes mb-navpop { from { transform: translateX(-4px); } to { transform: translateX(0); } }
+
+/* ---- Barres de progression : reflet lumineux qui balaie ---- */
+/* Ajoute la classe .mb-sheen à n'importe quelle barre de remplissage,
+   ou laisse monie-boost.js l'appliquer automatiquement. */
+.mb-sheen { position: relative; overflow: hidden; }
+.mb-sheen::after {
+  content: ''; position: absolute; inset: 0;
+  width: 46px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
+  transform: translateX(-140%);
+  animation: mb-sheen 2.6s ease-in-out 1s infinite;
+  pointer-events: none;
+}
+
+/* ---- Compteur en cours d'animation : léger « tabulaire » pour éviter le tremblement ---- */
+.mb-counting { font-variant-numeric: tabular-nums; }
+
+/* ---- Skeleton shimmer (affiché pendant le chargement d'un onglet) ---- */
+.mb-skel-overlay { position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column; gap: 14px; }
+.mb-skel {
+  border-radius: var(--radius, 16px);
+  background: linear-gradient(90deg, var(--card) 25%, var(--card-hover, #f0f0f0) 50%, var(--card) 75%);
+  background-size: 900px 100%;
+  animation: mb-shimmer 1.3s infinite linear;
+  border: 1px solid var(--border-soft);
+}
+
+/* ---- Toasts (si tu utilises le helper monieToast de monie-boost.js) ---- */
+.mb-toast {
+  position: fixed; bottom: 28px; left: 50%; z-index: 9999;
+  transform: translateX(-50%);
+  padding: 12px 22px; border-radius: 100px;
+  font-family: var(--ff, sans-serif); font-weight: 800; font-size: 14px;
+  color: #fff; box-shadow: var(--shadow-lg, 0 12px 30px rgba(0,0,0,.2));
+  animation: mb-toastIn .35s cubic-bezier(.34,1.56,.64,1);
+  pointer-events: none;
+}
+.mb-toast.success { background: var(--sage, #34D399); color: #0F172A; }
+.mb-toast.error   { background: var(--tender-rose, #C084FC); color: #0F172A; }
+.mb-toast.info    { background: var(--rose, #A78BFA); color: #fff; }
+
+/* ---- Feedback flottant « +50 € » ---- */
+.mb-float { position: absolute; z-index: 9999; font-weight: 900; font-size: 16px; pointer-events: none; animation: mb-float 1s ease forwards; }
+
+/* ---- Respecte le réglage système « réduire les animations » ---- */
+@media (prefers-reduced-motion: reduce) {
+  .mb-sheen::after, .cal-day.mb-just-selected, .nav-btn.active { animation: none !important; }
+  .btn-primary, .btn-ghost, .btn-auth, .nav-btn, .kpi { transition: none !important; }
+}
