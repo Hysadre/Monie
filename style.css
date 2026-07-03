@@ -441,7 +441,7 @@ body::after {
   will-change: transform;
 }
 .mobile-header.header-hidden {
-  transform: translateY(-100%);
+  transform: translate3d(0, -100%, 0);
 }
 .mobile-menu-btn {
   width: 44px;
@@ -479,6 +479,14 @@ body::after {
   padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
   z-index: 100;
   box-shadow: 0 -4px 20px rgba(45,55,72,0.06);
+  /* iOS : promotion en couche GPU pour que la barre reste VRAIMENT collée
+     en bas pendant le scroll inertiel / hard-scroll (sinon elle « flotte »
+     et se superpose au contenu pendant le rebond) */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 .bnav-btn {
   flex: 1;
@@ -514,6 +522,9 @@ body::after {
   border: 1px solid var(--border-soft);
 }
 .kpi:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+.kpi-click { cursor: pointer; }
+.kpi-click:hover { border-color: var(--rose); }
+.kpi-click:active { transform: translateY(0); }
 .kpi-label {
   font-size: 11px;
   font-weight: 600;
@@ -689,6 +700,7 @@ body::after {
 .day-tx-amt { font-family: var(--fm); font-weight: 700; font-size: 15px; flex-shrink: 0; }
 .amt-in { color: var(--sage); }
 .amt-out { color: var(--tender-rose); }
+.amt-save { color: #9B7FC0; }
 .tx-source-badge {
   display: inline-block;
   font-size: 9px;
@@ -732,9 +744,9 @@ body::after {
   color: var(--rose);
   font-family: var(--ff);
   font-size: 13px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
   transition: all 0.18s;
   margin-bottom: 12px;
 }
@@ -773,11 +785,11 @@ body::after {
   gap: 6px;
 }
 .qa-label {
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--ink);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
 }
 .qa-type-toggle {
   display: grid;
@@ -898,6 +910,57 @@ body::after {
 .avatar-big-preview img {
   width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
 }
+/* Emoji parfaitement centré (sinon il « flotte » selon la police système) */
+.avatar-big-preview { line-height: 1; }
+.user-avatar { line-height: 1; }
+
+/* ─── Recadrage photo de profil ─── */
+.crop-viewport {
+  position: relative;
+  width: 260px;
+  max-width: 78vw;
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #1b1b1f;
+  touch-action: none;             /* on gère le drag nous-mêmes */
+  cursor: grab;
+  user-select: none;
+}
+.crop-viewport:active { cursor: grabbing; }
+.crop-img {
+  position: absolute;
+  top: 0; left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+/* Anneau qui matérialise la zone ronde finale */
+.crop-ring {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.42) inset;
+  -webkit-mask:
+    radial-gradient(circle at center, transparent 49%, #000 50%);
+          mask:
+    radial-gradient(circle at center, transparent 49%, #000 50%);
+}
+.crop-zoom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px auto 4px;
+  width: 260px;
+  max-width: 78vw;
+}
+.crop-zoom input[type="range"] {
+  flex: 1;
+  accent-color: var(--rose);
+}
 
 .avatar-pick {
   width: 44px;
@@ -1013,6 +1076,89 @@ body::after {
   cursor: pointer;
 }
 .select:focus { outline: none; border-color: var(--rose); }
+/* Petit select intégré dans l'en-tête d'un graphe (filtre propre au graphe) */
+.select-mini {
+  padding: 5px 26px 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 100px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  min-height: 0;
+  max-width: 62vw;
+}
+.select-mini:focus { border-color: var(--rose); }
+
+/* Petit tableau (top dépenses, etc.) */
+.mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 460px;
+}
+.mini-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 6px 10px;
+  border-bottom: 1.5px solid var(--border);
+}
+.mini-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: middle;
+}
+.mini-table tbody tr:hover { background: var(--rose-soft); }
+
+/* ─── Tableau des transactions ─── */
+.tx-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tx-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 720px;
+}
+.tx-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card);
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-bottom: 1.5px solid var(--border);
+}
+.tx-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: middle;
+}
+.tx-table tbody tr:hover { background: var(--rose-soft); }
+.tx-table tbody tr.selected { background: var(--rose-soft); }
+.tx-cell-label { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-weight: 500; }
+.tx-sub-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 100px;
+  padding: 1px 7px;
+}
+.tx-cat-select {
+  padding: 5px 8px;
+  font-size: 12px;
+  width: 100%;
+  min-width: 170px;
+}
 
 /* ─── DROP ZONE ─── */
 .drop-zone {
@@ -1310,6 +1456,13 @@ body::after {
   height: 44px !important;
   flex-shrink: 0;
 }
+/* iPhone : cartes pleine largeur → le mini-graphe respire, plus de superposition */
+@media (max-width: 560px) {
+  .perf-grid { grid-template-columns: 1fr; gap: 10px; margin-bottom: 16px; }
+  .perf-card { padding: 15px 16px; }
+  .perf-val { font-size: 20px; }
+  .perf-mini { width: 130px !important; height: 46px !important; }
+}
 
 /* ─── VUE ANNUELLE TABLE ─── */
 .annuelle-table {
@@ -1563,8 +1716,10 @@ body::after {
   transition: all 0.15s;
 }
 .goal-card:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
-.goal-card.achieved { opacity: 0.75; border-left-color: var(--gold); background: var(--gold-soft); }
-.goal-card.abandoned { opacity: 0.5; border-left-color: var(--dim); }
+/* On garde une teinte distincte SANS griser (les boutons doivent rester bien lisibles/cliquables) */
+.goal-card.achieved { border-left-color: var(--gold); background: var(--gold-soft); }
+.goal-card.abandoned { border-left-color: var(--dim); background: var(--bg); }
+.goal-card.abandoned .goal-name { color: var(--muted); }
 
 .goal-hd {
   display: flex;
@@ -2266,6 +2421,11 @@ body::after {
     left: 0;
     right: 0;
     z-index: 95;
+    /* Même promotion GPU que la bottom-nav → pas de jitter au scroll iOS */
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
   }
   .main {
     margin-left: 0;

@@ -778,14 +778,124 @@ function resizeImage(file, maxSize = 400) {
   });
 }
 
-async function uploadAvatar(file) {
+// ─── Recadrage interactif de la photo de profil (pan + zoom → carré 400×400) ───
+const _crop = { nw: 0, nh: 0, base: 0, zoom: 1, tx: 0, ty: 0, dragging: false, startX: 0, startY: 0, startTx: 0, startTy: 0, VP: 260 };
+
+function openAvatarCropper(file) {
   if (!file) return;
   if (!currentUser) return;
   if (!file.type.startsWith('image/')) { toast('Ce n\'est pas une image', 'error'); return; }
-  if (file.size > 8 * 1024 * 1024) { toast('Image trop lourde (>8 Mo)', 'error'); return; }
-  toast('📷 Redimensionnement…');
+  if (file.size > 12 * 1024 * 1024) { toast('Image trop lourde (>12 Mo)', 'error'); return; }
+  _wireCropper();
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = $('crop-img');
+    img.onload = () => {
+      _crop.nw = img.naturalWidth;
+      _crop.nh = img.naturalHeight;
+      // VP réel = largeur rendue du viewport (peut être réduit sur petit écran)
+      const vpEl = $('crop-viewport');
+      _crop.VP = vpEl ? vpEl.clientWidth : 260;
+      // « cover » : l'image remplit toujours le carré
+      _crop.base = Math.max(_crop.VP / _crop.nw, _crop.VP / _crop.nh);
+      _crop.zoom = 1;
+      const zin = $('crop-zoom');
+      if (zin) zin.value = '1';
+      // centrer
+      const s = _crop.base;
+      _crop.tx = (_crop.VP - _crop.nw * s) / 2;
+      _crop.ty = (_crop.VP - _crop.nh * s) / 2;
+      _applyCropTransform();
+    };
+    img.src = e.target.result;
+    $('crop-modal').style.display = 'flex';
+  };
+  reader.onerror = () => toast('Lecture de l\'image impossible', 'error');
+  reader.readAsDataURL(file);
+}
+
+function _applyCropTransform() {
+  const s = _crop.base * _crop.zoom;
+  const w = _crop.nw * s, h = _crop.nh * s;
+  // borner pour que l'image couvre toujours le viewport
+  _crop.tx = Math.min(0, Math.max(_crop.VP - w, _crop.tx));
+  _crop.ty = Math.min(0, Math.max(_crop.VP - h, _crop.ty));
+  const img = $('crop-img');
+  if (img) img.style.transform = `translate(${_crop.tx}px, ${_crop.ty}px) scale(${s})`;
+}
+
+function _cropPointerDown(ev) {
+  _crop.dragging = true;
+  const p = ev.touches ? ev.touches[0] : ev;
+  _crop.startX = p.clientX; _crop.startY = p.clientY;
+  _crop.startTx = _crop.tx; _crop.startTy = _crop.ty;
+}
+function _cropPointerMove(ev) {
+  if (!_crop.dragging) return;
+  const p = ev.touches ? ev.touches[0] : ev;
+  _crop.tx = _crop.startTx + (p.clientX - _crop.startX);
+  _crop.ty = _crop.startTy + (p.clientY - _crop.startY);
+  _applyCropTransform();
+  if (ev.cancelable) ev.preventDefault();
+}
+function _cropPointerUp() { _crop.dragging = false; }
+
+// Câblage des évènements (une seule fois)
+function _wireCropper() {
+  const vp = $('crop-viewport');
+  if (!vp || vp.dataset.wired) return;
+  vp.dataset.wired = '1';
+  vp.addEventListener('mousedown', _cropPointerDown);
+  window.addEventListener('mousemove', _cropPointerMove);
+  window.addEventListener('mouseup', _cropPointerUp);
+  vp.addEventListener('touchstart', _cropPointerDown, { passive: true });
+  vp.addEventListener('touchmove', _cropPointerMove, { passive: false });
+  vp.addEventListener('touchend', _cropPointerUp);
+  const zin = $('crop-zoom');
+  if (zin) zin.addEventListener('input', () => {
+    // zoom centré sur le milieu du viewport
+    const oldS = _crop.base * _crop.zoom;
+    const newZoom = parseFloat(zin.value);
+    const newS = _crop.base * newZoom;
+    const cx = _crop.VP / 2, cy = _crop.VP / 2;
+    // garder le point central fixe
+    _crop.tx = cx - ((cx - _crop.tx) / oldS) * newS;
+    _crop.ty = cy - ((cy - _crop.ty) / oldS) * newS;
+    _crop.zoom = newZoom;
+    _applyCropTransform();
+  });
+}
+
+function closeAvatarCropper() {
+  const m = $('crop-modal');
+  if (m) m.style.display = 'none';
+  const inp = $('avatar-file');
+  if (inp) inp.value = '';
+}
+
+async function confirmAvatarCrop() {
+  const OUT = 400;
+  const canvas = document.createElement('canvas');
+  canvas.width = OUT; canvas.height = OUT;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  const s = _crop.base * _crop.zoom;
+  // zone source (en px image) correspondant au carré viewport
+  const sx = -_crop.tx / s;
+  const sy = -_crop.ty / s;
+  const sSize = _crop.VP / s;
+  const img = $('crop-img');
   try {
-    const blob = await resizeImage(file, 400);
+    ctx.drawImage(img, sx, sy, sSize, sSize, 0, 0, OUT, OUT);
+  } catch (e) { toast('Recadrage impossible', 'error'); return; }
+  closeAvatarCropper();
+  canvas.toBlob(blob => { if (blob) uploadAvatarBlob(blob); }, 'image/jpeg', 0.88);
+}
+
+async function uploadAvatarBlob(blob) {
+  if (!currentUser || !blob) return;
+  toast('📷 Envoi de la photo…');
+  try {
     const ext = 'jpg';
     const path = `${currentUser.id}/avatar-${Date.now()}.${ext}`;
     // Supprimer l'ancien avatar avant d'uploader (économise le stockage)
@@ -1094,14 +1204,19 @@ function selectDay(dateStr) {
     dayTx.forEach(t => {
       const el = document.createElement('div');
       el.className = 'day-tx-item';
+      el.style.cursor = 'pointer';
+      el.title = 'Cliquer pour modifier';
+      el.onclick = () => openTxEdit(t.id);
       const badge = t.source === 'manual' ? '<span class="tx-source-badge badge-manual">saisi</span>' : '<span class="tx-source-badge badge-import">import</span>';
+      const sign = t.type === 'entree' ? '+' : (t.type === 'epargne' ? '' : '-');
       el.innerHTML = `
-        <div class="day-tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
+        <div class="day-tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}" title="${esc(t.payment_method || 'moyen non précisé')}">${payMethodIcon(t.payment_method) || catIcon(t.category)}</div>
         <div class="day-tx-info">
           <div class="day-tx-label">${esc(t.label)}${badge}</div>
           <div class="day-tx-cat">${esc(t.category)}${t.sub_category ? ' · ' + esc(t.sub_category) : ''}</div>
         </div>
-        <div class="day-tx-amt ${t.type === 'entree' ? 'amt-in' : 'amt-out'}">${t.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(Number(t.amount)))}</div>
+        <div class="day-tx-amt ${t.type === 'entree' ? 'amt-in' : t.type === 'epargne' ? 'amt-save' : 'amt-out'}">${sign}${fmtD(Math.abs(Number(t.amount)))}</div>
+        <span style="color:var(--rose);font-size:14px;margin-left:6px">✏️</span>
       `;
       list.appendChild(el);
     });
@@ -1147,17 +1262,29 @@ function updatePayMethodOptions() {
   const sel = $('qa-paymethod');
   if (!sel) return;
   const type = document.querySelector('input[name="qa-type"]:checked')?.value || 'sortie';
-  const methods = type === 'sortie' ? PAY_METHODS_SORTIE : PAY_METHODS_ENTREE;
+  const methods = type === 'entree' ? PAY_METHODS_ENTREE : PAY_METHODS_SORTIE;
   const currentValue = sel.value;
   sel.innerHTML = methods.map(m => `<option value="${m.v}">${m.l}</option>`).join('');
-  // Garder la valeur si toujours possible, sinon défaut (carte pour sortie, virement pour entrée)
   if (methods.find(m => m.v === currentValue)) {
     sel.value = currentValue;
   } else {
-    sel.value = type === 'sortie' ? 'carte' : 'virement';
+    sel.value = type === 'entree' ? 'virement' : type === 'epargne' ? 'virement' : 'carte';
   }
   const lbl = $('qa-paymethod-label');
-  if (lbl) lbl.textContent = type === 'sortie' ? '💳 Payé avec :' : '💰 Reçu par :';
+  if (lbl) lbl.textContent = type === 'entree' ? 'Reçu par' : type === 'epargne' ? 'Mis de côté via' : 'Payé avec';
+  // Type Épargne → afficher le choix « classique / pour un objectif »
+  const epBox = $('qa-epargne-box');
+  if (epBox) {
+    epBox.style.display = type === 'epargne' ? '' : 'none';
+    if (type === 'epargne') {
+      const sel2 = $('qa-epargne-goal');
+      if (sel2 && sel2.options.length <= 1) {
+        const actifs = (typeof goalsList !== 'undefined' ? goalsList : []).filter(g => g.statut === 'en_cours');
+        sel2.innerHTML = '<option value="">💰 Épargne classique (sans objectif)</option>' +
+          actifs.map(g => `<option value="${g.id}">${g.emoji || '🎯'} ${esc(g.nom)}</option>`).join('');
+      }
+    }
+  }
 }
 document.addEventListener('change', e => {
   if (e.target.matches('input[name="qa-type"]')) populateCategorySelects();
@@ -1200,16 +1327,30 @@ async function quickAddTx() {
   const { data, error } = await sb.from('transactions').insert(newTx).select().single();
   if (error) { toast('Erreur : ' + error.message, 'error'); return; }
   transactions.unshift(data);
+  // Épargne pour un objectif → alimente la jauge de la page Épargne
+  if (type === 'epargne') {
+    const goalId = $('qa-epargne-goal') ? $('qa-epargne-goal').value : '';
+    if (goalId) { await contributeToGoal(goalId, absAmt); }
+  }
   $('qa-label').value = '';
   $('qa-amount').value = '';
   toast('✓ Ajouté dans le calendrier et les transactions', 'success');
   renderCalendar();
   selectDay(selectedDay);
-  // Rafraîchir la vue Transactions pour que la nouvelle op y apparaisse
   if (typeof renderTransactionsList === 'function') renderTransactionsList();
-  // Rafraîchir le dashboard + le suivi budget en temps réel (les barres s'animent selon le poste touché)
   if (typeof renderDashboard === 'function') renderDashboard();
   if (typeof renderBudgetStatus === 'function') renderBudgetStatus('budget-alert-page');
+  if (typeof renderEpargne === 'function') renderEpargne();
+}
+// Ajoute un montant à un objectif d'épargne (met à jour la jauge + trace la contribution)
+async function contributeToGoal(goalId, montant) {
+  const g = goalsList.find(x => x.id === goalId);
+  if (!g) return;
+  const newDeja = Number(g.deja_epargne || 0) + montant;
+  const r = await dbGuard(sb.from('epargne_objectifs').update({ deja_epargne: newDeja }).eq('id', goalId), 'Maj objectif échouée');
+  if (!r.ok) return;
+  await sb.from('epargne_contributions').insert({ objectif_id: goalId, user_id: currentUser.id, montant });
+  g.deja_epargne = newDeja;
 }
 
 // Switch entre les 3 vues du Dashboard : Global / Mensuel / Annuel
@@ -1225,6 +1366,15 @@ function setDashView(view) {
   else if (view === 'annuel') showTab('annuelle');
 }
 
+// Masque/affiche la liste des opérations du jour (pour ne pas occuper toute la place)
+function toggleDayList() {
+  const list = $('day-tx-list');
+  const btn = $('day-tx-toggle');
+  if (!list) return;
+  const hidden = list.style.display === 'none';
+  list.style.display = hidden ? '' : 'none';
+  if (btn) btn.textContent = hidden ? 'Masquer la liste' : 'Afficher la liste';
+}
 // Toggle affichage/masquage du formulaire de saisie rapide (calendrier)
 function toggleQuickAdd() {
   const box = document.getElementById('quick-add-box');
@@ -1274,6 +1424,47 @@ function changeDashMonth(dir) {
   }
   renderDashboard();
 }
+// Renvoie les transactions dans le périmètre courant du dashboard (même logique que renderDashboard)
+function getDashScopeTx() {
+  const isGlobalYear = dashYear === -1;
+  const isGlobalMonth = dashMonth === -1;
+  if (isGlobalYear && isGlobalMonth) return transactions.slice();
+  if (isGlobalYear) return transactions.filter(t => parseInt(t.date_op.slice(5, 7)) === dashMonth + 1);
+  if (isGlobalMonth) return transactions.filter(t => t.date_op.startsWith(String(dashYear)));
+  const monthPrefix = `${dashYear}-${String(dashMonth + 1).padStart(2, '0')}`;
+  return transactions.filter(t => t.date_op.startsWith(monthPrefix));
+}
+
+// ─── Liste éditable des opérations derrière une carte KPI ───
+function openKpiList(kind) {
+  let scope = getDashScopeTx();
+  const titles = { entree: '💚 Entrées', sortie: '🌹 Dépenses', epargne: '🐷 Épargne', all: '📋 Toutes les opérations' };
+  if (kind !== 'all') scope = scope.filter(t => t.type === kind);
+  scope = scope.slice().sort((a, b) => (a.date_op < b.date_op ? 1 : a.date_op > b.date_op ? -1 : 0));
+  const isGlobal = dashYear === -1 || dashMonth === -1;
+  const periodLbl = isGlobal ? 'Global (tout l\'historique)' : `${MONTHS[dashMonth]} ${dashYear}`;
+  const total = scope.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  set('kpi-modal-title', titles[kind] || 'Opérations');
+  set('kpi-modal-sub', `${periodLbl} · ${scope.length} opération${scope.length > 1 ? 's' : ''} · ${fmt(total)}`);
+  const list = $('kpi-modal-list');
+  if (!scope.length) {
+    list.innerHTML = '<div class="empty-sub" style="padding:20px;text-align:center">Aucune opération sur cette période.</div>';
+  } else {
+    list.innerHTML = scope.map(t => {
+      const sign = t.type === 'entree' ? '+' : (t.type === 'epargne' ? '' : '-');
+      const amtCls = t.type === 'entree' ? 'amt-in' : t.type === 'epargne' ? 'amt-save' : 'amt-out';
+      return `<div class="day-tx-item" style="cursor:pointer" onclick="closeKpiList();openTxEdit('${t.id}')" title="Cliquer pour modifier">
+        <div class="day-tx-icon" style="background:${catColor(t.category)}18;color:${catColor(t.category)}">${catIcon(t.category)}</div>
+        <div class="day-tx-info"><div class="tx-label">${esc(t.label)}</div><div class="tx-cat">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)} · ${esc(t.category || 'Sans catégorie')}</div></div>
+        <div class="day-tx-amt ${amtCls}">${sign}${fmtD(Math.abs(Number(t.amount)))}</div>
+        <span style="color:var(--rose);font-size:14px;margin-left:6px">✏️</span>
+      </div>`;
+    }).join('');
+  }
+  $('kpi-modal').style.display = 'flex';
+}
+function closeKpiList() { const m = $('kpi-modal'); if (m) m.style.display = 'none'; }
+
 function renderDashboard() {
   const isGlobalYear = dashYear === -1;
   const isGlobalMonth = dashMonth === -1;
@@ -1324,28 +1515,10 @@ function renderDashboard() {
   // ═══ Suivi du budget du mois ═══
   renderBudgetStatus('budget-alert-dash', true);
 
-  // Évolution 12 mois : FIGÉE sur Jan-Déc / ou GLOBAL par année (2020→2026)
-  const evoLabels = [];
-  const evoIn = [];
-  const evoOut = [];
-  if (isGlobalYear) {
-    // Mode global : agrège par année 2020-2026
-    const yrs = [...new Set(transactions.map(t => t.date_op.slice(0, 4)))].sort();
-    yrs.forEach(y => {
-      evoLabels.push(y);
-      const ytx = transactions.filter(t => t.date_op.startsWith(y));
-      evoIn.push(ytx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0));
-      evoOut.push(ytx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0));
-    });
-  } else {
-    for (let m = 0; m < 12; m++) {
-      const key = `${dashYear}-${String(m + 1).padStart(2, '0')}`;
-      evoLabels.push(MONTHS_SHORT[m]);
-      const mtx = transactions.filter(t => t.date_op.startsWith(key));
-      evoIn.push(mtx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0));
-      evoOut.push(mtx.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0));
-    }
-  }
+  // Évolution : filtre PROPRE au graphe (30j / 6 mois / 12 mois), indépendant du filtre de page.
+  const { evoLabels, evoIn, evoOut } = buildEvoSeries(evoRange);
+  if ($('dash-evo-range')) $('dash-evo-range').value = evoRange;
+  if ($('dash-evo-year')) set('dash-evo-year', evoRange === '30d' ? '· 30 derniers jours' : evoRange === '12m' ? '· 12 derniers mois' : '· 6 derniers mois');
   // Totaux annuels (ou globaux si année=all)
   const yearTx = isGlobalYear ? transactions.slice() : transactions.filter(t => t.date_op.startsWith(String(dashYear)));
   const yearIn = yearTx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
@@ -1370,42 +1543,102 @@ function renderDashboard() {
     scales: { x: { ticks: { color: '#A0AEC0' }, grid: { display: false } }, y: { ticks: { color: '#A0AEC0', callback: v => v.toLocaleString('fr-FR') + ' €' }, grid: { color: '#F5E7EA' } } }
   });
 
-  // Répartition catégories (mois courant)
-  const catTotals = {};
-  monthTx.filter(t => t.type === 'sortie').forEach(t => {
-    catTotals[t.category] = (catTotals[t.category] || 0) + Math.abs(Number(t.amount));
-  });
-  const entries = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
-  updateChart('chart-categories', 'doughnut', {
-    labels: entries.map(e => e[0]),
-    datasets: [{ data: entries.map(e => e[1]), backgroundColor: entries.map(e => catColor(e[0])), borderWidth: 0 }]
-  }, { plugins: { legend: { display: false } }, cutout: '65%' });
+  // Répartition (mois courant) — 2 vues : Blocs (Charges/Plaisir/Épargne) ou Détail catégories
+  if ($('dash-cat-view')) $('dash-cat-view').value = catChartView;
   const leg = $('cat-legend');
-  leg.innerHTML = entries.slice(0, 6).map(([cat, val]) => `
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;border-bottom:1px solid var(--border-soft)">
-      <span style="width:10px;height:10px;border-radius:2px;background:${catColor(cat)}"></span>
-      <span style="flex:1">${catIcon(cat)} ${cat}</span>
-      <span style="font-family:var(--fm);color:var(--muted)">${fmt(val)}</span>
-    </div>
-  `).join('') || '<div class="empty-sub">Aucune sortie ce mois</div>';
+  if (catChartView === 'blocks') {
+    const BLK_COL = { charges: '#DD7B85', plaisir: '#E8B84D', epargne: '#9B7FC0' };
+    const BLK_LBL = { charges: '🏠 Charges', plaisir: '🎈 Plaisir', epargne: '🐷 Épargne' };
+    const blk = { charges: 0, plaisir: 0, epargne: 0 };
+    monthTx.forEach(t => {
+      const a = Math.abs(Number(t.amount));
+      if (t.type === 'epargne') { blk.epargne += a; return; }
+      if (t.type !== 'sortie') return;
+      const b = BUDGET_BLOCK[t.category];
+      if (b === 'charges') blk.charges += a;
+      else if (b === 'plaisir') blk.plaisir += a;
+      else if (b === 'epargne') blk.epargne += a;
+      else blk.charges += a; // catégories non mappées → considérées comme charges
+    });
+    const order = ['charges', 'plaisir', 'epargne'].filter(k => blk[k] > 0);
+    const totalBlk = order.reduce((s, k) => s + blk[k], 0);
+    updateChart('chart-categories', 'doughnut', {
+      labels: order.map(k => BLK_LBL[k]),
+      datasets: [{ data: order.map(k => blk[k]), backgroundColor: order.map(k => BLK_COL[k]), borderWidth: 0 }]
+    }, { plugins: { legend: { display: false } }, cutout: '65%' });
+    leg.innerHTML = order.map(k => {
+      const pct = totalBlk ? Math.round(blk[k] / totalBlk * 100) : 0;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;border-bottom:1px solid var(--border-soft)">
+        <span style="width:10px;height:10px;border-radius:2px;background:${BLK_COL[k]}"></span>
+        <span style="flex:1">${BLK_LBL[k]}</span>
+        <span style="font-family:var(--fm);color:var(--muted)">${fmt(blk[k])} · ${pct}%</span>
+      </div>`;
+    }).join('') || '<div class="empty-sub">Aucun mouvement ce mois</div>';
+  } else {
+    const catTotals = {};
+    monthTx.filter(t => t.type === 'sortie').forEach(t => {
+      catTotals[t.category] = (catTotals[t.category] || 0) + Math.abs(Number(t.amount));
+    });
+    const entries = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
+    updateChart('chart-categories', 'doughnut', {
+      labels: entries.map(e => e[0]),
+      datasets: [{ data: entries.map(e => e[1]), backgroundColor: entries.map(e => catColor(e[0])), borderWidth: 0 }]
+    }, { plugins: { legend: { display: false } }, cutout: '65%' });
+    leg.innerHTML = entries.slice(0, 6).map(([cat, val]) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;border-bottom:1px solid var(--border-soft)">
+        <span style="width:10px;height:10px;border-radius:2px;background:${catColor(cat)}"></span>
+        <span style="flex:1">${catIcon(cat)} ${cat}</span>
+        <span style="font-family:var(--fm);color:var(--muted)">${fmt(val)}</span>
+      </div>
+    `).join('') || '<div class="empty-sub">Aucune sortie ce mois</div>';
+  }
 
   // ═══ Tendance des dépenses par catégorie (catégories choisies par l'utilisateur) ═══
   renderCatTrend();
 
-  // Top dépenses
+  // Top dépenses — tableau avec drapeau budget (dans le budget / dépassement du poste)
   const topExp = $('top-expenses');
-  const sortedTx = monthTx.filter(t => t.type === 'sortie').sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).slice(0, 8);
+  const deps = monthTx.filter(t => t.type === 'sortie');
+  const sortedTx = deps.slice().sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)).slice(0, 10);
   if (!sortedTx.length) {
     topExp.innerHTML = '<div class="empty"><div class="empty-title">Aucune dépense ce mois</div></div>';
   } else {
-    topExp.innerHTML = sortedTx.map(t => `
-      <div class="tx-row">
-        <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}</div>
-        <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
-        <div class="tx-info"><div class="tx-label">${esc(t.label)}</div><div class="tx-cat">${esc(t.category)}</div></div>
-        <div class="tx-amt amt-out">-${fmtD(Math.abs(Number(t.amount)))}</div>
-      </div>
-    `).join('');
+    // Budget par poste : uniquement pertinent sur un mois précis (pas en mode global)
+    const budgetByCat = isGlobal ? {} : computeBudgetStatus(monthPrefix).budgetByCat;
+    // Dépenses du mois triées chronologiquement → pour le cumul par catégorie « au moment de l'ajout »
+    const chrono = deps.slice().sort((a, b) => (a.date_op < b.date_op ? -1 : a.date_op > b.date_op ? 1 : (a.id > b.id ? 1 : -1)));
+    const cumBefore = {}; // cumul par catégorie AVANT chaque tx (dans l'ordre chrono)
+    const cumAt = {};     // cumul incluant la tx, mémorisé par id
+    chrono.forEach(t => {
+      const c = t.category;
+      const before = cumBefore[c] || 0;
+      const after = before + Math.abs(Number(t.amount));
+      cumAt[t.id] = after;
+      cumBefore[c] = after;
+    });
+    const rows = sortedTx.map(t => {
+      const bud = budgetByCat[t.category];
+      let flag = '<span style="color:var(--muted)">—</span>';
+      if (bud && bud > 0) {
+        const over = cumAt[t.id] > bud;
+        flag = over
+          ? `<span title="Poste dépassé (budget ${fmtD(bud)})" style="color:var(--tender-rose);font-weight:700">↑ dépassé</span>`
+          : `<span title="Dans le budget (${fmtD(bud)})" style="color:var(--sage);font-weight:700">↓ ok</span>`;
+      }
+      return `<tr onclick="openTxEdit('${t.id}')" style="cursor:pointer">
+        <td style="color:var(--muted);white-space:nowrap">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}</td>
+        <td><span style="display:inline-flex;align-items:center;gap:6px"><span style="color:${catColor(t.category)}">${catIcon(t.category)}</span> ${esc(t.label)}</span></td>
+        <td style="color:var(--muted);white-space:nowrap">${esc(t.category)}</td>
+        <td class="amt-out" style="text-align:right;font-family:var(--fm);white-space:nowrap">-${fmtD(Math.abs(Number(t.amount)))}</td>
+        <td style="text-align:right;white-space:nowrap">${flag}</td>
+      </tr>`;
+    }).join('');
+    topExp.innerHTML = `<table class="mini-table">
+      <thead><tr>
+        <th>Date</th><th>Libellé</th><th>Catégorie</th><th style="text-align:right">Montant</th><th style="text-align:right">Budget</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
   }
 }
 function updateChart(id, type, data, opts = {}) {
@@ -1415,8 +1648,54 @@ function updateChart(id, type, data, opts = {}) {
   charts[id] = new Chart(canvas, { type, data, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, ...opts.plugins }, ...opts } });
 }
 
-// ─── Graphe « Tendance des dépenses par catégorie » : sélection libre des catégories ───
-let catTrendSel = null; // Set des catégories choisies ; null = pas encore initialisé (→ top 5 auto)
+// ─── Évolution : filtre propre au graphe (rolling, indépendant du filtre de page) ───
+let evoRange = (() => { try { return localStorage.getItem('monie_evo_range') || '6m'; } catch (e) { return '6m'; } })();
+function setEvoRange(r) {
+  evoRange = r;
+  try { localStorage.setItem('monie_evo_range', r); } catch (e) {}
+  renderDashboard();
+}
+function _sumIn(arr) { return arr.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0); }
+function _sumOut(arr) { return arr.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0); }
+function buildEvoSeries(range) {
+  const evoLabels = [], evoIn = [], evoOut = [];
+  const now = new Date();
+  if (range === '30d') {
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      evoLabels.push(`${d.getDate()}/${d.getMonth() + 1}`);
+      const dtx = transactions.filter(t => t.date_op === key);
+      evoIn.push(_sumIn(dtx)); evoOut.push(_sumOut(dtx));
+    }
+  } else {
+    const n = range === '12m' ? 12 : 6;
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      evoLabels.push(MONTHS_SHORT[d.getMonth()] + (n === 12 ? ' ' + String(d.getFullYear()).slice(2) : ''));
+      const mtx = transactions.filter(t => t.date_op.startsWith(key));
+      evoIn.push(_sumIn(mtx)); evoOut.push(_sumOut(mtx));
+    }
+  }
+  return { evoLabels, evoIn, evoOut };
+}
+
+// ─── Graphe « Par catégorie » : bascule Blocs (Charges/Plaisir/Épargne) ↔ Détail ───
+let catChartView = (() => { try { return localStorage.getItem('monie_cat_view') || 'blocks'; } catch (e) { return 'blocks'; } })();
+function setCatView(v) {
+  catChartView = v;
+  try { localStorage.setItem('monie_cat_view', v); } catch (e) {}
+  renderDashboard();
+}
+
+// ─── Graphe « Tendance des dépenses » : menu déroulant, 1 catégorie (défaut Alimentation) ───
+let catTrendCat = (() => { try { return localStorage.getItem('monie_cat_trend_cat') || 'Alimentation'; } catch (e) { return 'Alimentation'; } })();
+function setCatTrend(cat) {
+  catTrendCat = cat;
+  try { localStorage.setItem('monie_cat_trend_cat', cat); } catch (e) {}
+  renderCatTrend();
+}
 function renderCatTrend() {
   const isGlobalYear = (typeof dashYear !== 'undefined') && dashYear === -1;
   // Périodes = 12 mois de l'année, ou par année en mode Global (comme le graphe d'évolution)
@@ -1433,67 +1712,39 @@ function renderCatTrend() {
   const spend = scope.filter(t => t.type === 'sortie');
   if ($('cat-trend-year')) set('cat-trend-year', isGlobalYear ? '· toutes années' : '· ' + dashYear);
 
-  // Toutes les catégories de dépense (sur tout l'historique) → liste stable pour les puces
+  // Toutes les catégories de dépense (sur tout l'historique) → options stables du menu
   const allTotals = {};
   transactions.filter(t => t.type === 'sortie').forEach(t => { allTotals[t.category] = (allTotals[t.category] || 0) + Math.abs(Number(t.amount)); });
   const allSpendCats = Object.entries(allTotals).sort((a, b) => b[1] - a[1]).map(e => e[0]).filter(Boolean);
 
-  // Sélection : localStorage sinon top 5 par défaut
-  if (catTrendSel === null) {
-    try { const s = JSON.parse(localStorage.getItem('monie_cat_trend_sel') || 'null'); if (Array.isArray(s)) catTrendSel = new Set(s); } catch (e) {}
-    if (catTrendSel === null) catTrendSel = new Set(allSpendCats.slice(0, 5));
-  }
-  const selected = allSpendCats.filter(c => catTrendSel.has(c));
+  // Catégorie sélectionnée : celle mémorisée si elle existe, sinon Alimentation, sinon la 1re
+  let cat = catTrendCat;
+  if (!allSpendCats.includes(cat)) cat = allSpendCats.includes('Alimentation') ? 'Alimentation' : (allSpendCats[0] || '');
+  catTrendCat = cat;
 
-  // Puces cliquables
-  const chipsEl = $('cat-trend-chips');
-  if (chipsEl) {
-    if (!chipsEl.dataset.wired) {
-      chipsEl.dataset.wired = '1';
-      chipsEl.addEventListener('click', e => {
-        const b = e.target.closest('button[data-cat]');
-        if (b) toggleCatTrend(b.dataset.cat);
-        else if (e.target.closest('#cat-trend-reset')) resetCatTrend();
-      });
-    }
-    const chips = allSpendCats.map(cat => {
-      const on = catTrendSel.has(cat);
-      const col = catColor(cat);
-      const style = on
-        ? `background:${col}22;border:1.5px solid ${col};color:${col}`
-        : `background:transparent;border:1.5px solid var(--border);color:var(--muted)`;
-      return `<button type="button" data-cat="${esc(cat)}" style="${style};padding:5px 10px;border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:4px;white-space:nowrap">${catIcon(cat)} ${esc(cat)}</button>`;
-    }).join('');
-    const reset = `<button type="button" id="cat-trend-reset" title="Revenir au top 5" style="background:transparent;border:1.5px dashed var(--border);color:var(--muted);padding:5px 10px;border-radius:100px;font-size:12px;font-weight:600;cursor:pointer">↺ Top 5</button>`;
-    chipsEl.innerHTML = chips + reset;
+  // Menu déroulant
+  const selEl = $('cat-trend-select');
+  if (selEl) {
+    selEl.innerHTML = allSpendCats.map(c => `<option value="${esc(c)}" ${c === cat ? 'selected' : ''}>${catIcon(c)} ${esc(c)}</option>`).join('');
+    selEl.value = cat;
   }
 
-  const datasets = selected.map(cat => ({
+  const col = catColor(cat);
+  const datasets = cat ? [{
     label: cat,
     data: periods.map(p => spend.filter(t => t.category === cat && p.match(t)).reduce((s, t) => s + Math.abs(Number(t.amount)), 0)),
-    borderColor: catColor(cat), backgroundColor: 'transparent', borderWidth: 2, tension: 0.35, pointRadius: 2, pointHoverRadius: 4
-  }));
+    borderColor: col, backgroundColor: col + '18', borderWidth: 2.5, tension: 0.35, pointRadius: 2, pointHoverRadius: 4, fill: true
+  }] : [];
   updateChart('chart-cat-trend', 'line', {
     labels: periods.map(p => p.label),
     datasets
   }, {
-    plugins: { legend: { display: selected.length > 0 && selected.length <= 8, position: 'top', labels: { color: '#718096', font: { size: 11 }, boxWidth: 12, usePointStyle: true } } },
+    plugins: { legend: { display: false } },
     scales: {
       x: { ticks: { color: '#A0AEC0' }, grid: { display: false } },
       y: { ticks: { color: '#A0AEC0', callback: v => v.toLocaleString('fr-FR') + ' €' }, grid: { color: '#F5E7EA' } }
     }
   });
-}
-function toggleCatTrend(cat) {
-  if (catTrendSel === null) renderCatTrend(); // initialise si besoin
-  if (catTrendSel.has(cat)) catTrendSel.delete(cat); else catTrendSel.add(cat);
-  try { localStorage.setItem('monie_cat_trend_sel', JSON.stringify([...catTrendSel])); } catch (e) {}
-  renderCatTrend();
-}
-function resetCatTrend() {
-  catTrendSel = null;
-  try { localStorage.removeItem('monie_cat_trend_sel'); } catch (e) {}
-  renderCatTrend();
 }
 
 // ═══ PAGE ANALYSE ══════════════════════════════════════════════
@@ -1518,16 +1769,29 @@ function renderAnalyse() {
   const epargne = scope.filter(t => t.type === 'epargne').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
   const solde = totalIn - totalOut - epargne;
   const tauxEp = totalIn > 0 ? Math.round(epargne / totalIn * 100) : 0;
+  // 1 · Taux d'épargne
   set('an-taux', tauxEp + '%');
   set('an-taux-hint', tauxEp >= 20 ? 'Excellent 🎯' : tauxEp >= 10 ? 'Correct' : 'À muscler');
+  // 2 · Épargné sur la période (flux type Épargne)
+  set('an-ep', fmt(Math.round(epargne)));
+  set('an-ep-hint', `${fmt(Math.round(epargne / months))}/mois`);
+  // 3 · Reste à vivre /mois
   set('an-rav', fmt(Math.round(solde / months)));
-  const abo = exp.filter(t => t.category === 'Abonnements').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
-  set('an-abo', fmt(Math.round(abo / months * 12)));
-  set('an-abo-hint', fmt(Math.round(abo / months)) + '/mois');
+  // 4 · Dépense moyenne /mois
+  set('an-depmoy', fmt(Math.round(totalOut / months)));
+  set('an-depmoy-hint', `sur ${months} mois`);
+  // 5 · Poste n°1 (catégorie de dépense la plus lourde)
+  const catTot = {};
+  exp.forEach(t => { catTot[t.category] = (catTot[t.category] || 0) + Math.abs(Number(t.amount)); });
+  const top1 = Object.entries(catTot).sort((a, b) => b[1] - a[1])[0];
+  if (top1) { set('an-top', `${catIcon(top1[0])} ${top1[0]}`); set('an-top-hint', `${fmt(Math.round(top1[1]))} · ${totalOut > 0 ? Math.round(top1[1] / totalOut * 100) : 0}% des dépenses`); }
+  else { set('an-top', '—'); set('an-top-hint', 'aucune dépense'); }
+  // 6 · Part « plaisir »
   let ch = 0, pl = 0;
   exp.forEach(t => { const b = BUDGET_BLOCK[t.category]; if (b === 'charges') ch += Math.abs(Number(t.amount)); if (b === 'plaisir') pl += Math.abs(Number(t.amount)); });
   const plPct = (ch + pl) > 0 ? Math.round(pl / (ch + pl) * 100) : 0;
   set('an-ratio', plPct + '%');
+  const abo = exp.filter(t => t.category === 'Abonnements').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
 
   // ── Zoom catégorie → sous-catégories ──
   const cSel = $('analyse-cat');
@@ -1592,6 +1856,107 @@ function renderAnalyse() {
       <div style="font-size:22px;flex-shrink:0">${t.i}</div>
       <div style="font-size:13px;line-height:1.55;align-self:center">${t.t}</div>
     </div>`).join('');
+
+  renderRulesList();
+}
+
+// ─── Éditeur de règles de catégorisation (marchand → catégorie) ───
+function renderRulesList() {
+  const el = $('rules-list');
+  if (!el) return;
+  const mine = (rules || []).filter(r => r.user_id === currentUser.id && r.id).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  if (!mine.length) {
+    el.innerHTML = '<div class="empty-sub" style="padding:16px 0">Aucune règle perso pour l\'instant. Crée-en une, ou ré-catégorise une opération depuis la page Transactions — une règle sera proposée automatiquement.</div>';
+    return;
+  }
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px">` + mine.map(r => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border-soft);border-radius:12px;background:var(--card)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600">« ${esc(r.pattern)} » → <span style="color:${catColor(r.category)}">${catIcon(r.category)} ${esc(r.category)}</span>${r.sub_category ? ` · ${esc(r.sub_category)}` : ''}</div>
+        <div style="font-size:11px;color:var(--muted)">${r.is_generic ? 'générique' : 'prioritaire'} · priorité ${r.priority || 0}</div>
+      </div>
+      <button class="goal-btn" onclick="openRuleForm('${r.id}')" title="Modifier">✏️</button>
+      <button class="goal-btn danger" onclick="deleteRule('${r.id}')" title="Supprimer">🗑️</button>
+    </div>`).join('') + `</div>
+    <button class="btn-ghost" onclick="recategorizeAllTx()" style="margin-top:14px">🔄 Ré-appliquer mes règles à tout l'historique</button>`;
+}
+
+function openRuleForm(id) {
+  const catSel = $('rule-category');
+  if (catSel) catSel.innerHTML = Object.keys(CAT_META).sort().map(c => `<option value="${c}">${catIcon(c)} ${c}</option>`).join('');
+  const r = id ? (rules || []).find(x => x.id === id) : null;
+  set('rule-modal-title', r ? 'Modifier la règle' : 'Nouvelle règle');
+  $('rule-id').value = r ? r.id : '';
+  $('rule-pattern').value = r ? r.pattern : '';
+  if (catSel) catSel.value = r ? r.category : 'Alimentation';
+  $('rule-subcat').value = r && r.sub_category ? r.sub_category : '';
+  $('rule-generic').checked = r ? !!r.is_generic : false;
+  $('rule-modal').style.display = 'flex';
+}
+function closeRuleForm() { const m = $('rule-modal'); if (m) m.style.display = 'none'; }
+
+async function saveRuleForm() {
+  const id = $('rule-id').value;
+  const pattern = ($('rule-pattern').value || '').trim().toLowerCase();
+  const category = $('rule-category').value;
+  const sub_category = ($('rule-subcat').value || '').trim() || null;
+  const is_generic = $('rule-generic').checked;
+  if (pattern.length < 3) { toast('Le texte à repérer doit faire au moins 3 caractères', 'error'); return; }
+  const payload = { user_id: currentUser.id, pattern, category, sub_category, is_generic, priority: is_generic ? 50 : 200 };
+  let res;
+  if (id) res = await dbGuard(sb.from('merchant_rules').update(payload).eq('id', id).select(), 'Maj règle échouée');
+  else res = await dbGuard(sb.from('merchant_rules').upsert(payload, { onConflict: 'pattern' }).select(), 'Création règle échouée');
+  if (!res.ok) return;
+  const row = res.data && res.data[0];
+  if (row) {
+    rules = (rules || []).filter(r => r.id !== row.id && r.pattern !== row.pattern);
+    rules.push(row);
+  }
+  closeRuleForm();
+  toast('✓ Règle enregistrée', 'success');
+  renderRulesList();
+}
+
+async function deleteRule(id) {
+  const r = (rules || []).find(x => x.id === id);
+  openModal('Supprimer cette règle ?', r ? `« ${r.pattern} » → ${r.category}` : '', async () => {
+    const res = await dbGuard(sb.from('merchant_rules').delete().eq('id', id), 'Suppression échouée');
+    if (!res.ok) return;
+    rules = (rules || []).filter(x => x.id !== id);
+    toast('✓ Règle supprimée', 'success');
+    renderRulesList();
+  });
+}
+
+// Ré-applique la catégorisation (règles incluses) à tout l'historique — ne met à jour que ce qui change.
+async function recategorizeAllTx() {
+  openModal('Ré-appliquer les règles ?', 'Toutes tes opérations seront reclassées selon tes règles actuelles. Les catégories que tu as fixées à la main seront elles aussi recalculées.', async () => {
+    const changed = [];
+    transactions.forEach(t => {
+      if (t.type !== 'sortie') return; // on ne reclasse que les dépenses (les revenus/épargne gardent leur poste)
+      const { category, sub_category } = categorize(t.label, Number(t.amount));
+      if (category !== t.category || (sub_category || null) !== (t.sub_category || null)) {
+        changed.push({ id: t.id, category, sub_category: sub_category || null });
+      }
+    });
+    if (!changed.length) { toast('Rien à changer — tout est déjà à jour', 'success'); return; }
+    toast(`🔄 Mise à jour de ${changed.length} opération(s)…`);
+    let ok = 0;
+    for (let i = 0; i < changed.length; i += 40) {
+      const chunk = changed.slice(i, i + 40);
+      await Promise.all(chunk.map(async c => {
+        const r = await sb.from('transactions').update({ category: c.category, sub_category: c.sub_category }).eq('id', c.id);
+        if (!r.error) {
+          ok++;
+          const tx = transactions.find(x => x.id === c.id);
+          if (tx) { tx.category = c.category; tx.sub_category = c.sub_category; }
+        }
+      }));
+    }
+    toast(`✓ ${ok} opération(s) reclassée(s)`, 'success');
+    renderAnalyse();
+    if (typeof renderDashboard === 'function') renderDashboard();
+  });
 }
 
 // ═══ TRANSACTIONS LIST ═════════════════════════════════════════
@@ -1656,33 +2021,44 @@ function renderTransactionsList() {
   if (!filtered.length) { list.innerHTML = bulkHtml + '<div class="empty"><div class="empty-title">Aucune transaction</div></div>'; return; }
 
   const allChecked = filtered.every(t => txSelectedIds.has(t.id));
+  const PM_SHORT = { carte: 'Carte', especes: 'Espèces', ticket_resto: 'Ticket resto', cheque: 'Chèque', prelevement: 'Prélèvement', virement: 'Virement' };
+  const typeSign = t => t.type === 'entree' ? '+' : (t.type === 'epargne' ? '' : '-');
+  const typeCls = t => t.type === 'entree' ? 'amt-in' : (t.type === 'epargne' ? 'amt-save' : 'amt-out');
   list.innerHTML = bulkHtml + `
-    <div class="select-all-bar">
-      <label>
-        <input type="checkbox" class="tx-checkbox" onchange="toggleAllTxVisible(this.checked)" ${allChecked ? 'checked' : ''}>
-        <span>${allChecked ? 'Tout désélectionner' : 'Tout sélectionner sur cette page'}</span>
-      </label>
-      ${txSelectedIds.size > 0 ? `<span style="margin-left:auto;font-weight:700;color:var(--rose)">${txSelectedIds.size} sélectionnée(s)</span>` : ''}
+    <div class="tx-table-wrap">
+    <table class="tx-table">
+      <thead><tr>
+        <th style="width:34px"><input type="checkbox" class="tx-checkbox" onchange="toggleAllTxVisible(this.checked)" ${allChecked ? 'checked' : ''} title="${allChecked ? 'Tout désélectionner' : 'Tout sélectionner'}"></th>
+        <th style="width:88px">Date</th>
+        <th>Libellé</th>
+        <th style="width:190px">Catégorie</th>
+        <th style="width:110px">Moyen</th>
+        <th style="width:110px;text-align:right">Montant</th>
+        <th style="width:74px;text-align:right">Actions</th>
+      </tr></thead>
+      <tbody>
+      ${filtered.map(t => {
+        const isSelected = txSelectedIds.has(t.id);
+        const catsSel = cats.map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('');
+        return `
+        <tr class="${isSelected ? 'selected' : ''}">
+          <td><input type="checkbox" class="tx-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleTxSelect('${t.id}', this.checked)"></td>
+          <td style="white-space:nowrap;color:var(--muted)">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}/${t.date_op.slice(2, 4)}</td>
+          <td><div class="tx-cell-label">${esc(t.label)} ${bankBadge(t.bank_source)}${t.sub_category ? `<span class="tx-sub-tag">${esc(t.sub_category)}</span>` : ''}</div></td>
+          <td>
+            <select class="select tx-cat-select" onchange="recategorizeTx('${t.id}', this.value)">${catsSel}</select>
+          </td>
+          <td style="white-space:nowrap;color:var(--muted);font-size:12px" title="${esc(t.payment_method || 'non précisé')}">${payMethodIcon(t.payment_method) || ''} ${PM_SHORT[t.payment_method] || '—'}</td>
+          <td class="${typeCls(t)}" style="text-align:right;font-family:var(--fm);white-space:nowrap">${typeSign(t)}${fmtD(Math.abs(Number(t.amount)))}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="import-del-btn" onclick="openTxEdit('${t.id}')" title="Modifier" style="color:var(--rose)">✏️</button>
+            <button class="import-del-btn" onclick="deleteTx('${t.id}')" title="Supprimer">✕</button>
+          </td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
     </div>
-    ${filtered.map(t => {
-      const isSelected = txSelectedIds.has(t.id);
-      const catsSel = cats.map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('');
-      return `
-        <div class="tx-row ${isSelected ? 'selected' : ''}">
-          <input type="checkbox" class="tx-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleTxSelect('${t.id}', this.checked)">
-          <div class="tx-date">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}<br><span style="font-size:10px">${t.date_op.slice(0, 4)}</span></div>
-          <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}" title="${esc(t.payment_method || 'moyen non précisé')}">${payMethodIcon(t.payment_method) || catIcon(t.category)}</div>
-          <div class="tx-info">
-            <div class="tx-label">${esc(t.label)} ${bankBadge(t.bank_source)}</div>
-            <select class="select" style="margin-top:4px;padding:4px 8px;font-size:11px;width:auto;min-width:180px" onchange="recategorizeTx('${t.id}', this.value)">
-              ${catsSel}
-            </select>
-          </div>
-          <div class="tx-amt ${t.type === 'entree' ? 'amt-in' : 'amt-out'}">${t.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(Number(t.amount)))}</div>
-          <button class="import-del-btn" onclick="openTxEdit('${t.id}')" title="Modifier" style="color:var(--rose)">✏️</button>
-          <button class="import-del-btn" onclick="deleteTx('${t.id}')" title="Supprimer">✕</button>
-        </div>`;
-    }).join('')}
     ${allFiltered.length > txRenderLimit ? `<button type="button" onclick="loadMoreTx()" style="display:block;margin:16px auto;padding:10px 22px;border:none;border-radius:10px;background:var(--rose,#E76F51);color:#fff;font-weight:700;cursor:pointer">Charger plus (${allFiltered.length - txRenderLimit} restantes)</button>` : ''}`;
 }
 
@@ -1895,8 +2271,16 @@ function setupDragDrop() {
     if (file) handleImportFile(file);
   });
 }
-async function handleImportFile(file) {
+// Conteneur d'aperçu d'import (page Import par défaut, ou page Transactions)
+let importPreviewTarget = 'import-preview';
+async function handleImportFromTx(file) {
   if (!file) return;
+  await handleImportFile(file, 'tx-import-preview');
+  const inp = $('tx-import-file'); if (inp) inp.value = '';
+}
+async function handleImportFile(file, target) {
+  if (!file) return;
+  importPreviewTarget = target || 'import-preview';
   const name = file.name.toLowerCase();
   // Reset l'état de preview pour repartir propre
   previewTab = 'todo';
@@ -2078,7 +2462,7 @@ let bulkCategory = '';
 
 function showImportPreview() {
   preservedScroll = window.scrollY;
-  const wrap = $('import-preview');
+  const wrap = $(importPreviewTarget) || $('import-preview');
   wrap.style.display = 'block';
   const nDup = importMatches.length;
   const nNew = importPreviewData.length - nDup;
@@ -2302,7 +2686,7 @@ function changePreviewPage(dir) {
   showImportPreview();
   // Scroll en haut de la liste pour la nouvelle page
   requestAnimationFrame(() => {
-    const wrap = $('import-preview');
+    const wrap = $(importPreviewTarget) || $('import-preview');
     if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 }
@@ -2505,8 +2889,7 @@ function keepBoth(i) {
 function cancelImport() {
   importPreviewData = [];
   importMatches = [];
-  $('import-preview').style.display = 'none';
-  $('import-preview').innerHTML = '';
+  ['import-preview', 'tx-import-preview'].forEach(id => { const el = $(id); if (el) { el.style.display = 'none'; el.innerHTML = ''; } });
 }
 async function confirmImport() {
   const toAdd = importPreviewData.filter(t => !t._duplicate).map(t => ({
@@ -2533,10 +2916,12 @@ async function confirmImport() {
     const { error } = await sb.from('transactions').insert(batch);
     if (error) { toast('Erreur : ' + error.message, 'error'); console.error(error); return; }
   }
+  const fromTx = importPreviewTarget === 'tx-import-preview';
   await loadAllData();
   cancelImport();
   toast(`✓ ${toAdd.length} transactions ajoutées`, 'success');
-  showTab('calendar');
+  if (fromTx) { showTab('transactions'); if (typeof renderTransactionsList === 'function') renderTransactionsList(); }
+  else showTab('calendar');
 }
 
 // ═══ SUIVI MENSUEL ═════════════════════════════════════════════
@@ -2697,12 +3082,11 @@ function renderEpargne() {
   if ($('ep-month-select')) $('ep-month-select').value = epargneMonth;
   if ($('ep-year-select')) $('ep-year-select').value = epargneYear;
   const monthKey = `${epargneYear}-${String(epargneMonth + 1).padStart(2, '0')}`;
-  const yearTx = transactions.filter(t => t.date_op.startsWith(String(epargneYear)));
-  const totalIn = yearTx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
-
-  // Contributions du mois sélectionné
-  const monthContribs = contribList.filter(c => c.date_contrib && c.date_contrib.startsWith(monthKey));
-  const totalMoisEpargne = monthContribs.reduce((s, c) => s + Number(c.montant), 0);
+  // Périmètre = MOIS sélectionné (piloté par les sélecteurs en haut de la page), pas l'année entière.
+  const monthTx = transactions.filter(t => t.date_op.startsWith(monthKey));
+  const monthIn = monthTx.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
+  // Épargne « réelle » du mois = somme de tes opérations de type Épargne (source de vérité : le calendrier).
+  const monthEpargneFlow = monthTx.filter(t => t.type === 'epargne').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
 
   const active = goalsList.filter(g => g.statut === 'en_cours');
   const achieved = goalsList.filter(g => g.statut === 'atteint');
@@ -2712,14 +3096,19 @@ function renderEpargne() {
   const totalEpargne = active.reduce((s, g) => s + Number(g.deja_epargne || 0), 0);
   const reste = Math.max(0, totalCible - totalEpargne);
 
-  set('ep-year', fmt(totalMoisEpargne));
-  set('ep-year-hint', `${monthContribs.length} contribution(s) en ${MONTHS[epargneMonth]}`);
+  // KPI 1 : Épargné sur le mois sélectionné (flux type Épargne)
+  set('ep-year', fmt(monthEpargneFlow));
+  set('ep-year-hint', `${MONTHS[epargneMonth]} ${epargneYear} · opérations type Épargne`);
+  // KPI 2 : Cible active = somme des cibles de tous les objectifs en cours
   set('ep-cible', fmt(totalCible));
-  set('ep-cible-hint', `${active.length} en cours`);
+  set('ep-cible-hint', `${active.length} objectif(s) en cours`);
+  // KPI 3 : Reste à épargner = cumul (toutes cibles − déjà épargné) des objectifs en cours
   set('ep-ecart', fmt(reste));
-  set('ep-ecart-hint', totalCible > 0 ? `${Math.round(totalEpargne / totalCible * 100)}% atteint total` : 'pour tout finir');
-  const rate = totalIn > 0 ? Math.round(totalEpargne / totalIn * 100) : 0;
+  set('ep-ecart-hint', totalCible > 0 ? `${Math.round(totalEpargne / totalCible * 100)}% des cibles atteint` : 'cumul de tes objectifs');
+  // KPI 4 : Taux d'épargne = part des revenus du MOIS mise de côté
+  const rate = monthIn > 0 ? Math.round(monthEpargneFlow / monthIn * 100) : 0;
   set('ep-rate', rate + '%');
+  if ($('ep-rate-hint')) set('ep-rate-hint', monthIn > 0 ? `${fmt(monthEpargneFlow)} / ${fmt(monthIn)} de revenus` : 'aucun revenu ce mois');
 
   // Objectifs actifs
   const activeList = $('goals-active-list');
@@ -2810,15 +3199,18 @@ function renderGoalCard(g, isAchieved = false, isAbandoned = false) {
   }
 
   const actions = isAchieved
-    ? `<button class="goal-btn danger" onclick="deleteGoal('${g.id}')">🗑️ Supprimer</button>`
+    ? `<button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier">✏️ Modifier</button>
+       <button class="goal-btn" onclick="reactivateGoal('${g.id}')" title="Remettre en cours">🔄 Remettre en cours</button>
+       <button class="goal-btn danger" onclick="deleteGoal('${g.id}')" title="Supprimer">🗑️</button>`
     : isAbandoned
-      ? `<button class="goal-btn" onclick="reactivateGoal('${g.id}')">🔄 Réactiver</button>
-         <button class="goal-btn danger" onclick="deleteGoal('${g.id}')">🗑️</button>`
-      : `<button class="goal-btn primary" onclick="openContribForm('${g.id}')">+ Contribuer</button>
-         <button class="goal-btn" onclick="editGoal('${g.id}')">✏️</button>
-         ${pct >= 100 ? `<button class="goal-btn" onclick="markAchieved('${g.id}')" style="color:var(--gold);border-color:var(--gold)">🏆 Atteint !</button>` : ''}
-         <button class="goal-btn" onclick="abandonGoal('${g.id}')">💤</button>
-         <button class="goal-btn danger" onclick="deleteGoal('${g.id}')">🗑️</button>`;
+      ? `<button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier">✏️ Modifier</button>
+         <button class="goal-btn" onclick="reactivateGoal('${g.id}')" title="Réactiver">🔄 Réactiver</button>
+         <button class="goal-btn danger" onclick="deleteGoal('${g.id}')" title="Supprimer">🗑️</button>`
+      : `<button class="goal-btn primary" onclick="openContribForm('${g.id}')" title="Ajouter une contribution">+ Contribuer</button>
+         <button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier l'objectif">✏️</button>
+         ${pct >= 100 ? `<button class="goal-btn" onclick="markAchieved('${g.id}')" title="Marquer atteint" style="color:var(--gold);border-color:var(--gold)">🏆 Atteint !</button>` : ''}
+         <button class="goal-btn" onclick="abandonGoal('${g.id}')" title="Archiver / mettre en pause">💤 Archiver</button>
+         <button class="goal-btn danger" onclick="deleteGoal('${g.id}')" title="Supprimer">🗑️</button>`;
 
   const dateAtteintStr = isAchieved && g.updated_at ? new Date(g.updated_at).toLocaleDateString('fr-FR') : '';
 
@@ -3125,6 +3517,10 @@ function renderPerfCards(currentKey, curIn, curOut, curBal) {
   moneyVal.className = 'perf-val ' + (curBal >= 0 ? 'positive' : 'negative');
   const moneyCard = $('perf-money');
   moneyCard.classList.toggle('negative', curBal < 0);
+  // Cliquable → liste éditable de toutes les opérations du mois
+  moneyCard.style.cursor = 'pointer';
+  moneyCard.onclick = () => openKpiList('all');
+  moneyCard.title = 'Voir & modifier les opérations du mois';
 
   // Delta
   const deltaMoney = curBal - prevBal;
@@ -3180,15 +3576,25 @@ function renderPerfCards(currentKey, curIn, curOut, curBal) {
     plugins: { legend: { display: false }, tooltip: { enabled: false } }
   });
 
-  // ─── 2. Épargne : basée sur les comptes d'épargne du Suivi mensuel ───
-  // Épargne = Livret A + LDDS + Assurance vie + Esalia + Investissements (soldes saisis)
-  const suiviEpargne = (k) => { const r = suiviData[k] || {}; return (r.livret_a || 0) + (r.ldds || 0) + (r.assurance_vie || 0) + (r.esalia || 0) + (r.investissements || 0); };
-  const curSavings = suiviEpargne(currentKey);
-  const prevSavings = suiviEpargne(prevKey);
+  // ─── 2. Épargne : basée sur tes opérations de type « Épargne » du mois ───
+  // Règle claire : l'épargne du mois = somme des opérations que TU as saisies en type Épargne
+  // (via le calendrier). Ni revenu, ni dépense. → cohérent avec les graphiques épargne.
+  const epargneFlow = (k) => transactions.filter(t => t.date_op.startsWith(k) && t.type === 'epargne').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const curSavings = epargneFlow(currentKey);
+  const prevSavings = epargneFlow(prevKey);
 
   const savingsVal = $('perf-savings-val');
   savingsVal.textContent = fmt(curSavings);
   savingsVal.className = 'perf-val ' + (curSavings > 0 ? 'positive' : '');
+  // Libellé + basis + clic
+  const savLabelEl = document.querySelector('#perf-savings .perf-label');
+  if (savLabelEl) savLabelEl.textContent = '🐷 Épargne du mois';
+  const savCard = $('perf-savings');
+  if (savCard) {
+    savCard.style.cursor = 'pointer';
+    savCard.onclick = () => openKpiList('epargne');
+    savCard.title = 'Basée sur tes opérations de type Épargne — cliquer pour voir & modifier';
+  }
 
   const deltaSavings = curSavings - prevSavings;
   const badgeSavings = $('perf-savings-badge');
@@ -3216,14 +3622,12 @@ function renderPerfCards(currentKey, curIn, curOut, curBal) {
   }
   $('perf-savings-icon').textContent = curSavings > 0 ? '🌱' : '🎯';
 
-  // Sparkline épargne : 6 derniers mois
+  // Sparkline épargne : flux d'épargne des 6 derniers mois (type = epargne)
   const sparkSav = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(dashYear, dashMonth - i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const inv = transactions.filter(t => t.date_op.startsWith(key) && t.category === 'Investissements').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
-    const tr = (suiviData[key]?.epargne_reel) || 0;
-    sparkSav.push(Math.max(inv, tr));
+    sparkSav.push(epargneFlow(key));
   }
   updateChart('perf-savings-chart', 'bar', {
     labels: sparkSav.map(() => ''),
@@ -3340,9 +3744,12 @@ const BUDGET_BLOCK = {
   'Amis & Famille': 'plaisir', 'Divertissement': 'plaisir', 'Voyages': 'plaisir',
   'Dîme': 'charges', 'Investissements': 'epargne'
 };
-function computeBudgetStatus() {
-  const now = new Date();
-  const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+function computeBudgetStatus(monthKey) {
+  let key = monthKey;
+  if (!key) {
+    const now = new Date();
+    key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
   const b = budgetByMonth[key] || budgetTemplate; // budget du mois réel en cours (modèle si pas encore défini)
   const rev = b.revenu_mensuel || 0;
   const sub = b.sub_budget || DEFAULT_SUB_PCT;

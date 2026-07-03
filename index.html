@@ -76,10 +76,7 @@
           <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
           Transactions
         </button>
-        <button class="nav-btn" data-tab="import" onclick="showTab('import')">
-          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Import
-        </button>
+        <!-- Import déplacé dans la page Transactions (bouton « Importer un relevé ») -->
         <button class="nav-btn" data-tab="budget" onclick="showTab('budget')">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           Gestion du budget
@@ -176,8 +173,9 @@
               <div class="card-title" id="day-detail-date">—</div>
               <div style="font-size:11px;color:var(--muted);margin-top:2px" id="day-detail-summary">—</div>
             </div>
+            <button type="button" class="btn-ghost" id="day-tx-toggle" onclick="toggleDayList()" style="padding:6px 12px;font-size:12px">Masquer la liste</button>
           </div>
-          <div id="day-tx-list"></div>
+          <div id="day-tx-list" style="max-height:320px;overflow-y:auto"></div>
           <div class="quick-add" id="quick-add-box">
             <button type="button" class="quick-add-hd quick-add-toggle" onclick="toggleQuickAdd()" aria-expanded="true">
               <span>➕ Saisir une opération pour ce jour</span>
@@ -186,7 +184,7 @@
             <div class="qa-form-v2" id="quick-add-form-wrap">
               <!-- Étape 1 : Sortie / Entrée -->
               <div class="qa-field">
-                <label class="qa-label">1️⃣ Type d'opération</label>
+                <label class="qa-label">Type</label>
                 <div class="qa-type-toggle">
                   <label class="qa-type-btn qa-type-out">
                     <input type="radio" name="qa-type" value="sortie" checked onchange="updatePayMethodOptions()">
@@ -203,27 +201,33 @@
                 </div>
               </div>
 
+              <!-- Type d'épargne (visible seulement si type = Épargne) -->
+              <div class="qa-field" id="qa-epargne-box" style="display:none">
+                <label class="qa-label">Vers quel objectif ?</label>
+                <select class="select" id="qa-epargne-goal"><option value="">💰 Épargne classique (sans objectif)</option></select>
+              </div>
+
               <!-- Étape 2 : Moyen de paiement -->
               <div class="qa-field">
-                <label class="qa-label" id="qa-paymethod-label">2️⃣ 💳 Payé avec</label>
+                <label class="qa-label" id="qa-paymethod-label">Payé avec</label>
                 <select class="select" id="qa-paymethod"></select>
               </div>
 
               <!-- Étape 3 : Montant -->
               <div class="qa-field">
-                <label class="qa-label">3️⃣ 💶 Montant</label>
+                <label class="qa-label">Montant</label>
                 <input class="inp" type="number" step="0.01" id="qa-amount" placeholder="0,00 €" inputmode="decimal">
               </div>
 
               <!-- Étape 4 : Libellé -->
               <div class="qa-field">
-                <label class="qa-label">4️⃣ ✏️ Libellé</label>
+                <label class="qa-label">Libellé</label>
                 <input class="inp" type="text" id="qa-label" placeholder="Ex: Café Dolce">
               </div>
 
               <!-- Étape 5 : Catégorie -->
               <div class="qa-field">
-                <label class="qa-label">5️⃣ 🗂️ Catégorie</label>
+                <label class="qa-label">Catégorie</label>
                 <select class="select" id="qa-cat"></select>
               </div>
 
@@ -275,10 +279,10 @@
 
         <div id="dash-view-global">
         <div class="kpi-grid">
-          <div class="kpi kpi-sage"><div class="kpi-label">Revenus mois</div><div class="kpi-val kpi-val-sage" id="dash-rev">—</div><div class="kpi-hint" id="dash-rev-hint">Ce mois</div></div>
-          <div class="kpi kpi-rose"><div class="kpi-label">Dépenses mois</div><div class="kpi-val kpi-val-rose" id="dash-dep">—</div><div class="kpi-hint" id="dash-dep-hint">Ce mois</div></div>
-          <div class="kpi kpi-peach"><div class="kpi-label">Solde mois</div><div class="kpi-val" id="dash-bal">—</div><div class="kpi-hint" id="dash-bal-hint">—</div></div>
-          <div class="kpi kpi-gold"><div class="kpi-label">Nb opérations</div><div class="kpi-val kpi-val-gold" id="dash-count">—</div><div class="kpi-hint">transactions</div></div>
+          <div class="kpi kpi-sage kpi-click" onclick="openKpiList('entree')" title="Voir & modifier les entrées"><div class="kpi-label">Revenus mois ›</div><div class="kpi-val kpi-val-sage" id="dash-rev">—</div><div class="kpi-hint" id="dash-rev-hint">Ce mois</div></div>
+          <div class="kpi kpi-rose kpi-click" onclick="openKpiList('sortie')" title="Voir & modifier les dépenses"><div class="kpi-label">Dépenses mois ›</div><div class="kpi-val kpi-val-rose" id="dash-dep">—</div><div class="kpi-hint" id="dash-dep-hint">Ce mois</div></div>
+          <div class="kpi kpi-peach kpi-click" onclick="openKpiList('all')" title="Voir & modifier toutes les opérations"><div class="kpi-label">Solde mois ›</div><div class="kpi-val" id="dash-bal">—</div><div class="kpi-hint" id="dash-bal-hint">—</div></div>
+          <div class="kpi kpi-gold kpi-click" onclick="openKpiList('all')" title="Voir & modifier toutes les opérations"><div class="kpi-label">Nb opérations ›</div><div class="kpi-val kpi-val-gold" id="dash-count">—</div><div class="kpi-hint">transactions</div></div>
         </div>
 
         <!-- 📆 Totaux annuels -->
@@ -357,23 +361,38 @@
 
         <div class="grid-2-1">
           <div class="card">
-            <div class="card-hd"><div class="card-title">Évolution 12 mois <span id="dash-evo-year" style="font-size:12px;font-weight:700;color:var(--rose)"></span></div></div>
+            <div class="card-hd">
+              <div class="card-title">Évolution <span id="dash-evo-year" style="font-size:12px;font-weight:700;color:var(--rose)"></span></div>
+              <select id="dash-evo-range" class="select select-mini" onchange="setEvoRange(this.value)">
+                <option value="30d">30 jours</option>
+                <option value="6m" selected>6 mois</option>
+                <option value="12m">12 mois</option>
+              </select>
+            </div>
             <div style="height:220px"><canvas id="chart-evolution"></canvas></div>
           </div>
           <div class="card">
-            <div class="card-hd"><div class="card-title">Par catégorie <span id="dash-cat-period" style="font-size:12px;font-weight:700;color:var(--rose)"></span></div></div>
+            <div class="card-hd">
+              <div class="card-title">Par catégorie <span id="dash-cat-period" style="font-size:12px;font-weight:700;color:var(--rose)"></span></div>
+              <select id="dash-cat-view" class="select select-mini" onchange="setCatView(this.value)">
+                <option value="blocks" selected>Charges / Plaisir / Épargne</option>
+                <option value="cats">Détail catégories</option>
+              </select>
+            </div>
             <div style="height:160px;display:flex;align-items:center;justify-content:center"><canvas id="chart-categories"></canvas></div>
             <div id="cat-legend" style="margin-top:12px"></div>
           </div>
         </div>
         <div class="card">
-          <div class="card-hd"><div class="card-title">Tendance des dépenses par catégorie <span id="cat-trend-year" style="font-size:12px;font-weight:700;color:var(--rose)"></span> <span style="font-size:11px;font-weight:500;color:var(--muted)">— clique pour choisir les catégories à comparer</span></div></div>
-          <div id="cat-trend-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+          <div class="card-hd">
+            <div class="card-title">Tendance des dépenses <span id="cat-trend-year" style="font-size:12px;font-weight:700;color:var(--rose)"></span></div>
+            <select id="cat-trend-select" class="select select-mini" onchange="setCatTrend(this.value)"></select>
+          </div>
           <div style="height:240px"><canvas id="chart-cat-trend"></canvas></div>
         </div>
         <div class="card">
-          <div class="card-hd"><div class="card-title">Top dépenses du mois</div></div>
-          <div id="top-expenses"></div>
+          <div class="card-hd"><div class="card-title">Top dépenses du mois <span style="font-size:11px;font-weight:500;color:var(--muted)">— vert = dans le budget, rouge = dépassement du poste</span></div></div>
+          <div id="top-expenses" style="overflow-x:auto"></div>
         </div>
         </div> <!-- /dash-view-global -->
 
@@ -407,7 +426,14 @@
             <h1 class="page-title">Transactions</h1>
             <p class="page-sub"><span id="tx-total-count">0</span> opérations enregistrées</p>
           </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-ghost" onclick="showTab('calendar')" title="Saisir une opération">➕ Ajouter</button>
+            <button class="btn-primary" onclick="document.getElementById('tx-import-file').click()" title="Importer un relevé CSV / PDF / JSON">📤 Importer un relevé</button>
+            <input type="file" id="tx-import-file" accept=".csv,.pdf,.json" style="display:none" onchange="handleImportFromTx(this.files[0])">
+          </div>
         </div>
+        <!-- Aperçu d'import intégré à la page Transactions -->
+        <div id="tx-import-preview" style="display:none;margin-bottom:16px"></div>
         <div class="help-banner" id="help-transactions">
           <div class="help-banner-hd">
             <div class="help-banner-icon">💸</div>
@@ -616,11 +642,13 @@
           <select class="select" id="analyse-year" onchange="renderAnalyse()"></select>
         </div>
 
-        <div class="kpi-grid kpi-row-4" style="grid-template-columns:repeat(4,1fr)">
-          <div class="kpi kpi-sage"><div class="kpi-label">Taux d'épargne</div><div class="kpi-val kpi-val-sage" id="an-taux">—</div><div class="kpi-hint" id="an-taux-hint">—</div></div>
-          <div class="kpi kpi-rose"><div class="kpi-label">Reste à vivre /mois</div><div class="kpi-val" id="an-rav">—</div><div class="kpi-hint">en moyenne</div></div>
-          <div class="kpi kpi-peach"><div class="kpi-label">Abonnements /an</div><div class="kpi-val" id="an-abo">—</div><div class="kpi-hint" id="an-abo-hint">—</div></div>
-          <div class="kpi"><div class="kpi-label">Part « plaisir »</div><div class="kpi-val" id="an-ratio">—</div><div class="kpi-hint">des dépenses courantes</div></div>
+        <div class="kpi-grid kpi-row-3" style="grid-template-columns:repeat(3,1fr)">
+          <div class="kpi kpi-sage" title="Part de tes revenus mise de côté (opérations type Épargne ÷ revenus) sur la période choisie"><div class="kpi-label">Taux d'épargne</div><div class="kpi-val kpi-val-sage" id="an-taux">—</div><div class="kpi-hint" id="an-taux-hint">—</div></div>
+          <div class="kpi kpi-peach" title="Total mis de côté (opérations de type Épargne) sur la période choisie"><div class="kpi-label">Épargné (période)</div><div class="kpi-val" id="an-ep">—</div><div class="kpi-hint" id="an-ep-hint">—</div></div>
+          <div class="kpi kpi-rose" title="Ce qui te reste en moyenne chaque mois après dépenses et épargne"><div class="kpi-label">Reste à vivre /mois</div><div class="kpi-val" id="an-rav">—</div><div class="kpi-hint">en moyenne</div></div>
+          <div class="kpi kpi-gold" title="Moyenne de tes dépenses courantes par mois sur la période"><div class="kpi-label">Dépense moy. /mois</div><div class="kpi-val kpi-val-gold" id="an-depmoy">—</div><div class="kpi-hint" id="an-depmoy-hint">—</div></div>
+          <div class="kpi" title="Ta catégorie de dépense la plus lourde sur la période"><div class="kpi-label">Poste n°1</div><div class="kpi-val" id="an-top" style="font-size:18px">—</div><div class="kpi-hint" id="an-top-hint">—</div></div>
+          <div class="kpi kpi-peach" title="Part de tes dépenses courantes classées « plaisir » (vs « charges »)"><div class="kpi-label">Part « plaisir »</div><div class="kpi-val" id="an-ratio">—</div><div class="kpi-hint">des dépenses courantes</div></div>
         </div>
 
         <div class="card">
@@ -636,6 +664,16 @@
         <div class="card">
           <div class="card-hd"><div class="card-title">💡 Tes conseils perso <span style="font-size:11px;font-weight:500;color:var(--muted)">— basés sur tes vraies dépenses</span></div></div>
           <div id="analyse-tips"></div>
+        </div>
+
+        <!-- Règles de catégorisation (marchand → catégorie / sous-catégorie) -->
+        <div class="card">
+          <div class="card-hd">
+            <div class="card-title">🏷️ Mes règles de catégorisation <span style="font-size:11px;font-weight:500;color:var(--muted)">— « quand le libellé contient X → catégorie Y »</span></div>
+            <button class="btn-primary" onclick="openRuleForm()" style="padding:6px 12px;font-size:13px">+ Nouvelle règle</button>
+          </div>
+          <p class="page-sub" style="margin:0 0 12px">Ces règles s'appliquent automatiquement à l'import et à la saisie. Tu peux ré-catégoriser tout l'historique après modification.</p>
+          <div id="rules-list"></div>
         </div>
       </div>
 
@@ -791,10 +829,10 @@
           </div>
         </div>
         <div class="kpi-grid">
-          <div class="kpi kpi-sage"><div class="kpi-label">Épargné année</div><div class="kpi-val kpi-val-sage" id="ep-year">—</div><div class="kpi-hint" id="ep-year-hint">—</div></div>
-          <div class="kpi kpi-peach"><div class="kpi-label">Cible active</div><div class="kpi-val" id="ep-cible">—</div><div class="kpi-hint" id="ep-cible-hint">tous objectifs</div></div>
-          <div class="kpi kpi-rose"><div class="kpi-label">Reste à épargner</div><div class="kpi-val kpi-val-rose" id="ep-ecart">—</div><div class="kpi-hint" id="ep-ecart-hint">pour tout finir</div></div>
-          <div class="kpi kpi-gold"><div class="kpi-label">Taux d'épargne</div><div class="kpi-val kpi-val-gold" id="ep-rate">—</div><div class="kpi-hint">% des revenus</div></div>
+          <div class="kpi kpi-sage" title="Somme de tes opérations de type Épargne sur le mois choisi ci-dessus"><div class="kpi-label">Épargné ce mois</div><div class="kpi-val kpi-val-sage" id="ep-year">—</div><div class="kpi-hint" id="ep-year-hint">—</div></div>
+          <div class="kpi kpi-peach" title="Somme des montants cibles de tous tes objectifs en cours"><div class="kpi-label">Cible active</div><div class="kpi-val" id="ep-cible">—</div><div class="kpi-hint" id="ep-cible-hint">tous objectifs</div></div>
+          <div class="kpi kpi-rose" title="Cumul, sur tous tes objectifs en cours, de ce qu'il reste à mettre pour atteindre 100%"><div class="kpi-label">Reste à épargner</div><div class="kpi-val kpi-val-rose" id="ep-ecart">—</div><div class="kpi-hint" id="ep-ecart-hint">pour tout finir</div></div>
+          <div class="kpi kpi-gold" title="Part de tes revenus du mois que tu as mise de côté (épargne du mois ÷ revenus du mois)"><div class="kpi-label">Taux d'épargne</div><div class="kpi-val kpi-val-gold" id="ep-rate">—</div><div class="kpi-hint" id="ep-rate-hint">% des revenus du mois</div></div>
         </div>
 
         <!-- Objectifs en cours -->
@@ -864,10 +902,10 @@
               <div class="avatar-upload">
                 <div class="avatar-big-preview" id="avatar-big-preview">🌸</div>
                 <div style="display:flex;flex-direction:column;gap:6px;flex:1">
-                  <input type="file" id="avatar-file" accept="image/*" style="display:none" onchange="uploadAvatar(this.files[0])">
+                  <input type="file" id="avatar-file" accept="image/*" style="display:none" onchange="openAvatarCropper(this.files[0])">
                   <button class="btn-ghost" onclick="document.getElementById('avatar-file').click()">📷 Choisir une photo</button>
                   <button class="btn-ghost" onclick="removeAvatar()" id="avatar-remove-btn" style="display:none;font-size:11px;padding:6px 10px">🗑 Retirer la photo</button>
-                  <div style="font-size:11px;color:var(--muted)">JPG / PNG · redimensionné auto à 400×400px max</div>
+                  <div style="font-size:11px;color:var(--muted)">JPG / PNG · tu recadres toi-même la photo</div>
                 </div>
               </div>
             </div>
@@ -992,9 +1030,9 @@
         <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
         Ops
       </button>
-      <button class="bnav-btn" data-tab="import" onclick="showTab('import')">
-        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Import
+      <button class="bnav-btn" data-tab="analyse" onclick="showTab('analyse')">
+        <svg viewBox="0 0 24 24"><path d="M21 21H4a1 1 0 01-1-1V3"/><path d="M7 14l3-3 3 3 5-6"/></svg>
+        Analyse
       </button>
       <button class="bnav-btn" data-tab="epargne" onclick="showTab('epargne')">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -1014,6 +1052,66 @@
     <div class="modal-btns">
       <button class="btn-ghost" onclick="closeModal()">Annuler</button>
       <button class="btn-primary" id="modal-confirm" onclick="confirmModal()">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Éditeur de règle de catégorisation -->
+<div id="rule-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeRuleForm()">
+  <div class="modal-box" style="max-width:440px;width:92vw">
+    <div class="modal-title" id="rule-modal-title">Nouvelle règle</div>
+    <div class="modal-msg" style="margin-bottom:14px">Quand le libellé d'une opération contient le texte ci-dessous, elle est classée dans la catégorie choisie.</div>
+    <input type="hidden" id="rule-id">
+    <div class="qa-field" style="margin-bottom:12px">
+      <label class="qa-label">Le libellé contient…</label>
+      <input class="inp" id="rule-pattern" placeholder="ex : franprix, sncf, netflix" style="text-transform:lowercase;width:100%">
+    </div>
+    <div class="qa-field" style="margin-bottom:12px">
+      <label class="qa-label">Catégorie</label>
+      <select class="select" id="rule-category" style="width:100%"></select>
+    </div>
+    <div class="qa-field" style="margin-bottom:12px">
+      <label class="qa-label">Sous-catégorie (facultatif)</label>
+      <input class="inp" id="rule-subcat" placeholder="ex : Courses, Train, Streaming" style="width:100%">
+    </div>
+    <div class="qa-field" style="margin-bottom:4px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="rule-generic"> Règle générique (priorité basse, appliquée en dernier)
+      </label>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-ghost" onclick="closeRuleForm()">Annuler</button>
+      <button class="btn-primary" onclick="saveRuleForm()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Liste éditable des opérations (clic sur une carte KPI) -->
+<div id="kpi-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeKpiList()">
+  <div class="modal-box" style="max-width:560px;width:92vw;max-height:82vh;display:flex;flex-direction:column">
+    <div class="modal-title" id="kpi-modal-title" style="margin-bottom:4px">Opérations</div>
+    <div class="modal-msg" id="kpi-modal-sub" style="margin-bottom:10px">—</div>
+    <div id="kpi-modal-list" style="overflow-y:auto;flex:1;margin:0 -4px"></div>
+    <div class="modal-btns"><button class="btn-ghost" onclick="closeKpiList()">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Recadrage de la photo de profil -->
+<div id="crop-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="max-width:340px">
+    <div class="modal-title">Recadre ta photo</div>
+    <div class="modal-msg" style="margin-bottom:12px">Glisse la photo pour la repositionner, puis ajuste le zoom.</div>
+    <div id="crop-viewport" class="crop-viewport">
+      <img id="crop-img" class="crop-img" alt="" draggable="false">
+      <div class="crop-ring"></div>
+    </div>
+    <div class="crop-zoom">
+      <span style="font-size:13px">🔍</span>
+      <input type="range" id="crop-zoom" min="1" max="3" step="0.01" value="1">
+    </div>
+    <div class="modal-btns">
+      <button class="btn-ghost" onclick="closeAvatarCropper()">Annuler</button>
+      <button class="btn-primary" onclick="confirmAvatarCrop()">✓ Valider</button>
     </div>
   </div>
 </div>
