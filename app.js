@@ -4227,3 +4227,159 @@ function quickAddOpen() {
   if (!selectedDay) selectDay(new Date().toISOString().slice(0, 10));
   $('qa-label').focus();
 }
+
+// ═══════════════════════════════════════════════════════════════
+// 🤖 IA — Chatbot budgétaire + Conseils Analyse (via Edge Function « monie-ai »)
+//    La clé API vit côté serveur ; ici on n'envoie qu'un CONTEXTE AGRÉGÉ.
+// ═══════════════════════════════════════════════════════════════
+let aiChatMsgs = [];      // historique de la conversation en cours
+let aiBusy = false;
+
+// Construit un résumé chiffré et compact des finances (jamais le relevé brut).
+function buildAIContext(opts = {}) {
+  if (!Array.isArray(transactions) || !transactions.length) return "Aucune transaction enregistrée pour l'instant.";
+  const now = new Date();
+  const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const curYear = opts.year && opts.year !== '-1' ? String(opts.year) : String(now.getFullYear());
+  const sIn = a => a.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
+  const sOut = a => a.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const sEp = a => a.filter(t => t.type === 'epargne').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const L = [];
+
+  // Mois courant
+  const cur = transactions.filter(t => t.date_op.startsWith(curKey));
+  L.push(`Mois en cours (${curKey}) : revenus ${Math.round(sIn(cur))}€, dépenses ${Math.round(sOut(cur))}€, épargne ${Math.round(sEp(cur))}€.`);
+
+  // Année analysée
+  const yr = transactions.filter(t => t.date_op.startsWith(curYear));
+  const yIn = sIn(yr), yOut = sOut(yr), yEp = sEp(yr);
+  const nMonths = new Set(yr.map(t => t.date_op.slice(0, 7))).size || 1;
+  L.push(`Année ${curYear} : revenus ${Math.round(yIn)}€, dépenses ${Math.round(yOut)}€, épargne ${Math.round(yEp)}€, taux d'épargne ${yIn > 0 ? Math.round(yEp / yIn * 100) : 0}% (sur ${nMonths} mois).`);
+
+  // Top catégories de dépense de l'année
+  const catTot = {};
+  yr.filter(t => t.type === 'sortie').forEach(t => { catTot[t.category] = (catTot[t.category] || 0) + Math.abs(Number(t.amount)); });
+  const top = Object.entries(catTot).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  if (top.length) L.push('Top dépenses ' + curYear + ' par catégorie : ' + top.map(([c, v]) => `${c} ${Math.round(v)}€`).join(', ') + '.');
+
+  // Évolution 6 derniers mois (net)
+  const evo = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const m = transactions.filter(t => t.date_op.startsWith(k));
+    evo.push(`${k}: net ${Math.round(sIn(m) - sOut(m))}€`);
+  }
+  L.push('6 derniers mois (solde net) : ' + evo.join(' · ') + '.');
+
+  // Budget du mois (si défini)
+  try {
+    if (typeof computeBudgetStatus === 'function') {
+      const b = computeBudgetStatus();
+      if (b && b.rev) {
+        L.push(`Budget du mois : revenu ${Math.round(b.rev)}€ ; charges ${Math.round(b.spent.charges)}/${b.budget.charges}€, plaisir ${Math.round(b.spent.plaisir)}/${b.budget.plaisir}€, épargne ${Math.round(b.spent.epargne)}/${b.budget.epargne}€.`);
+      }
+    }
+  } catch (e) {}
+
+  // Objectifs d'épargne
+  if (Array.isArray(goalsList) && goalsList.length) {
+    const act = goalsList.filter(g => g.statut === 'en_cours');
+    if (act.length) L.push('Objectifs en cours : ' + act.map(g => `${g.nom} ${Math.round(g.deja_epargne || 0)}/${Math.round(g.cible || 0)}€ (${g.cible > 0 ? Math.round((g.deja_epargne || 0) / g.cible * 100) : 0}%)`).join(', ') + '.');
+  }
+  return L.join('\n');
+}
+
+// Appel générique à l'Edge Function
+async function callMonieAI(messages, mode, contextOpts) {
+  const context = buildAIContext(contextOpts || {});
+  const { data, error } = await sb.functions.invoke('monie-ai', { body: { messages, mode, context } });
+  if (error) {
+    // message d'erreur exploitable (fonction non déployée, etc.)
+    let msg = 'IA indisponible.';
+    try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; } catch (e) {}
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data?.reply || '(réponse vide)';
+}
+
+// ─── Widget de chat flottant (présent sur toutes les pages) ───
+function toggleAIChat(force) {
+  const panel = $('ai-chat-panel');
+  if (!panel) return;
+  const open = force !== undefined ? force : panel.style.display === 'none' || !panel.style.display;
+  panel.style.display = open ? 'flex' : 'none';
+  if (open) {
+    if (!aiChatMsgs.length) renderAIChat(); // affiche le message d'accueil
+    setTimeout(() => { const i = $('ai-chat-input'); if (i) i.focus(); }, 50);
+  }
+}
+
+function renderAIChat() {
+  const box = $('ai-chat-msgs');
+  if (!box) return;
+  if (!aiChatMsgs.length) {
+    box.innerHTML = `<div class="ai-msg ai-msg-bot">Coucou ! 🌸 Je suis Monie, ta conseillère budget. Pose-moi une question sur tes dépenses, ton épargne, ton budget… Ex : « Où est-ce que je dépense le plus ? » ou « Comment épargner 200€/mois ? »</div>`;
+    return;
+  }
+  box.innerHTML = aiChatMsgs.map(m => `<div class="ai-msg ai-msg-${m.role === 'user' ? 'me' : 'bot'}">${aiFmt(m.content)}</div>`).join('') +
+    (aiBusy ? `<div class="ai-msg ai-msg-bot ai-typing">Monie réfléchit…</div>` : '');
+  box.scrollTop = box.scrollHeight;
+}
+
+// Rend le markdown léger (gras + retours ligne) de façon sûre (échappe le HTML)
+function aiFmt(txt) {
+  let s = esc(String(txt));
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  s = s.replace(/\n/g, '<br>');
+  return s;
+}
+
+async function sendAIChat() {
+  const inp = $('ai-chat-input');
+  if (!inp) return;
+  const text = inp.value.trim();
+  if (!text || aiBusy) return;
+  inp.value = '';
+  aiChatMsgs.push({ role: 'user', content: text });
+  aiBusy = true;
+  renderAIChat();
+  try {
+    const reply = await callMonieAI(aiChatMsgs, 'chat');
+    aiChatMsgs.push({ role: 'assistant', content: reply });
+  } catch (e) {
+    aiChatMsgs.push({ role: 'assistant', content: '⚠️ ' + (e.message || 'IA indisponible') + '\n\n(As-tu déployé la fonction « monie-ai » et configuré la clé ?)' });
+  } finally {
+    aiBusy = false;
+    renderAIChat();
+  }
+}
+function onAIChatKey(ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); sendAIChat(); } }
+
+// ─── Conseils IA sur la page Analyse (dépense des tokens à chaque clic) ───
+async function runAIConseils() {
+  const out = $('ai-conseils-out');
+  const btn = $('ai-conseils-btn');
+  if (!out) return;
+  if (aiBusy) return;
+  aiBusy = true;
+  if (btn) { btn.disabled = true; btn.textContent = '🤖 Analyse en cours…'; }
+  out.style.display = 'block';
+  out.innerHTML = '<div class="ai-msg ai-msg-bot ai-typing">Monie analyse tes chiffres…</div>';
+  const ySel = $('analyse-year');
+  const year = ySel ? ySel.value : null;
+  try {
+    const reply = await callMonieAI(
+      [{ role: 'user', content: 'Analyse ma situation financière sur la période sélectionnée et donne-moi un bilan personnalisé.' }],
+      'conseils',
+      { year }
+    );
+    out.innerHTML = `<div class="ai-conseils-card">${aiFmt(reply)}</div>`;
+  } catch (e) {
+    out.innerHTML = `<div class="ai-msg ai-msg-bot">⚠️ ${esc(e.message || 'IA indisponible')}<br><br><small>Vérifie que la fonction « monie-ai » est déployée sur Supabase et que la clé ANTHROPIC_API_KEY est configurée.</small></div>`;
+  } finally {
+    aiBusy = false;
+    if (btn) { btn.disabled = false; btn.textContent = '🤖 Relancer l\'analyse IA'; }
+  }
+}

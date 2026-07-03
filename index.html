@@ -662,7 +662,11 @@
         </div>
 
         <div class="card">
-          <div class="card-hd"><div class="card-title">💡 Tes conseils perso <span style="font-size:11px;font-weight:500;color:var(--muted)">— basés sur tes vraies dépenses</span></div></div>
+          <div class="card-hd">
+            <div class="card-title">💡 Tes conseils perso <span style="font-size:11px;font-weight:500;color:var(--muted)">— basés sur tes vraies dépenses</span></div>
+            <button class="btn-primary" id="ai-conseils-btn" onclick="runAIConseils()" style="padding:6px 12px;font-size:13px" title="Analyse IA personnalisée (consomme des tokens à chaque clic)">🤖 Analyse IA</button>
+          </div>
+          <div id="ai-conseils-out" style="display:none;margin-bottom:14px"></div>
           <div id="analyse-tips"></div>
         </div>
 
@@ -1053,6 +1057,20 @@
       <button class="btn-ghost" onclick="closeModal()">Annuler</button>
       <button class="btn-primary" id="modal-confirm" onclick="confirmModal()">OK</button>
     </div>
+  </div>
+</div>
+
+<!-- 🤖 Chatbot IA flottant (toutes pages) -->
+<button id="ai-chat-fab" class="ai-chat-fab" onclick="toggleAIChat()" title="Demander à Monie" aria-label="Assistant IA">💬</button>
+<div id="ai-chat-panel" class="ai-chat-panel" style="display:none">
+  <div class="ai-chat-head">
+    <div class="ai-chat-title">🌸 Monie — ton assistante budget</div>
+    <button class="ai-chat-close" onclick="toggleAIChat(false)" aria-label="Fermer">✕</button>
+  </div>
+  <div id="ai-chat-msgs" class="ai-chat-msgs"></div>
+  <div class="ai-chat-inputbar">
+    <textarea id="ai-chat-input" class="ai-chat-input" rows="1" placeholder="Pose ta question…" onkeydown="onAIChatKey(event)"></textarea>
+    <button class="ai-chat-send" onclick="sendAIChat()" aria-label="Envoyer">➤</button>
   </div>
 </div>
 
