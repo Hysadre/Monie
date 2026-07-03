@@ -1830,33 +1830,7 @@ function renderAnalyse() {
       </div>`).join('') : '';
   $('analyse-sublist').innerHTML = `<div style="font-weight:800;font-size:15px;margin-bottom:10px">${catIcon(cat)} ${esc(cat)} — ${fmt(catTotal)}</div>` + subHtml + pmHtml;
 
-  // ── Conseils éducatifs (basés sur les vraies données) ──
-  const tips = [];
-  const alim = exp.filter(t => t.category === 'Alimentation');
-  const alimTot = alim.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
-  const resto = alim.filter(t => /resto|restau|sorties|livraison/i.test(t.sub_category || '')).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
-  if (alimTot > 0) {
-    const rp = Math.round(resto / alimTot * 100);
-    tips.push(rp > 35
-      ? { i: '🍽️', ok: false, t: `Tes restos & livraisons pèsent <b>${rp}%</b> de ton budget alimentation (${fmt(resto)}). Cuisiner un peu plus pourrait libérer une vraie marge.` }
-      : { i: '🍽️', ok: true, t: `Restos & livraisons : <b>${rp}%</b> de ton alimentation — bon équilibre 👍` });
-  }
-  tips.push(tauxEp >= 20
-    ? { i: '🌱', ok: true, t: `Taux d'épargne de <b>${tauxEp}%</b> — au-dessus des 20% recommandés. Continue comme ça !` }
-    : { i: '🌱', ok: false, t: `Ton taux d'épargne est de <b>${tauxEp}%</b>. La règle 50/30/20 vise <b>20%</b> : un virement automatique en début de mois t'aide à t'y tenir sans y penser.` });
-  if (abo > 0) {
-    const aboAn = Math.round(abo / months * 12);
-    const heavy = totalOut > 0 && (abo / totalOut) > 0.12;
-    tips.push({ i: '📱', ok: !heavy, t: `Tes abonnements coûtent <b>${fmt(aboAn)}/an</b> (${fmt(Math.round(abo / months))}/mois)${heavy ? ' — c\'est un poste important, passe-les en revue : souvent 1 ou 2 ne servent plus.' : '. Pense à vérifier de temps en temps ceux que tu n\'utilises plus.'}` });
-  }
-  if (plPct > 35) tips.push({ i: '🌸', ok: false, t: `Tes dépenses « plaisir » représentent <b>${plPct}%</b> de tes dépenses courantes (repère conseillé : 30%). Rien de grave — juste un point de vigilance.` });
-  tips.push({ i: '📊', ok: true, t: `Sur cette période : <b>${fmt(totalIn)}</b> de revenus, <b>${fmt(totalOut)}</b> de dépenses, soit un solde de <b>${fmt(solde)}</b>.` });
-  $('analyse-tips').innerHTML = tips.map(t => `
-    <div style="display:flex;gap:12px;padding:12px 14px;border-radius:12px;background:${t.ok ? 'rgba(127,184,158,0.12)' : 'rgba(232,184,77,0.14)'};margin-bottom:10px">
-      <div style="font-size:22px;flex-shrink:0">${t.i}</div>
-      <div style="font-size:13px;line-height:1.55;align-self:center">${t.t}</div>
-    </div>`).join('');
-
+  // Les conseils sont désormais générés par l'IA (bouton « 🤖 Analyse IA »).
   renderRulesList();
 }
 
@@ -4365,6 +4339,7 @@ async function runAIConseils() {
   if (aiBusy) return;
   aiBusy = true;
   if (btn) { btn.disabled = true; btn.textContent = '🤖 Analyse en cours…'; }
+  const hint = $('ai-conseils-hint'); if (hint) hint.style.display = 'none';
   out.style.display = 'block';
   out.innerHTML = '<div class="ai-msg ai-msg-bot ai-typing">Monie analyse tes chiffres…</div>';
   const ySel = $('analyse-year');
