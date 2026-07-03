@@ -2,15 +2,13 @@
 // Stratégie : cache-first pour le "shell" de l'app (HTML/CSS/JS/icônes),
 // réseau direct pour Supabase (données live jamais mises en cache).
 // Bump la version du cache à chaque déploiement pour forcer la mise à jour.
-const CACHE = 'monie-v3-37';
+const CACHE = 'monie-v3-38';
 // Fichiers locaux (doivent tous être mis en cache)
 const ASSETS = [
   './',
   './index.html',
   './app.js',
   './style.css',
-  './monie-boost.css',
-  './monie-boost.js',
   './manifest.json',
   './favicon.svg',
   './icon-152.png',
