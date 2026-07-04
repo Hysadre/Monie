@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v61'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v62'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3735,21 +3735,26 @@ function renderGoalCard(g, isAchieved = false, isAbandoned = false) {
     dateCibleStr = d.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
   }
 
+  // Boutons selon l'état — simple et clair
   const actions = isAchieved
-    ? `<button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier">✏️ Modifier</button>
-       <button class="goal-btn" onclick="reactivateGoal('${g.id}')" title="Remettre en cours">🔄 Remettre en cours</button>
+    ? `<button class="goal-btn" onclick="reactivateGoal('${g.id}')" title="Réactiver">🔄 Réactiver</button>
        <button class="goal-btn danger" onclick="deleteGoal('${g.id}')" title="Supprimer">🗑️</button>`
     : isAbandoned
-      ? `<button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier">✏️ Modifier</button>
-         <button class="goal-btn" onclick="reactivateGoal('${g.id}')" title="Réactiver">🔄 Réactiver</button>
+      ? `<button class="goal-btn" onclick="reactivateGoal('${g.id}')" title="Réactiver">🔄 Réactiver</button>
+         <button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier">✏️</button>
          <button class="goal-btn danger" onclick="deleteGoal('${g.id}')" title="Supprimer">🗑️</button>`
       : `<button class="goal-btn primary" onclick="openContribForm('${g.id}')" title="Ajouter une contribution">+ Contribuer</button>
-         <button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier l'objectif">✏️</button>
-         ${pct >= 100 ? `<button class="goal-btn" onclick="markAchieved('${g.id}')" title="Marquer atteint" style="color:var(--gold);border-color:var(--gold)">🏆 Atteint !</button>` : ''}
-         <button class="goal-btn" onclick="abandonGoal('${g.id}')" title="Archiver / mettre en pause">💤 Archiver</button>
-         <button class="goal-btn danger" onclick="deleteGoal('${g.id}')" title="Supprimer">🗑️</button>`;
+         <button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier">✏️</button>
+         <button class="goal-btn" onclick="postponeGoal('${g.id}')" title="Reporter la date cible">📅 Reporter</button>
+         ${pct >= 100 ? `<button class="goal-btn" onclick="markAchieved('${g.id}')" title="Marquer terminé" style="color:var(--gold);border-color:var(--gold)">🏆 Terminer</button>` : ''}
+         <button class="goal-btn" onclick="abandonGoal('${g.id}')" title="Annuler cet objectif">✖️ Annuler</button>`;
 
-  const dateAtteintStr = isAchieved && g.updated_at ? new Date(g.updated_at).toLocaleDateString('fr-FR') : '';
+  // Badge d'état (en haut à droite) — pas de texte dans la description
+  const statusBadge = isAchieved
+    ? `<span style="background:var(--sage-soft);color:var(--sage);font-weight:700;font-size:11px;padding:3px 10px;border-radius:100px;white-space:nowrap">✓ Terminé</span>`
+    : isAbandoned
+      ? `<span style="background:var(--border-soft);color:var(--muted);font-weight:700;font-size:11px;padding:3px 10px;border-radius:100px;white-space:nowrap">Annulé</span>`
+      : '';
 
   return `
     <div class="goal-card ${isAchieved ? 'achieved' : ''} ${isAbandoned ? 'abandoned' : ''}" style="border-left-color:${g.couleur || 'var(--sage)'}">
@@ -3758,13 +3763,13 @@ function renderGoalCard(g, isAchieved = false, isAbandoned = false) {
           <div class="goal-emoji" style="background:${g.couleur ? g.couleur + '20' : 'var(--sage-soft)'}">${g.emoji || '🎯'}</div>
           <div style="min-width:0;flex:1">
             <div class="goal-name">${esc(g.nom)}</div>
-            <div class="goal-sub">
-              ${isAchieved ? `🏆 Atteint le ${dateAtteintStr}` : isAbandoned ? '💤 Abandonné' : `Depuis le ${new Date(g.date_debut).toLocaleDateString('fr-FR')}`}
-              ${g.note ? ' · ' + esc(g.note) : ''}
-            </div>
+            ${g.note ? `<div class="goal-sub">${esc(g.note)}</div>` : ''}
           </div>
         </div>
-        <div class="goal-actions">${actions}</div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+          ${statusBadge}
+          <div class="goal-actions">${actions}</div>
+        </div>
       </div>
       <div class="goal-progress">
         <div class="goal-progress-bar">
@@ -4013,12 +4018,27 @@ async function markAchieved(id) {
 async function abandonGoal(id) {
   const g = goalsList.find(g => g.id === id);
   if (!g) return;
-  openModal('Abandonner cet objectif ?', `"${g.nom}" sera déplacé dans les abandonnés. Tu pourras le réactiver plus tard.`, async () => {
+  openModal('Annuler cet objectif ?', `"${g.nom}" passera en « Annulé » (grisé). Tu pourras le réactiver quand tu veux.`, async () => {
     if (!(await dbGuard(sb.from('epargne_objectifs').update({ statut: 'abandonne' }).eq('id', id))).ok) return;
     await loadGoals();
     renderEpargne();
-    toast('Objectif déplacé dans les abandonnés');
+    toast('✓ Objectif annulé');
   });
+}
+// Reporter la date cible d'un objectif en cours
+async function postponeGoal(id) {
+  const g = goalsList.find(x => x.id === id);
+  if (!g) return;
+  const cur = g.date_cible ? g.date_cible.slice(0, 10) : '';
+  const v = prompt('Reporter à quelle date ? (format AAAA-MM-JJ, ou vide pour retirer)', cur);
+  if (v === null) return;
+  const val = v.trim();
+  if (val && !/^\d{4}-\d{2}-\d{2}$/.test(val)) { toast('Format attendu : AAAA-MM-JJ', 'error'); return; }
+  const r = await dbGuard(sb.from('epargne_objectifs').update({ date_cible: val || null }).eq('id', id), 'Report impossible');
+  if (!r.ok) return;
+  g.date_cible = val || null;
+  renderEpargne();
+  toast(val ? `✓ Reporté au ${new Date(val).toLocaleDateString('fr-FR')}` : '✓ Date retirée', 'success');
 }
 
 async function reactivateGoal(id) {
