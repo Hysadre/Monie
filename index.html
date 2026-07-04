@@ -232,7 +232,14 @@
               <!-- Étape 5 : Catégorie -->
               <div class="qa-field">
                 <label class="qa-label">Catégorie</label>
-                <select class="select" id="qa-cat"></select>
+                <select class="select" id="qa-cat" onchange="updateQaSubcats()"></select>
+              </div>
+
+              <!-- Étape 6 : Sous-catégorie -->
+              <div class="qa-field">
+                <label class="qa-label">Sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(facultatif)</span></label>
+                <input class="inp" id="qa-subcat" list="qa-subcat-list" placeholder="Choisis ou saisis">
+                <datalist id="qa-subcat-list"></datalist>
               </div>
 
               <button class="btn-primary qa-submit" onclick="quickAddTx()">✓ Ajouter</button>
