@@ -284,6 +284,7 @@
         <div id="dash-view-global">
         <div id="dash-alerts"></div>
         <div id="dash-recap"></div>
+        <div id="dash-patrimoine"></div>
         <div class="kpi-grid">
           <div class="kpi kpi-sage kpi-click" onclick="openKpiList('entree')" title="Voir & modifier les entrées"><div class="kpi-label">Revenus mois ›</div><div class="kpi-val kpi-val-sage" id="dash-rev">—</div><div class="kpi-hint" id="dash-rev-hint">Ce mois</div></div>
           <div class="kpi kpi-rose kpi-click" onclick="openKpiList('sortie')" title="Voir & modifier les dépenses"><div class="kpi-label">Dépenses mois ›</div><div class="kpi-val kpi-val-rose" id="dash-dep">—</div><div class="kpi-hint" id="dash-dep-hint">Ce mois</div></div>
@@ -884,6 +885,33 @@
             <button class="btn-ghost" onclick="toggleAbandonedList()" id="toggle-abandoned-btn" style="padding:6px 12px;font-size:12px">Voir</button>
           </div>
           <div id="goals-abandoned-list" style="display:none"></div>
+        </div>
+
+        <!-- 🤝 Remboursements -->
+        <div class="card">
+          <div class="card-hd"><div class="card-title">🤝 Remboursements <span style="font-size:11px;font-weight:500;color:var(--muted)">— qui te doit quoi (et à qui tu dois)</span></div></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+            <select class="select" id="remb-sens" style="width:auto"><option value="on_me_doit">On me doit</option><option value="je_dois">Je dois</option></select>
+            <input class="inp" id="remb-tiers" placeholder="Qui ? (ex: Julien)" style="flex:1;min-width:120px">
+            <input class="inp" id="remb-motif" placeholder="Motif (facultatif)" style="flex:1;min-width:120px">
+            <input class="inp" id="remb-montant" type="number" step="0.01" placeholder="€" style="width:90px">
+            <button class="btn-primary" onclick="addRemboursement()" style="padding:8px 16px">+ Ajouter</button>
+          </div>
+          <div id="remb-list"></div>
+        </div>
+
+        <!-- 📦 Enveloppes / cagnottes -->
+        <div class="card">
+          <div class="card-hd"><div class="card-title">📦 Enveloppes <span style="font-size:11px;font-weight:500;color:var(--muted)">— mettre de côté chaque mois (Noël, vacances, impôts…)</span></div>
+            <button class="btn-primary" onclick="openEnveloppeForm()" style="padding:6px 12px;font-size:13px">+ Nouvelle</button></div>
+          <div id="env-list"></div>
+        </div>
+
+        <!-- 💳 Dettes / paiements échelonnés -->
+        <div class="card">
+          <div class="card-hd"><div class="card-title">💳 Dettes & échelonné <span style="font-size:11px;font-weight:500;color:var(--muted)">— Klarna, prêts… où tu en es</span></div>
+            <button class="btn-primary" onclick="openDetteForm()" style="padding:6px 12px;font-size:13px">+ Nouvelle</button></div>
+          <div id="dette-list"></div>
         </div>
       </div>
 

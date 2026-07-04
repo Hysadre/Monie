@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v58'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v59'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -158,6 +158,9 @@ let budgetYear = new Date().getFullYear();
 let investissements = [];
 let goalsList = [];
 let contribList = [];
+let remboursementsList = [];
+let enveloppesList = [];
+let dettesList = [];
 let showAchieved = false;
 let showAbandoned = false;
 let epargneMonth = new Date().getMonth();
@@ -554,6 +557,7 @@ async function showApp(user) {
   await loadBudgetPrep();
   await loadInvestissements();
   await loadGoals();
+  await loadExtra();
   populateYearSelect();
   populateDateSelects();
   renderCalendar();
@@ -681,6 +685,12 @@ async function loadAllData() {
   rules = rulesRes.data || [];
   await loadProfile();
   console.log(`📊 ${transactions.length} transactions, ${rules.length} règles, profil chargé`);
+}
+// Charge remboursements / enveloppes / dettes (défensif : si les tables n'existent pas encore, on ignore)
+async function loadExtra() {
+  try { const r = await sb.from('remboursements').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }); if (!r.error) remboursementsList = r.data || []; } catch (e) {}
+  try { const r = await sb.from('enveloppes').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }); if (!r.error) enveloppesList = r.data || []; } catch (e) {}
+  try { const r = await sb.from('dettes').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }); if (!r.error) dettesList = r.data || []; } catch (e) {}
 }
 
 // Affiche la version de l'app (témoin de déploiement) dès que possible
@@ -1403,6 +1413,35 @@ function renderDashRecap() {
   </div>`;
 }
 function dismissRecap(key) { try { localStorage.setItem('monie_recap_seen', key); } catch (e) {} const el = $('dash-recap'); if (el) el.innerHTML = ''; }
+
+// ─── 💎 Suivi de patrimoine (net worth, à partir du suivi mensuel) ───
+const _NW_FIELDS = ['lcl', 'bourso', 'especes', 'banque_postale', 'autre', 'livret_a', 'ldds', 'assurance_vie', 'esalia', 'investissements'];
+function computeNetWorth() {
+  if (typeof suiviData !== 'object' || !suiviData) return null;
+  const months = Object.keys(suiviData).sort();
+  if (!months.length) return null;
+  const sumMonth = k => _NW_FIELDS.reduce((s, f) => s + Number((suiviData[k] || {})[f] || 0), 0);
+  const cur = months[months.length - 1];
+  const prev = months.length > 1 ? months[months.length - 2] : null;
+  return { cur, curVal: sumMonth(cur), prevVal: prev != null ? sumMonth(prev) : null, months, sumMonth };
+}
+function renderPatrimoine() {
+  const el = $('dash-patrimoine'); if (!el) return;
+  const nw = computeNetWorth();
+  if (!nw || !nw.curVal) { el.innerHTML = ''; return; }
+  const delta = nw.prevVal != null ? nw.curVal - nw.prevVal : 0;
+  const series = nw.months.slice(-12).map(m => Math.round(nw.sumMonth(m)));
+  el.innerHTML = `<div class="card" style="margin-bottom:16px;cursor:pointer" onclick="showTab('suivi')" title="Voir le détail dans Suivi mensuel">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">💎 Ton patrimoine</div>
+        <div style="font-size:26px;font-weight:900;font-family:var(--fm)">${fmt(nw.curVal)}</div>
+        <div style="font-size:12px;color:${delta >= 0 ? 'var(--sage)' : 'var(--tender-rose)'}">${nw.prevVal != null ? (delta >= 0 ? '▲ +' : '▼ ') + fmt(delta) + ' vs mois dernier' : 'comptes + épargne + placements'}</div>
+      </div>
+      <div style="width:170px;height:60px"><canvas id="patrimoine-spark"></canvas></div>
+    </div></div>`;
+  if (series.length > 1) updateChart('patrimoine-spark', 'line', { labels: series.map(() => ''), datasets: [{ data: series, borderColor: '#7C3F58', backgroundColor: 'rgba(124,63,88,0.12)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0 }] }, { scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false }, tooltip: { enabled: false } } });
+}
 async function generateMonthlyRecap(monthKey) {
   const out = $('dash-recap-out'); if (!out || aiBusy) return;
   aiBusy = true;
@@ -1858,6 +1897,7 @@ function renderDashboard() {
   const isGlobal = isGlobalYear || isGlobalMonth;
   if (typeof renderDashAlerts === 'function') renderDashAlerts();
   if (typeof renderDashRecap === 'function') renderDashRecap();
+  if (typeof renderPatrimoine === 'function') renderPatrimoine();
 
   set('dash-month-lbl', isGlobal
     ? '🌍 Global (toutes tes tx)'
@@ -3541,6 +3581,9 @@ async function resyncSuivi() {
 
 // ═══ ÉPARGNE ═══════════════════════════════════════════════════
 function renderEpargne() {
+  renderRemboursements();
+  renderEnveloppes();
+  renderDettes();
   if ($('ep-month-select')) $('ep-month-select').value = epargneMonth;
   if ($('ep-year-select')) $('ep-year-select').value = epargneYear;
   const monthKey = `${epargneYear}-${String(epargneMonth + 1).padStart(2, '0')}`;
@@ -5119,3 +5162,165 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openSearch(); }
   else if (e.key === 'Escape') { const m = $('search-modal'); if (m && m.style.display !== 'none') closeSearch(); }
 });
+
+// ═══ 🤝 REMBOURSEMENTS · 📦 ENVELOPPES · 💳 DETTES ═══
+async function addRemboursement() {
+  const tiers = ($('remb-tiers').value || '').trim();
+  const montant = parseFloat($('remb-montant').value) || 0;
+  const sens = $('remb-sens').value;
+  const motif = ($('remb-motif').value || '').trim() || null;
+  if (!tiers || montant <= 0) { toast('Un nom et un montant, s\'il te plaît', 'error'); return; }
+  const r = await dbGuard(sb.from('remboursements').insert({ user_id: currentUser.id, tiers, montant, sens, motif }).select(), 'Ajout impossible (as-tu lancé le SQL-V317 ?)');
+  if (!r.ok) return;
+  if (r.data && r.data[0]) remboursementsList.unshift(r.data[0]);
+  $('remb-tiers').value = ''; $('remb-montant').value = ''; $('remb-motif').value = '';
+  renderRemboursements();
+  toast('✓ Remboursement ajouté', 'success');
+}
+async function settleRemboursement(id) {
+  const r = await dbGuard(sb.from('remboursements').update({ statut: 'regle' }).eq('id', id), 'Maj impossible');
+  if (!r.ok) return;
+  const e = remboursementsList.find(x => x.id === id); if (e) e.statut = 'regle';
+  renderRemboursements(); toast('✓ Marqué réglé', 'success');
+}
+async function deleteRemboursement(id) {
+  const r = await dbGuard(sb.from('remboursements').delete().eq('id', id), 'Suppression impossible');
+  if (!r.ok) return;
+  remboursementsList = remboursementsList.filter(x => x.id !== id);
+  renderRemboursements();
+}
+function renderRemboursements() {
+  const el = $('remb-list'); if (!el) return;
+  const pend = remboursementsList.filter(r => r.statut !== 'regle');
+  const meDoit = pend.filter(r => r.sens === 'on_me_doit').reduce((s, r) => s + Number(r.montant), 0);
+  const jeDois = pend.filter(r => r.sens === 'je_dois').reduce((s, r) => s + Number(r.montant), 0);
+  if (!remboursementsList.length) { el.innerHTML = '<div class="empty-sub">Rien pour l\'instant. Ajoute ce qu\'on te doit (ou ce que tu dois).</div>'; return; }
+  el.innerHTML = `<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:130px;background:var(--sage-soft);border-radius:10px;padding:10px 12px"><div style="font-size:11px;color:var(--muted)">On te doit</div><div style="font-family:var(--fm);font-weight:800;color:var(--sage)">${fmt(meDoit)}</div></div>
+      <div style="flex:1;min-width:130px;background:var(--tender-rose-soft);border-radius:10px;padding:10px 12px"><div style="font-size:11px;color:var(--muted)">Tu dois</div><div style="font-family:var(--fm);font-weight:800;color:var(--tender-rose)">${fmt(jeDois)}</div></div>
+    </div>` + remboursementsList.map(r => {
+    const reg = r.statut === 'regle';
+    return `<div class="day-tx-item" style="${reg ? 'opacity:.5' : ''}">
+      <div class="day-tx-icon" style="background:${r.sens === 'on_me_doit' ? 'var(--sage-soft)' : 'var(--tender-rose-soft)'};color:${r.sens === 'on_me_doit' ? 'var(--sage)' : 'var(--tender-rose)'}">${r.sens === 'on_me_doit' ? '↩️' : '➡️'}</div>
+      <div class="day-tx-info"><div class="tx-label">${esc(r.tiers)}${r.motif ? ' · ' + esc(r.motif) : ''}</div><div class="tx-cat">${r.sens === 'on_me_doit' ? 'te doit' : 'tu dois'}${reg ? ' · réglé ✓' : ''}</div></div>
+      <div class="day-tx-amt" style="font-family:var(--fm);font-weight:700">${fmt(r.montant)}</div>
+      ${reg ? '' : `<button class="goal-btn" onclick="settleRemboursement('${r.id}')" title="Marquer réglé">✓</button>`}
+      <button class="goal-btn danger" onclick="deleteRemboursement('${r.id}')" title="Supprimer">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+function openEnveloppeForm(existing) {
+  const e = existing || {};
+  openModal(existing ? 'Modifier l\'enveloppe' : 'Nouvelle enveloppe', 'Une cagnotte que tu remplis mois après mois.', async () => {
+    const nom = ($('env-nom').value || '').trim();
+    const emoji = ($('env-emoji').value || '📦').trim() || '📦';
+    const objectif = parseFloat($('env-obj').value) || 0;
+    const mensuel = parseFloat($('env-mensuel').value) || 0;
+    if (!nom) { toast('Un nom, s\'il te plaît', 'error'); return false; }
+    const payload = { user_id: currentUser.id, nom, emoji, objectif, mensuel };
+    let res;
+    if (e.id) res = await dbGuard(sb.from('enveloppes').update(payload).eq('id', e.id).select(), 'Maj impossible');
+    else res = await dbGuard(sb.from('enveloppes').insert(payload).select(), 'Ajout impossible (SQL-V317 lancé ?)');
+    if (!res.ok) return false;
+    await loadExtra(); renderEnveloppes(); toast('✓ Enregistré', 'success');
+  }, `<div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;gap:8px"><input class="inp" id="env-emoji" value="${esc(e.emoji || '📦')}" style="width:56px;text-align:center"><input class="inp" id="env-nom" value="${esc(e.nom || '')}" placeholder="Ex: Noël, Vacances, Impôts" style="flex:1"></div>
+    <div class="auth-field"><label>Objectif (€, facultatif)</label><input class="inp" id="env-obj" type="number" step="1" value="${e.objectif || ''}"></div>
+    <div class="auth-field"><label>Je mets chaque mois (€)</label><input class="inp" id="env-mensuel" type="number" step="1" value="${e.mensuel || ''}"></div>
+  </div>`);
+}
+async function addToEnveloppe(id, montant) {
+  const e = enveloppesList.find(x => x.id === id); if (!e) return;
+  const nv = Number(e.actuel || 0) + montant;
+  const r = await dbGuard(sb.from('enveloppes').update({ actuel: nv }).eq('id', id), 'Maj impossible');
+  if (!r.ok) return;
+  e.actuel = nv; renderEnveloppes();
+}
+async function deleteEnveloppe(id) {
+  openModal('Supprimer l\'enveloppe ?', '', async () => {
+    const r = await dbGuard(sb.from('enveloppes').delete().eq('id', id), 'Suppression impossible');
+    if (!r.ok) return;
+    enveloppesList = enveloppesList.filter(x => x.id !== id); renderEnveloppes(); toast('✓ Supprimée', 'success');
+  });
+}
+function renderEnveloppes() {
+  const el = $('env-list'); if (!el) return;
+  if (!enveloppesList.length) { el.innerHTML = '<div class="empty-sub">Crée une enveloppe pour provisionner tes dépenses futures (cadeaux, vacances…).</div>'; return; }
+  el.innerHTML = enveloppesList.map(e => {
+    const pct = e.objectif > 0 ? Math.min(100, Math.round(e.actuel / e.objectif * 100)) : 0;
+    return `<div style="padding:12px 0;border-bottom:1px solid var(--border-soft)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span style="font-size:20px">${esc(e.emoji || '📦')}</span>
+        <div style="flex:1"><b>${esc(e.nom)}</b>${e.mensuel > 0 ? ` <span style="font-size:11px;color:var(--muted)">· ${fmt(e.mensuel)}/mois</span>` : ''}</div>
+        <div style="font-family:var(--fm);font-weight:800">${fmt(e.actuel || 0)}${e.objectif > 0 ? ` <span style="color:var(--muted);font-weight:600">/ ${fmt(e.objectif)}</span>` : ''}</div>
+      </div>
+      ${e.objectif > 0 ? `<div style="height:6px;background:var(--border-soft);border-radius:100px;overflow:hidden;margin-bottom:6px"><div style="height:100%;width:${pct}%;background:var(--sage);border-radius:100px"></div></div>` : ''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${e.mensuel > 0 ? `<button class="goal-btn" onclick="addToEnveloppe('${e.id}', ${Number(e.mensuel)})">+ ${fmt(e.mensuel)} (mois)</button>` : ''}
+        <button class="goal-btn" onclick="addToEnveloppe('${e.id}', 10)">+10</button>
+        <button class="goal-btn" onclick="openEnveloppeForm(enveloppesList.find(x=>x.id==='${e.id}'))">✏️</button>
+        <button class="goal-btn danger" onclick="deleteEnveloppe('${e.id}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openDetteForm(existing) {
+  const d = existing || {};
+  openModal(existing ? 'Modifier la dette' : 'Nouvelle dette / échelonné', 'Suis où tu en es dans ton remboursement.', async () => {
+    const nom = ($('dette-nom').value || '').trim();
+    const total = parseFloat($('dette-total').value) || 0;
+    const mensualite = parseFloat($('dette-mens').value) || 0;
+    const deja = parseFloat($('dette-deja').value) || 0;
+    if (!nom || total <= 0) { toast('Un nom et un montant total', 'error'); return false; }
+    const payload = { user_id: currentUser.id, nom, montant_total: total, mensualite, deja_paye: deja };
+    let res;
+    if (d.id) res = await dbGuard(sb.from('dettes').update(payload).eq('id', d.id).select(), 'Maj impossible');
+    else res = await dbGuard(sb.from('dettes').insert(payload).select(), 'Ajout impossible (SQL-V317 lancé ?)');
+    if (!res.ok) return false;
+    await loadExtra(); renderDettes(); toast('✓ Enregistré', 'success');
+  }, `<div style="display:flex;flex-direction:column;gap:10px">
+    <div class="auth-field"><label>Nom</label><input class="inp" id="dette-nom" value="${esc(d.nom || '')}" placeholder="Ex: Klarna canapé, Prêt"></div>
+    <div class="auth-field"><label>Montant total (€)</label><input class="inp" id="dette-total" type="number" step="1" value="${d.montant_total || ''}"></div>
+    <div class="auth-field"><label>Mensualité (€)</label><input class="inp" id="dette-mens" type="number" step="1" value="${d.mensualite || ''}"></div>
+    <div class="auth-field"><label>Déjà payé (€)</label><input class="inp" id="dette-deja" type="number" step="1" value="${d.deja_paye || 0}"></div>
+  </div>`);
+}
+async function payDette(id) {
+  const d = dettesList.find(x => x.id === id); if (!d) return;
+  const nv = Math.min(Number(d.montant_total), Number(d.deja_paye || 0) + Number(d.mensualite || 0));
+  const r = await dbGuard(sb.from('dettes').update({ deja_paye: nv }).eq('id', id), 'Maj impossible');
+  if (!r.ok) return;
+  d.deja_paye = nv; renderDettes();
+  if (nv >= Number(d.montant_total)) { toast('🎉 Dette remboursée, bravo !', 'success'); _confettiBurst(); }
+}
+async function deleteDette(id) {
+  openModal('Supprimer cette dette ?', '', async () => {
+    const r = await dbGuard(sb.from('dettes').delete().eq('id', id), 'Suppression impossible');
+    if (!r.ok) return;
+    dettesList = dettesList.filter(x => x.id !== id); renderDettes(); toast('✓ Supprimée', 'success');
+  });
+}
+function renderDettes() {
+  const el = $('dette-list'); if (!el) return;
+  if (!dettesList.length) { el.innerHTML = '<div class="empty-sub">Ajoute un paiement échelonné ou un prêt pour suivre ce qu\'il te reste.</div>'; return; }
+  el.innerHTML = dettesList.map(d => {
+    const reste = Math.max(0, Number(d.montant_total) - Number(d.deja_paye || 0));
+    const pct = d.montant_total > 0 ? Math.min(100, Math.round(d.deja_paye / d.montant_total * 100)) : 0;
+    const nbRest = d.mensualite > 0 ? Math.ceil(reste / d.mensualite) : null;
+    return `<div style="padding:12px 0;border-bottom:1px solid var(--border-soft)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <div style="flex:1"><b>${esc(d.nom)}</b> <span style="font-size:11px;color:var(--muted)">${nbRest != null && reste > 0 ? `· ${nbRest} paiement(s) de ${fmt(d.mensualite)}` : (reste === 0 ? '· soldé 🎉' : '')}</span></div>
+        <div style="font-family:var(--fm);font-weight:800">${fmt(d.deja_paye || 0)} <span style="color:var(--muted);font-weight:600">/ ${fmt(d.montant_total)}</span></div>
+      </div>
+      <div style="height:6px;background:var(--border-soft);border-radius:100px;overflow:hidden;margin-bottom:6px"><div style="height:100%;width:${pct}%;background:var(--gold);border-radius:100px"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Reste ${fmt(reste)}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${reste > 0 && d.mensualite > 0 ? `<button class="goal-btn" onclick="payDette('${d.id}')">+ payer ${fmt(d.mensualite)}</button>` : ''}
+        <button class="goal-btn" onclick="openDetteForm(dettesList.find(x=>x.id==='${d.id}'))">✏️</button>
+        <button class="goal-btn danger" onclick="deleteDette('${d.id}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
