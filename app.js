@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v59'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v60'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1389,30 +1389,58 @@ function dismissDashAlerts() {
   const el = $('dash-alerts'); if (el) el.innerHTML = '';
 }
 
-// ─── 📅 Récap mensuel automatique (généré par l'IA à la demande) ───
+// ─── 📅 Récap mensuel : on DEMANDE d'abord si le mois est prêt (transactions complètes) ───
+let _recapSnoozed = false; // "pas encore" → caché pour la session, reproposé au prochain lancement
+function _getRecaps() { try { return JSON.parse(localStorage.getItem('monie_recaps') || '{}'); } catch (e) { return {}; } }
+function _recapDone(key) { return !!_getRecaps()[key]; }
+function _saveRecap(key, text) {
+  try { const r = _getRecaps(); r[key] = { text, date: new Date().toISOString() }; localStorage.setItem('monie_recaps', JSON.stringify(r)); } catch (e) {}
+}
 function renderDashRecap() {
   const el = $('dash-recap'); if (!el) return;
   const now = new Date();
   const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const lastKey = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}`;
   const hasData = transactions.some(t => t.date_op.startsWith(lastKey));
-  let dismissed = false;
-  try { dismissed = localStorage.getItem('monie_recap_seen') === lastKey; } catch (e) {}
-  if (!hasData || dismissed) { el.innerHTML = ''; return; }
+  if (!hasData || _recapDone(lastKey) || _recapSnoozed) { el.innerHTML = ''; return; }
   el.innerHTML = `<div class="card" id="dash-recap-card" style="margin-bottom:16px;background:linear-gradient(135deg,var(--lavender-soft),var(--sage-soft));border:none">
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <div style="font-size:28px">📅</div>
       <div style="flex:1;min-width:180px">
-        <div style="font-weight:800;font-size:15px">Ton récap de ${MONTHS[last.getMonth()]} ${last.getFullYear()} est prêt</div>
-        <div style="font-size:12px;color:var(--muted)">Un bilan personnalisé de ton mois, généré par l'IA.</div>
+        <div style="font-weight:800;font-size:15px">${MONTHS[last.getMonth()]} ${last.getFullYear()} est terminé</div>
+        <div style="font-size:12px;color:var(--muted)">Tes transactions de ce mois sont-elles <b>complètes et à jour</b> (relevés reçus) ? Si oui, je te fais le récap.</div>
       </div>
-      <button class="btn-primary" onclick="generateMonthlyRecap('${lastKey}')">✨ Voir le récap</button>
-      <button class="btn-ghost" style="padding:6px 10px;font-size:12px" onclick="dismissRecap('${lastKey}')">Plus tard</button>
+      <button class="btn-primary" onclick="generateMonthlyRecap('${lastKey}')">✅ Oui, fais le récap</button>
+      <button class="btn-ghost" style="padding:6px 10px;font-size:12px" onclick="snoozeRecap()">⏳ Pas encore</button>
     </div>
     <div id="dash-recap-out" style="margin-top:14px"></div>
   </div>`;
 }
-function dismissRecap(key) { try { localStorage.setItem('monie_recap_seen', key); } catch (e) {} const el = $('dash-recap'); if (el) el.innerHTML = ''; }
+function snoozeRecap() { _recapSnoozed = true; const el = $('dash-recap'); if (el) el.innerHTML = ''; toast('Ok, je te reposerai la question plus tard 🌸'); }
+// Liste des récaps sauvegardés (page Analyse, en bas)
+function renderAnalyseRecaps() {
+  const el = $('analyse-recaps'); if (!el) return;
+  const recaps = _getRecaps();
+  const keys = Object.keys(recaps).sort().reverse();
+  if (!keys.length) { el.innerHTML = '<div class="empty-sub">Aucun récap encore. Quand un mois est complet, valide-le depuis le tableau de bord et ton récap s\'enregistrera ici.</div>'; return; }
+  el.innerHTML = keys.map(k => {
+    const r = recaps[k];
+    const lbl = `${MONTHS[parseInt(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}`;
+    return `<details style="border:1px solid var(--border-soft);border-radius:12px;padding:10px 14px;margin-bottom:10px">
+      <summary style="cursor:pointer;font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center">
+        <span>📅 ${lbl}</span>
+        <span style="font-size:11px;color:var(--muted);font-weight:400">enregistré le ${new Date(r.date).toLocaleDateString('fr-FR')}</span>
+      </summary>
+      <div class="ai-conseils-card" style="margin-top:10px">${aiFmt(r.text)}</div>
+      <div style="text-align:right;margin-top:8px"><button class="goal-btn danger" onclick="deleteRecap('${k}')" style="font-size:12px">🗑 Supprimer</button></div>
+    </details>`;
+  }).join('');
+}
+function deleteRecap(key) {
+  try { const r = _getRecaps(); delete r[key]; localStorage.setItem('monie_recaps', JSON.stringify(r)); } catch (e) {}
+  renderAnalyseRecaps();
+  toast('✓ Récap supprimé', 'success');
+}
 
 // ─── 💎 Suivi de patrimoine (net worth, à partir du suivi mensuel) ───
 const _NW_FIELDS = ['lcl', 'bourso', 'especes', 'banque_postale', 'autre', 'livret_a', 'ldds', 'assurance_vie', 'esalia', 'investissements'];
@@ -1453,7 +1481,8 @@ async function generateMonthlyRecap(monthKey) {
       { periodType: 'month', month: monthKey }
     );
     out.innerHTML = `<div class="ai-conseils-card">${aiFmt(reply)}</div>`;
-    try { localStorage.setItem('monie_recap_seen', monthKey); } catch (e) {}
+    _saveRecap(monthKey, reply);              // sauvegarde → visible dans Analyse
+    if (typeof renderAnalyseRecaps === 'function') renderAnalyseRecaps();
   } catch (e) {
     out.innerHTML = `<div class="ai-msg ai-msg-bot">⚠️ ${esc(e.message || 'IA indisponible')}</div>`;
   } finally { aiBusy = false; }
@@ -2262,6 +2291,7 @@ function renderAnalyse() {
 
   // Les conseils sont désormais générés par l'IA (bouton « 🤖 Analyse IA »).
   renderRulesList();
+  if (typeof renderAnalyseRecaps === 'function') renderAnalyseRecaps();
 }
 
 // ─── Éditeur de règles de catégorisation (marchand → catégorie) ───
