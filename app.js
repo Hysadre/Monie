@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v63'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v64'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1336,6 +1336,7 @@ function populateCategorySelects() {
   const type = document.querySelector('input[name="qa-type"]:checked')?.value || 'sortie';
   const opts = (type === 'sortie' ? cats : catsEnt).map(c => `<option value="${c}">${catIcon(c)} ${c}</option>`).join('');
   $('qa-cat').innerHTML = opts;
+  if (typeof updateQaSubcats === 'function') updateQaSubcats();
   updatePayMethodOptions();
   // Filter select
   const catsAll = Object.keys(CAT_META).sort();
@@ -1544,12 +1545,19 @@ function updatePayMethodOptions() {
 document.addEventListener('change', e => {
   if (e.target.matches('input[name="qa-type"]')) populateCategorySelects();
 });
+// Met à jour les suggestions de sous-catégorie du formulaire selon la catégorie choisie
+function updateQaSubcats() {
+  const cat = $('qa-cat') ? $('qa-cat').value : '';
+  const dl = $('qa-subcat-list');
+  if (dl && typeof subcatDatalist === 'function') dl.innerHTML = subcatDatalist(cat);
+}
 async function quickAddTx() {
   if (!selectedDay) { toast('Sélectionne un jour d\'abord', 'error'); return; }
   const label = $('qa-label').value.trim();
   const amount = parseFloat($('qa-amount').value);
   const type = document.querySelector('input[name="qa-type"]:checked').value;
   const category = $('qa-cat').value;
+  const subcat = ($('qa-subcat') && $('qa-subcat').value || '').trim() || null;
   const payMethod = $('qa-paymethod') ? $('qa-paymethod').value : null;
   if (!label || !amount || amount <= 0) { toast('Description et montant requis', 'error'); return; }
   // ⚠️ Alerte doublon : une opération du même montant existe déjà à ±3 jours ?
@@ -1574,7 +1582,7 @@ async function quickAddTx() {
     amount: type === 'entree' ? amount : -amount,
     type: type,
     category: category,
-    sub_category: null,
+    sub_category: subcat,
     source: 'manual',
     merchant_key: merchantKey(label),
     payment_method: payMethod || null
@@ -1589,6 +1597,7 @@ async function quickAddTx() {
   }
   $('qa-label').value = '';
   $('qa-amount').value = '';
+  if ($('qa-subcat')) $('qa-subcat').value = '';
   toast('✓ Ajouté dans le calendrier et les transactions', 'success');
   renderCalendar();
   selectDay(selectedDay);
