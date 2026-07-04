@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v48'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v49'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1488,6 +1488,43 @@ function navBack() {
   const prev = _navStack[_navStack.length - 1];
   if (prev) prev(); else closeKpiList();
 }
+// Ré-affiche la vue courante de la fenêtre (après une modif « réglé »/note, sans changer de niveau)
+function _navRefresh() {
+  const top = _navStack[_navStack.length - 1];
+  const m = $('kpi-modal');
+  if (top && m && m.style.display !== 'none') top();
+}
+
+// ─── État « réglé ✓ » + note par catégorie (partagé liste ↔ box), stocké dans le budget du mois ───
+function _ensureSubBudget() {
+  if (!budgetData.sub_budget) budgetData.sub_budget = JSON.parse(JSON.stringify(DEFAULT_SUB_PCT));
+  if (!budgetData.sub_budget._catStatus) budgetData.sub_budget._catStatus = {};
+  return budgetData.sub_budget;
+}
+function catStat(cat) {
+  const s = budgetData.sub_budget;
+  return (s && s._catStatus && s._catStatus[cat]) || {};
+}
+function toggleCatDone(cat) {
+  const sub = _ensureSubBudget();
+  const cur = sub._catStatus[cat] || {};
+  cur.done = !cur.done;
+  sub._catStatus[cat] = cur;
+  saveBudgetPrep();
+  if (typeof renderBudget === 'function') renderBudget();
+  _navRefresh();
+}
+function editCatNote(cat) {
+  const note = prompt(`Petite note pour « ${cat} » :`, catStat(cat).note || '');
+  if (note === null) return; // annulé
+  const sub = _ensureSubBudget();
+  const cur = sub._catStatus[cat] || {};
+  cur.note = note.trim();
+  sub._catStatus[cat] = cur;
+  saveBudgetPrep();
+  if (typeof renderBudget === 'function') renderBudget();
+  _navRefresh();
+}
 
 // ─── Liste éditable des opérations derrière une carte KPI ───
 function openKpiList(kind, nav) {
@@ -1583,10 +1620,14 @@ function openBlockDetail(blockKey, monthKey, nav) {
   list.innerHTML = _backBtnHtml() + (cats.length ? cats.map(c => {
     const sp = Math.round(status.spentByCat[c]);
     const bud = Math.round(status.budgetByCat[c] || 0);
-    return `<div class="day-tx-item" style="cursor:pointer" onclick="openCatMonthList('${esc(c)}','${monthKey}','push')" title="Voir les opérations ${esc(c)}">
+    const st = catStat(c);
+    const cE = esc(c);
+    return `<div class="day-tx-item${st.done ? ' done' : ''}" style="cursor:pointer" onclick="openCatMonthList('${cE}','${monthKey}','push')" title="Voir les opérations ${cE}">
       <div class="day-tx-icon" style="background:${catColor(c)}18;color:${catColor(c)}">${catIcon(c)}</div>
-      <div class="day-tx-info"><div class="tx-label">${esc(c)} ›</div><div class="tx-cat">${bud > 0 ? 'budget ' + fmt(bud) : 'hors budget'}</div></div>
+      <div class="day-tx-info"><div class="tx-label">${cE} ›</div><div class="tx-cat">${bud > 0 ? 'budget ' + fmt(bud) : 'hors budget'}${st.note ? ` · 📝 ${esc(st.note)}` : ''}</div></div>
       <div class="day-tx-amt amt-out">${fmt(sp)}</div>
+      <span onclick="event.stopPropagation();editCatNote('${cE}')" title="Ajouter / modifier une note" style="cursor:pointer;font-size:15px;margin-left:8px;opacity:.7">📝</span>
+      <input type="checkbox" class="bud-sub-check" ${st.done ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleCatDone('${cE}')" title="C'est réglé ✓" aria-label="Marquer ${cE} comme réglé" style="margin-left:10px">
     </div>`;
   }).join('') : '<div class="empty-sub" style="padding:20px;text-align:center">Aucune dépense dans ce poste ce mois.</div>');
   $('kpi-modal').style.display = 'flex';
@@ -3938,10 +3979,23 @@ function renderBudgetStatus(containerId, compact, monthKey) {
     .filter(r => r.bud > 0 || r.sp > 0)
     .sort((a, b) => (b.over - a.over) || (b.pct - a.pct));
   if (compact) rows = rows.filter(r => r.pct >= 80).slice(0, 6);
+  else {
+    // Vue complète : on allège → on ne garde que les postes ENTAMÉS mais pas encore bouclés.
+    //  • pas dépensé (sp = 0)         → retiré
+    //  • budget atteint pile (reste 0) → retiré (c'est réglé, ça prend de la place pour rien)
+    //  • en cours (partiel) ou dépassé → gardé
+    rows = rows.filter(r => r.sp > 0 && r.sp !== r.bud);
+  }
   const bar = (r) => {
-    // Binaire : tant que dépensé ≤ budget → vert (dans le budget) ; dès que dépensé > budget → rouge (dépassé)
-    const color = r.over ? '#E53935' : 'var(--sage)';
+    // 3 niveaux : ≤60% = vert · >60% (pas encore dépassé) = rouge clair (attention) · dépassé = rouge
+    const warn = !r.over && r.bud > 0 && r.pct > 60;
+    const color = r.over ? '#E53935' : warn ? '#E8908F' : 'var(--sage)';
     const w = Math.min(100, r.pct);
+    const status = r.over
+      ? `⚠️ hors budget · dépassé de ${fmt(r.sp - r.bud)}`
+      : r.bud > 0
+        ? `${warn ? '⚠ attention' : '✓ dans le budget'} · reste ${fmt(r.bud - r.sp)}`
+        : 'hors budget (poste non prévu)';
     return `
       <div style="margin-bottom:10px;cursor:pointer" onclick="openCatMonthList('${esc(r.cat)}','${key}')" title="Voir les opérations ${esc(r.cat)} de ce mois">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
@@ -3951,7 +4005,7 @@ function renderBudgetStatus(containerId, compact, monthKey) {
         <div style="height:6px;background:var(--border-soft);border-radius:100px;overflow:hidden">
           <div style="height:100%;width:${w}%;background:${color};border-radius:100px;transition:width .5s"></div>
         </div>
-        <div style="font-size:10px;color:${color};margin-top:2px">${r.over ? `⚠️ hors budget · dépassé de ${fmt(r.sp - r.bud)}` : r.bud > 0 ? `✓ dans le budget · reste ${fmt(r.bud - r.sp)}` : 'hors budget (poste non prévu)'}</div>
+        <div style="font-size:10px;color:${color};margin-top:2px">${status}</div>
       </div>`;
   };
   el.innerHTML = `
@@ -3961,7 +4015,7 @@ function renderBudgetStatus(containerId, compact, monthKey) {
       <div style="font-size:11px;color:var(--muted)">${fmt(rev)} de revenu − ${fmt(totalSpentDep)} déjà dépensés</div>
       ${aPrevoir > 0 ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">📌 Pense-bête : ${fmt(aPrevoir)} de dépenses à prévoir (non déduites)</div>` : ''}
     </div>
-    ${compact && !rows.length ? '<div class="empty-sub" style="text-align:center">👍 Tout est dans le budget pour l\'instant</div>' : ''}
+    ${!rows.length ? '<div class="empty-sub" style="text-align:center;padding:8px 0">👍 Rien à surveiller pour l\'instant — les postes réglés ou non entamés sont masqués</div>' : ''}
     ${rows.map(bar).join('')}
     ${!compact ? `<div style="margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--sage-soft);font-size:12px;line-height:1.6">
       <div style="font-weight:800;margin-bottom:2px">🌱 Épargne — ${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}</div>
@@ -4185,8 +4239,9 @@ function renderBudget() {
         ${!blocOK ? `<div style="font-size:11px;color:#B7791F;background:rgba(232,184,77,0.16);padding:7px 10px;border-radius:8px;margin-bottom:10px;line-height:1.5">⚠ Ta répartition détaillée fait <b>${totalBlocPct}%</b> (${fmt(totalBlocAmt)}) alors que ta cible ${blocLabel.replace(/^[^ ]+ /, '').toLowerCase()} est <b>${blocPct}%</b> (${fmt(blocAmt)}). Ajuste les % ci-dessous pour retomber sur ${blocPct}%, ou modifie ta cible en haut de page.</div>` : ''}
         ${items.map((it, i) => {
           const amt = Math.round(rev * it.pct / 100);
+          const _done = catStat(it.cat).done;
           return `
-            <div class="bud-sub-row${it.done ? ' done' : ''}">
+            <div class="bud-sub-row${_done ? ' done' : ''}">
               <div class="bud-sub-cat">
                 <span style="width:8px;height:8px;border-radius:50%;background:${catColor(it.cat)};display:inline-block"></span>
                 ${catIcon(it.cat)} ${esc(it.cat)}${it.note ? ` <span style="color:var(--muted);font-size:11px">${esc(it.note)}</span>` : ''}
@@ -4200,7 +4255,7 @@ function renderBudget() {
                        style="width:58px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
                 <span style="font-size:11px;color:var(--muted)">€</span>
               </div>
-              <input type="checkbox" class="bud-sub-check" ${it.done ? 'checked' : ''} onchange="toggleSubBudgetDone('${blocKey}',${i})" title="Coche quand c'est payé / réglé ✓" aria-label="Marquer comme payé">
+              <input type="checkbox" class="bud-sub-check" ${_done ? 'checked' : ''} onchange="toggleCatDone('${esc(it.cat)}')" title="Coche quand c'est payé / réglé ✓ (partagé avec le détail du poste)" aria-label="Marquer comme payé">
               <button class="bud-sub-del" onclick="deleteSubBudgetLine('${blocKey}',${i})" title="Supprimer cette ligne">🗑</button>
             </div>`;
         }).join('')}
