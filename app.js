@@ -2158,6 +2158,7 @@ function renderTransactionsList() {
   const filtYear = $('tx-filter-year') ? $('tx-filter-year').value : 'all';
   const filtMonth = $('tx-filter-month') ? $('tx-filter-month').value : 'all';
   const filtDate = $('tx-filter-date') ? $('tx-filter-date').value : '';
+  const filtSub = $('tx-filter-subcat') ? $('tx-filter-subcat').value : 'all';
 
   // Peuple les selects year/month à partir des données réelles
   if ($('tx-filter-year') && $('tx-filter-year').options.length <= 1) {
@@ -2169,13 +2170,25 @@ function renderTransactionsList() {
     $('tx-filter-month').innerHTML = '<option value="all">Tous mois</option>' +
       MONTHS.map((m, i) => `<option value="${String(i + 1).padStart(2, '0')}">${m}</option>`).join('');
   }
+  // Peuple le filtre sous-catégorie à partir des données réelles (dépend de la catégorie choisie)
+  if ($('tx-filter-subcat')) {
+    const subs = [...new Set(transactions
+      .filter(t => filtCat === 'all' || t.category === filtCat)
+      .map(t => (t.sub_category || '').trim()).filter(Boolean))].sort();
+    const cur = $('tx-filter-subcat').value;
+    $('tx-filter-subcat').innerHTML = '<option value="all">Toutes sous-cat.</option><option value="__none__">— sans sous-catégorie —</option>' +
+      subs.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    if ([...$('tx-filter-subcat').options].some(o => o.value === cur)) $('tx-filter-subcat').value = cur;
+  }
 
   const allFiltered = transactions.filter(t => {
     if (filtCat !== 'all' && t.category !== filtCat) return false;
     if (filtYear !== 'all' && !t.date_op.startsWith(filtYear)) return false;
     if (filtMonth !== 'all' && t.date_op.slice(5, 7) !== filtMonth) return false;
     if (filtDate && t.date_op !== filtDate) return false;
-    if (search && !t.label.toLowerCase().includes(search)) return false;
+    if (filtSub === '__none__' && (t.sub_category || '').trim()) return false;
+    if (filtSub !== 'all' && filtSub !== '__none__' && (t.sub_category || '').trim() !== filtSub) return false;
+    if (search && !(t.label.toLowerCase().includes(search) || (t.sub_category || '').toLowerCase().includes(search))) return false;
     return true;
   });
   const filtered = allFiltered.slice(0, txRenderLimit);
@@ -2220,6 +2233,7 @@ function renderTransactionsList() {
         <th style="width:88px">Date</th>
         <th>Libellé</th>
         <th style="width:190px">Catégorie</th>
+        <th style="width:150px">Sous-catégorie</th>
         <th style="width:110px">Moyen</th>
         <th style="width:110px;text-align:right">Montant</th>
         <th style="width:74px;text-align:right">Actions</th>
@@ -2233,11 +2247,12 @@ function renderTransactionsList() {
         <tr class="${isSelected ? 'selected' : ''}">
           <td><input type="checkbox" class="tx-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleTxSelect('${t.id}', this.checked)"></td>
           <td style="white-space:nowrap;color:var(--muted)">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}/${t.date_op.slice(2, 4)}</td>
-          <td><div class="tx-cell-label">${esc(t.label)} ${bankBadge(t.bank_source)}${t.sub_category ? `<span class="tx-sub-tag">${esc(t.sub_category)}</span>` : ''}</div></td>
+          <td><div class="tx-cell-label">${esc(t.label)} ${bankBadge(t.bank_source)}</div></td>
           <td>
             <select class="select tx-cat-select" onchange="recategorizeTx('${t.id}', this.value)">${catsSel}</select>
             <div style="font-size:10px;color:var(--muted);margin-top:2px">${famT ? 'famille : ' + FAMILY_LABEL[famT] : ''}</div>
           </td>
+          <td><input class="inp tx-subcat-input" value="${esc(t.sub_category || '')}" placeholder="—" onchange="updateTxSubcat('${t.id}', this.value)" title="Clique pour saisir/modifier la sous-catégorie" style="width:100%;padding:5px 8px;font-size:12px"></td>
           <td style="white-space:nowrap;color:var(--muted);font-size:12px" title="${esc(t.payment_method || 'non précisé')}">${payMethodIcon(t.payment_method) || ''} ${PM_SHORT[t.payment_method] || '—'}</td>
           <td class="${typeCls(t)}" style="text-align:right;font-family:var(--fm);white-space:nowrap">${typeSign(t)}${fmtD(Math.abs(Number(t.amount)))}</td>
           <td style="text-align:right;white-space:nowrap">
@@ -2278,7 +2293,7 @@ function clearTxSelection() { txSelectedIds.clear(); renderTransactionsList(); }
 
 function clearTxFilters() {
   ['tx-search','tx-filter-date'].forEach(id => { if ($(id)) $(id).value = ''; });
-  ['tx-filter-cat','tx-filter-year','tx-filter-month'].forEach(id => { if ($(id)) $(id).value = 'all'; });
+  ['tx-filter-cat','tx-filter-subcat','tx-filter-year','tx-filter-month'].forEach(id => { if ($(id)) $(id).value = 'all'; });
   txRenderLimit = TX_PAGE;
   renderTransactionsList();
   toast('✓ Filtres réinitialisés');
@@ -2345,8 +2360,9 @@ function openTxEdit(id) {
     const type = $('txedit-type').value;
     const category = $('txedit-cat').value;
     const pm = $('txedit-pm').value || null;
+    const subcat = ($('txedit-subcat') && $('txedit-subcat').value || '').trim() || null;
     if (!date || !label || !amount || amount <= 0) { toast('Date, libellé et montant requis', 'error'); return false; }
-    const patch = { date_op: date, label, amount: type === 'entree' ? amount : -amount, type, category, payment_method: pm };
+    const patch = { date_op: date, label, amount: type === 'entree' ? amount : -amount, type, category, sub_category: subcat, payment_method: pm };
     const { error } = await sb.from('transactions').update(patch).eq('id', id);
     if (error) { toast('Erreur : ' + error.message, 'error'); return false; }
     Object.assign(t, patch);
@@ -2369,6 +2385,7 @@ function openTxEdit(id) {
       </div>
       <div class="auth-field"><label>Catégorie</label><select class="select" id="txedit-cat" onchange="_updateTxFamHint()">${catOpts}</select>
         <div id="txedit-fam-hint" style="font-size:11px;color:var(--muted);margin-top:4px">Famille : ${FAMILY_LABEL[catFamily(t.category)] || '—'}</div></div>
+      <div class="auth-field"><label>Sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(ex: Frais bancaires, Courses, Restos…)</span></label><input class="inp" id="txedit-subcat" value="${esc(t.sub_category || '')}" placeholder="Facultatif"></div>
       <div class="auth-field"><label>Moyen de paiement</label><select class="select" id="txedit-pm">${pmOpts}</select></div>
     </div>
   `);
@@ -2381,6 +2398,17 @@ async function recategorizeTx(id, newCat) {
   tx.category = newCat;
   tx.sub_category = null;
   toast('✓ Catégorie mise à jour', 'success');
+  renderTransactionsList();
+}
+// Saisie / modification de la sous-catégorie directement dans le tableau
+async function updateTxSubcat(id, val) {
+  const tx = transactions.find(t => t.id === id);
+  if (!tx) return;
+  const v = (val || '').trim() || null;
+  if ((tx.sub_category || null) === v) return; // rien changé
+  const { error } = await sb.from('transactions').update({ sub_category: v }).eq('id', id);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  tx.sub_category = v;
   renderTransactionsList();
 }
 
