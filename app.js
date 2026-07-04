@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v54'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v56'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1386,11 +1386,38 @@ async function quickAddTx() {
 async function contributeToGoal(goalId, montant) {
   const g = goalsList.find(x => x.id === goalId);
   if (!g) return;
-  const newDeja = Number(g.deja_epargne || 0) + montant;
+  const oldDeja = Number(g.deja_epargne || 0);
+  const newDeja = oldDeja + montant;
   const r = await dbGuard(sb.from('epargne_objectifs').update({ deja_epargne: newDeja }).eq('id', goalId), 'Maj objectif échouée');
   if (!r.ok) return;
   await sb.from('epargne_contributions').insert({ objectif_id: goalId, user_id: currentUser.id, montant });
   g.deja_epargne = newDeja;
+  _goalMilestone(g, oldDeja, newDeja);
+}
+// Célèbre le franchissement d'un palier (25/50/75/100 %) d'un objectif
+function _goalMilestone(g, oldD, newD) {
+  const cible = Number(g.cible || 0);
+  if (cible <= 0) return;
+  const oldPct = oldD / cible * 100, newPct = newD / cible * 100;
+  const hit = [25, 50, 75, 100].filter(m => oldPct < m && newPct >= m).pop();
+  if (!hit) return;
+  toast(hit >= 100 ? `🎉 Objectif « ${g.nom} » ATTEINT ! Bravo 👏` : `🎊 ${hit}% de « ${g.nom} » atteint ! Continue 🌱`, 'success');
+  _confettiBurst();
+}
+function _confettiBurst() {
+  try {
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const colors = ['#E76F51', '#7FB89E', '#E8B84D', '#9B7FC0', '#DD7B85', '#4FC3F7'];
+    for (let i = 0; i < 26; i++) {
+      const c = document.createElement('div');
+      c.style.cssText = `position:fixed;top:38%;left:50%;width:9px;height:9px;background:${colors[i % colors.length]};border-radius:2px;z-index:99999;pointer-events:none`;
+      document.body.appendChild(c);
+      const ang = Math.random() * Math.PI * 2, dist = 120 + Math.random() * 200;
+      const dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist - 130;
+      c.animate([{ transform: 'translate(-50%,-50%) rotate(0)', opacity: 1 }, { transform: `translate(${dx}px,${dy}px) rotate(${Math.random() * 720}deg)`, opacity: 0 }], { duration: 900 + Math.random() * 600, easing: 'cubic-bezier(.2,.6,.4,1)' });
+      setTimeout(() => c.remove(), 1600);
+    }
+  } catch (e) {}
 }
 
 // Switch entre les 3 vues du Dashboard : Global / Mensuel / Annuel
@@ -3702,7 +3729,8 @@ function openContribForm(id) {
     async () => {
       const montant = parseFloat($('contrib-montant').value) || 0;
       if (montant <= 0) { toast('Montant invalide', 'error'); return false; }
-      const newDeja = Number(g.deja_epargne || 0) + montant;
+      const oldDeja = Number(g.deja_epargne || 0);
+      const newDeja = oldDeja + montant;
       const { error } = await sb.from('epargne_objectifs').update({ deja_epargne: newDeja }).eq('id', id);
       if (error) { toast('Erreur : ' + error.message, 'error'); console.error(error); return false; }
       // Trace la contribution
@@ -3714,6 +3742,7 @@ function openContribForm(id) {
       await loadGoals();
       renderEpargne();
       toast(`+${fmt(montant)} ajoutés à "${g.nom}" 🌱`, 'success');
+      _goalMilestone({ nom: g.nom, cible: g.cible }, oldDeja, newDeja);
     },
     `<div style="display:flex;flex-direction:column;gap:14px">
       <div style="background:var(--sage-soft);padding:14px;border-radius:10px;text-align:center">
@@ -4113,20 +4142,28 @@ function renderBudgetStatus(containerId, compact, monthKey) {
         <div style="font-size:10px;color:${color};margin-top:2px">${status}</div>
       </div>`;
   };
-  // ── Prévision fin de mois : uniquement pour le mois réel en cours, à mi-parcours ──
+  // ── Estimation « rythme récent » : moyenne des dépenses des 3 derniers mois COMPLETS ──
+  // (pas d'extrapolation du mois en cours → plus de chiffre absurde ; comparée à TON revenu)
   let forecastHtml = '';
   const _now = new Date();
   const _curKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}`;
-  if (key === _curKey) {
-    const dayEl = _now.getDate();
-    const daysIn = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate();
-    if (dayEl >= 3 && dayEl < daysIn && totalSpentDep > 0) {
-      const projSpent = Math.round(totalSpentDep / dayEl * daysIn);
-      const projReste = rev - projSpent;
-      const over = projSpent > totalBudgetDep;
-      forecastHtml = `<div style="padding:10px 12px;border-radius:12px;background:${projReste >= 0 ? 'rgba(232,163,23,0.10)' : 'rgba(229,57,53,0.10)'};font-size:12px;line-height:1.5;margin-bottom:14px">
-        <b>📈 Projection fin de mois</b> <span style="color:var(--muted)">(jour ${dayEl}/${daysIn})</span><br>
-        À ce rythme, tu finirais autour de <b>${fmt(projSpent)}</b> de dépenses → il te resterait <b style="color:${projReste >= 0 ? 'var(--sage)' : '#E53935'}">${fmt(projReste)}</b>.${over ? ` <span style="color:#B7791F">⚠ au-dessus de ton budget (${fmt(totalBudgetDep)})</span>` : ''}
+  if (key === _curKey && rev > 0) {
+    let sumM = 0, nM = 0;
+    for (let i = 1; i <= 3; i++) {
+      const d = new Date(_now.getFullYear(), _now.getMonth() - i, 1);
+      const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const mtx = transactions.filter(t => t.date_op.startsWith(mk) && t.type === 'sortie');
+      if (mtx.length) { sumM += mtx.reduce((s, t) => s + Math.abs(Number(t.amount)), 0); nM++; }
+    }
+    if (nM > 0) {
+      const avgM = Math.round(sumM / nM);
+      const projReste = rev - avgM;
+      const over = avgM > rev;
+      forecastHtml = `<div style="padding:10px 12px;border-radius:12px;background:${over ? 'rgba(229,57,53,0.10)' : 'rgba(232,163,23,0.10)'};font-size:12px;line-height:1.5;margin-bottom:14px">
+        <b>📈 Ton rythme récent</b> <span style="color:var(--muted)">(moyenne de tes ${nM} dernier${nM > 1 ? 's' : ''} mois)</span><br>
+        Tu dépenses en moyenne <b>${fmt(avgM)}/mois</b>. Sur ton revenu de <b>${fmt(rev)}</b>, il te resterait ~<b style="color:${projReste >= 0 ? 'var(--sage)' : '#E53935'}">${fmt(projReste)}</b>.
+        ${over ? `<br><span style="color:#B7791F">⚠ Ces derniers mois, tu as dépensé plus que ton revenu — vise un retour à l'équilibre.</span>` : ''}
+        <br><span style="color:var(--muted);font-size:11px">Estimation indicative sur tes derniers mois — pas une fatalité 🌱</span>
       </div>`;
     }
   }
@@ -4863,3 +4900,42 @@ async function _launchAIConseils(opts) {
     if (btn) { btn.disabled = false; btn.textContent = '🤖 Relancer l\'analyse IA'; }
   }
 }
+
+// ═══ 🔍 RECHERCHE GLOBALE (⌘K / Ctrl+K) ═══
+function openSearch() {
+  const m = $('search-modal'); if (!m) return;
+  m.style.display = 'flex';
+  const inp = $('search-input');
+  if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 50); }
+  const box = $('search-results');
+  if (box) box.innerHTML = '<div class="empty-sub" style="padding:16px;text-align:center">Tape pour chercher dans toutes tes opérations (libellé, catégorie, sous-catégorie, montant).</div>';
+}
+function closeSearch() { const m = $('search-modal'); if (m) m.style.display = 'none'; }
+function doGlobalSearch() {
+  const q = ($('search-input').value || '').trim().toLowerCase();
+  const box = $('search-results');
+  if (!box) return;
+  if (!q) { box.innerHTML = '<div class="empty-sub" style="padding:16px;text-align:center">Tape pour chercher…</div>'; return; }
+  const num = parseFloat(q.replace(',', '.'));
+  const res = transactions.filter(t => {
+    if (t.label && t.label.toLowerCase().includes(q)) return true;
+    if (t.category && t.category.toLowerCase().includes(q)) return true;
+    if (t.sub_category && t.sub_category.toLowerCase().includes(q)) return true;
+    if (!isNaN(num) && num > 0 && Math.abs(Math.abs(Number(t.amount)) - num) < 0.005) return true;
+    return false;
+  }).slice(0, 40);
+  if (!res.length) { box.innerHTML = '<div class="empty-sub" style="padding:16px;text-align:center">Aucun résultat.</div>'; return; }
+  box.innerHTML = `<div style="font-size:11px;color:var(--muted);margin:0 4px 8px">${res.length} résultat(s)</div>` + res.map(t => {
+    const sign = t.type === 'entree' ? '+' : (t.type === 'epargne' ? '' : '-');
+    const cls = t.type === 'entree' ? 'amt-in' : (t.type === 'epargne' ? 'amt-save' : 'amt-out');
+    return `<div class="day-tx-item" style="cursor:pointer" onclick="closeSearch();openTxEdit('${t.id}')" title="Modifier">
+      <div class="day-tx-icon" style="background:${catColor(t.category)}18;color:${catColor(t.category)}">${catIcon(t.category)}</div>
+      <div class="day-tx-info"><div class="tx-label">${esc(t.label)}</div><div class="tx-cat">${t.date_op} · ${esc(t.category || '')}${t.sub_category ? ' · ' + esc(t.sub_category) : ''}</div></div>
+      <div class="day-tx-amt ${cls}">${sign}${fmtD(Math.abs(Number(t.amount)))}</div>
+    </div>`;
+  }).join('');
+}
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openSearch(); }
+  else if (e.key === 'Escape') { const m = $('search-modal'); if (m && m.style.display !== 'none') closeSearch(); }
+});
