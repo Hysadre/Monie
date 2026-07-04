@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v56'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v57'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -67,6 +67,58 @@ const CAT_META = {
   'Épargne': { emoji: '🐷', color: '#7FB89E' },
   'Autres': { emoji: '📌', color: '#A0AEC0' }
 };
+// Sous-catégories prédéfinies par catégorie (proposées en liste déroulante ; extensibles)
+const SUBCATS = {
+  'Alimentation': ['Courses', 'Restos', 'Livraison', 'Boulangerie', 'Café / Bar', 'Traiteur'],
+  'Transport': ['Train', 'Bus / Métro', 'Essence', 'Uber / VTC', 'Péage', 'Parking', 'Avion', 'Vélo / Trottinette'],
+  'Banque': ['Frais bancaires', 'Agios', 'Cotisation carte', 'Assurance', 'Virement'],
+  'Abonnements': ['Téléphone', 'Internet', 'Streaming', 'Salle de sport', 'IA', 'Logiciels', 'Presse', 'Cloud'],
+  'Santé': ['Médecin', 'Pharmacie', 'Mutuelle', 'Dentiste', 'Optique', 'Kiné', 'Analyses'],
+  'Mode': ['Vêtements', 'Chaussures', 'Accessoires', 'Sous-vêtements', 'Sport'],
+  'Cosmétique': ['Soins', 'Coiffeur', 'Maquillage', 'Parfum', 'Ongles'],
+  'Loyer': ['Loyer', 'Charges', 'Caution', 'Eau', 'Électricité', 'Gaz'],
+  'Administratif': ['Papiers', 'Amendes', 'Assurance habitation', 'Timbres / Poste', 'Frais divers'],
+  'Vie quotidienne': ['Maison', 'Ménage', 'Animaux', 'Bricolage', 'Divers'],
+  'Divertissement': ['Cinéma', 'Sorties', 'Jeux', 'Concerts', 'Livres', 'Musées'],
+  'Dons': ['Association', 'Caritatif', 'Cagnotte'],
+  'Dîme': ['Église'],
+  'Éducation': ['Scolarité', 'Fournitures', 'CVEC', 'Livres', 'Formation'],
+  'Amis & Famille': ['Cadeaux', 'Famille', 'Prêt', 'Sorties'],
+  'Voyages': ['Hébergement', 'Transport', 'Activités', 'Restauration'],
+  'Impôts': ['Impôt sur le revenu', "Taxe d'habitation", 'Taxe foncière', 'CFE'],
+  'Investissements': ['PEA', 'Livret A', 'LDDS', 'Assurance vie', 'Crypto', 'Bourse'],
+  'Imprévus': ['Réparation', 'Médical', 'Panne', 'Autre'],
+  'Salaire': ['Salaire', 'Prime', 'Heures sup'],
+  'Remboursements': ['Ami', 'Administratif', 'Banque', 'Achat marchand', 'Santé']
+};
+// Construit les <option> d'une sous-catégorie : prédéfinies + déjà utilisées + « Autre »
+function subcatOptions(category, current) {
+  const cur = (current || '').trim();
+  const predef = SUBCATS[category] || [];
+  const used = [...new Set(transactions.filter(t => t.category === category && t.sub_category).map(t => (t.sub_category || '').trim()))].filter(Boolean);
+  const all = [...new Set([...predef, ...used])].sort();
+  if (cur && !all.includes(cur)) all.unshift(cur);
+  return `<option value="">— aucune —</option>`
+    + all.map(s => `<option value="${esc(s)}" ${s === cur ? 'selected' : ''}>${esc(s)}</option>`).join('')
+    + `<option value="__custom__">➕ Autre (saisir…)</option>`;
+}
+// Options d'un <datalist> (suggestions pour un champ texte)
+function subcatDatalist(category) {
+  const predef = SUBCATS[category] || [];
+  const used = [...new Set(transactions.filter(t => t.category === category && t.sub_category).map(t => (t.sub_category || '').trim()))].filter(Boolean);
+  return [...new Set([...predef, ...used])].sort().map(s => `<option value="${esc(s)}">`).join('');
+}
+// Gère le choix dans la liste (dont « Autre » → saisie libre)
+function onSubcatSelect(id, val) {
+  if (val === '__custom__') {
+    const tx = transactions.find(t => t.id === id);
+    const v = prompt('Nouvelle sous-catégorie :', tx ? (tx.sub_category || '') : '');
+    if (v === null) { renderTransactionsList(); return; } // annulé → on remet le select
+    updateTxSubcat(id, v);
+    return;
+  }
+  updateTxSubcat(id, val);
+}
 // Métadonnées des banques source (pastilles LCL / BoursoBank)
 const BANK_META = {
   'LCL':        { label: 'LCL',    color: '#0059A5', bg: '#E3EEFB' },
@@ -2279,7 +2331,7 @@ function renderTransactionsList() {
             <select class="select tx-cat-select" onchange="recategorizeTx('${t.id}', this.value)">${catsSel}</select>
             <div style="font-size:10px;color:var(--muted);margin-top:2px">${famT ? 'famille : ' + FAMILY_LABEL[famT] : ''}</div>
           </td>
-          <td><input class="inp tx-subcat-input" value="${esc(t.sub_category || '')}" placeholder="—" onchange="updateTxSubcat('${t.id}', this.value)" title="Clique pour saisir/modifier la sous-catégorie" style="width:100%;padding:5px 8px;font-size:12px"></td>
+          <td><select class="select tx-subcat-select" onchange="onSubcatSelect('${t.id}', this.value)" title="Choisis ou ajoute une sous-catégorie" style="width:100%;padding:5px 8px;font-size:12px">${subcatOptions(t.category, t.sub_category)}</select></td>
           <td style="white-space:nowrap;color:var(--muted);font-size:12px" title="${esc(t.payment_method || 'non précisé')}">${payMethodIcon(t.payment_method) || ''} ${PM_SHORT[t.payment_method] || '—'}</td>
           <td class="${typeCls(t)}" style="text-align:right;font-family:var(--fm);white-space:nowrap">${typeSign(t)}${fmtD(Math.abs(Number(t.amount)))}</td>
           <td style="text-align:right;white-space:nowrap">
@@ -2459,7 +2511,7 @@ function openTxEdit(id) {
       </div>
       <div class="auth-field"><label>Catégorie</label><select class="select" id="txedit-cat" onchange="_updateTxFamHint()">${catOpts}</select>
         <div id="txedit-fam-hint" style="font-size:11px;color:var(--muted);margin-top:4px">Famille : ${FAMILY_LABEL[catFamily(t.category)] || '—'}</div></div>
-      <div class="auth-field"><label>Sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(ex: Frais bancaires, Courses, Restos…)</span></label><input class="inp" id="txedit-subcat" value="${esc(t.sub_category || '')}" placeholder="Facultatif"></div>
+      <div class="auth-field"><label>Sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(choisis une suggestion ou saisis)</span></label><input class="inp" id="txedit-subcat" value="${esc(t.sub_category || '')}" list="txedit-subcat-list" placeholder="Facultatif"><datalist id="txedit-subcat-list">${subcatDatalist(t.category)}</datalist></div>
       <div class="auth-field"><label>Moyen de paiement</label><select class="select" id="txedit-pm">${pmOpts}</select></div>
     </div>
   `);
