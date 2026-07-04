@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v49'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v51'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -63,6 +63,7 @@ const CAT_META = {
   'Divertissement': { emoji: '🎬', color: '#E76F51' },
   'Aide au logement': { emoji: '🏘️', color: '#7FB89E' },
   'Paiement échelonné': { emoji: '💳', color: '#B79CD6' },
+  'Imprévus': { emoji: '⚡', color: '#E8A317' },
   'Épargne': { emoji: '🐷', color: '#7FB89E' },
   'Autres': { emoji: '📌', color: '#A0AEC0' }
 };
@@ -538,12 +539,14 @@ function loadBudgetForMonth() {
   const saved = budgetByMonth[budgetKey()];
   if (saved) {
     budgetData = { ...saved, events: saved.events || [] };
+    budgetData.pct_imprevus = (budgetData.sub_budget && budgetData.sub_budget._pctImprevus) || 0;
   } else {
     budgetData = {
       revenu_mensuel: budgetTemplate.revenu_mensuel || 0,
       pct_charges: budgetTemplate.pct_charges || 50,
       pct_plaisir: budgetTemplate.pct_plaisir || 30,
       pct_epargne: budgetTemplate.pct_epargne || 20,
+      pct_imprevus: 0,
       sub_budget: null,
       events: []
     };
@@ -558,6 +561,7 @@ function setBudgetMonth() {
   $('bud-pct-charges').value = budgetData.pct_charges;
   $('bud-pct-plaisir').value = budgetData.pct_plaisir;
   $('bud-pct-epargne').value = budgetData.pct_epargne;
+  if ($('bud-pct-imprevus')) $('bud-pct-imprevus').value = budgetData.pct_imprevus || 0;
   renderBudget();
 }
 // Copie tout le budget du mois précédent dans le mois affiché
@@ -1566,9 +1570,10 @@ function renderRealBlocks() {
   const blocks = [
     { k: 'charges', emoji: '🏠', label: 'Charges & Nécessités', bg: 'var(--tender-rose-soft)', real: spent.charges, bud: budget.charges, isEp: false },
     { k: 'plaisir', emoji: '🌸', label: 'Plaisir & Envies', bg: 'var(--peach-soft)', real: spent.plaisir, bud: budget.plaisir, isEp: false },
+    { k: 'imprevus', emoji: '⚡', label: 'Imprévus', bg: 'rgba(232,163,23,0.12)', real: spent.imprevus || 0, bud: budget.imprevus || 0, isEp: false },
     { k: 'epargne', emoji: '🌱', label: 'Épargne & Investissement', bg: 'var(--sage-soft)', real: spent.epargne, bud: budget.epargne, isEp: true }
   ];
-  el.innerHTML = blocks.map(b => {
+  el.innerHTML = blocks.filter(b => b.bud > 0 || b.real > 0).map(b => {
     const pct = b.bud > 0 ? Math.round(b.real / b.bud * 100) : (b.real > 0 ? 100 : 0);
     const over = !b.isEp && b.bud > 0 && b.real > b.bud;
     const barColor = over ? '#E53935' : 'var(--sage)';
@@ -1755,9 +1760,9 @@ function renderDashboard() {
   if ($('dash-cat-view')) $('dash-cat-view').value = catChartView;
   const leg = $('cat-legend');
   if (catChartView === 'blocks') {
-    const BLK_COL = { charges: '#DD7B85', plaisir: '#E8B84D', epargne: '#9B7FC0' };
-    const BLK_LBL = { charges: '🏠 Charges', plaisir: '🎈 Plaisir', epargne: '🐷 Épargne' };
-    const blk = { charges: 0, plaisir: 0, epargne: 0 };
+    const BLK_COL = { charges: '#DD7B85', plaisir: '#E8B84D', imprevus: '#E8A317', epargne: '#9B7FC0' };
+    const BLK_LBL = { charges: '🏠 Charges', plaisir: '🎈 Plaisir', imprevus: '⚡ Imprévus', epargne: '🐷 Épargne' };
+    const blk = { charges: 0, plaisir: 0, imprevus: 0, epargne: 0 };
     monthTx.forEach(t => {
       const a = Math.abs(Number(t.amount));
       if (t.type === 'epargne') { blk.epargne += a; return; }
@@ -1765,10 +1770,11 @@ function renderDashboard() {
       const b = BUDGET_BLOCK[t.category];
       if (b === 'charges') blk.charges += a;
       else if (b === 'plaisir') blk.plaisir += a;
+      else if (b === 'imprevus') blk.imprevus += a;
       else if (b === 'epargne') blk.epargne += a;
       else blk.charges += a; // catégories non mappées → considérées comme charges
     });
-    const order = ['charges', 'plaisir', 'epargne'].filter(k => blk[k] > 0);
+    const order = ['charges', 'plaisir', 'imprevus', 'epargne'].filter(k => blk[k] > 0);
     const totalBlk = order.reduce((s, k) => s + blk[k], 0);
     updateChart('chart-categories', 'doughnut', {
       labels: order.map(k => BLK_LBL[k]),
@@ -2221,7 +2227,8 @@ function renderTransactionsList() {
       <tbody>
       ${filtered.map(t => {
         const isSelected = txSelectedIds.has(t.id);
-        const catsSel = cats.map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('');
+        const catsSel = catOptionsGrouped(t.category);
+        const famT = catFamily(t.category);
         return `
         <tr class="${isSelected ? 'selected' : ''}">
           <td><input type="checkbox" class="tx-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleTxSelect('${t.id}', this.checked)"></td>
@@ -2229,6 +2236,7 @@ function renderTransactionsList() {
           <td><div class="tx-cell-label">${esc(t.label)} ${bankBadge(t.bank_source)}${t.sub_category ? `<span class="tx-sub-tag">${esc(t.sub_category)}</span>` : ''}</div></td>
           <td>
             <select class="select tx-cat-select" onchange="recategorizeTx('${t.id}', this.value)">${catsSel}</select>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">${famT ? 'famille : ' + FAMILY_LABEL[famT] : ''}</div>
           </td>
           <td style="white-space:nowrap;color:var(--muted);font-size:12px" title="${esc(t.payment_method || 'non précisé')}">${payMethodIcon(t.payment_method) || ''} ${PM_SHORT[t.payment_method] || '—'}</td>
           <td class="${typeCls(t)}" style="text-align:right;font-family:var(--fm);white-space:nowrap">${typeSign(t)}${fmtD(Math.abs(Number(t.amount)))}</td>
@@ -2320,10 +2328,14 @@ function exportTxCsv() {
 }
 
 // Édition complète d'une transaction (date, libellé, montant, type, catégorie, paiement)
+function _updateTxFamHint() {
+  const sel = $('txedit-cat'); const hint = $('txedit-fam-hint');
+  if (sel && hint) hint.textContent = 'Famille : ' + (FAMILY_LABEL[catFamily(sel.value)] || '—');
+}
 function openTxEdit(id) {
   const t = transactions.find(x => x.id === id);
   if (!t) return;
-  const catOpts = Object.keys(CAT_META).map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${catIcon(c)} ${c}</option>`).join('');
+  const catOpts = catOptionsGrouped(t.category);
   const pms = ['carte', 'especes', 'cheque', 'prelevement', 'virement', 'ticket_resto', 'autre'];
   const pmOpts = ['<option value="">— non précisé —</option>'].concat(pms.map(p => `<option value="${p}" ${t.payment_method === p ? 'selected' : ''}>${payMethodIcon(p)} ${p}</option>`)).join('');
   openModal('✏️ Modifier la transaction', 'Ajuste les infos de cette opération', async () => {
@@ -2355,7 +2367,8 @@ function openTxEdit(id) {
         </select></div>
         <div class="auth-field"><label>Montant (€)</label><input class="inp" type="number" step="0.01" id="txedit-amount" value="${Math.abs(Number(t.amount))}"></div>
       </div>
-      <div class="auth-field"><label>Catégorie</label><select class="select" id="txedit-cat">${catOpts}</select></div>
+      <div class="auth-field"><label>Catégorie</label><select class="select" id="txedit-cat" onchange="_updateTxFamHint()">${catOpts}</select>
+        <div id="txedit-fam-hint" style="font-size:11px;color:var(--muted);margin-top:4px">Famille : ${FAMILY_LABEL[catFamily(t.category)] || '—'}</div></div>
       <div class="auth-field"><label>Moyen de paiement</label><select class="select" id="txedit-pm">${pmOpts}</select></div>
     </div>
   `);
@@ -3924,8 +3937,22 @@ const BUDGET_BLOCK = {
   'Impôts': 'charges', 'Banque': 'charges', 'Éducation': 'charges', 'Aide au logement': 'charges',
   'Vie quotidienne': 'plaisir', 'Mode': 'plaisir', 'Cosmétique': 'plaisir', 'Dons': 'plaisir',
   'Amis & Famille': 'plaisir', 'Divertissement': 'plaisir', 'Voyages': 'plaisir',
-  'Dîme': 'charges', 'Investissements': 'epargne'
+  'Dîme': 'charges', 'Investissements': 'epargne', 'Imprévus': 'imprevus'
 };
+// Familles budgétaires (pour regrouper les catégories)
+const FAMILY_LABEL = { charges: '🏠 Charges', plaisir: '🌸 Plaisir', epargne: '🌱 Épargne', imprevus: '⚡ Imprévus' };
+function catFamily(cat) { return BUDGET_BLOCK[cat] || null; }
+// Options d'un <select> de catégories, regroupées par famille via <optgroup>
+function catOptionsGrouped(selected) {
+  const groups = { charges: [], plaisir: [], epargne: [], imprevus: [], autres: [] };
+  Object.keys(CAT_META).forEach(c => { (groups[BUDGET_BLOCK[c]] || groups.autres).push(c); });
+  const order = [['charges', FAMILY_LABEL.charges], ['plaisir', FAMILY_LABEL.plaisir], ['epargne', FAMILY_LABEL.epargne], ['imprevus', FAMILY_LABEL.imprevus], ['autres', '📂 Autres (revenus, divers)']];
+  return order.map(([k, lbl]) => {
+    const arr = (groups[k] || []).sort();
+    if (!arr.length) return '';
+    return `<optgroup label="${lbl}">` + arr.map(c => `<option value="${esc(c)}" ${c === selected ? 'selected' : ''}>${catIcon(c)} ${esc(c)}</option>`).join('') + '</optgroup>';
+  }).join('');
+}
 function computeBudgetStatus(monthKey) {
   let key = monthKey;
   if (!key) {
@@ -3935,7 +3962,8 @@ function computeBudgetStatus(monthKey) {
   const b = budgetByMonth[key] || budgetTemplate; // budget du mois réel en cours (modèle si pas encore défini)
   const rev = b.revenu_mensuel || 0;
   const sub = b.sub_budget || DEFAULT_SUB_PCT;
-  const spent = { charges: 0, plaisir: 0, epargne: 0 };
+  const pctImp = Number((b.sub_budget && b.sub_budget._pctImprevus) || 0); // % Imprévus (stocké dans le jsonb)
+  const spent = { charges: 0, plaisir: 0, epargne: 0, imprevus: 0 };
   const spentByCat = {};
   transactions.forEach(t => {
     if (!t.date_op.startsWith(key)) return;
@@ -3951,10 +3979,12 @@ function computeBudgetStatus(monthKey) {
   ['charges', 'plaisir'].forEach(blk => (sub[blk] || []).forEach(it => {
     if (it.cat) budgetByCat[it.cat] = (budgetByCat[it.cat] || 0) + rev * (it.pct || 0) / 100;
   }));
+  if (pctImp > 0) budgetByCat['Imprévus'] = (budgetByCat['Imprévus'] || 0) + rev * pctImp / 100; // Imprévus = 1 catégorie = toute sa famille
   const budget = {
     charges: Math.round(rev * (b.pct_charges || 0) / 100),
     plaisir: Math.round(rev * (b.pct_plaisir || 0) / 100),
-    epargne: Math.round(rev * (b.pct_epargne || 0) / 100)
+    epargne: Math.round(rev * (b.pct_epargne || 0) / 100),
+    imprevus: Math.round(rev * pctImp / 100)
   };
   // Dépenses "à prévoir" du mois (loyer, factures que tu sais devoir payer) → à retirer du disponible
   const aPrevoir = (b.events || []).reduce((s, e) => s + Number(e.amount || 0), 0);
@@ -3966,11 +3996,11 @@ function renderBudgetStatus(containerId, compact, monthKey) {
   if (!el) return;
   const { rev, spent, spentByCat, budgetByCat, budget, aPrevoir, key } = computeBudgetStatus(monthKey);
   if (!rev) { el.innerHTML = '<div class="empty-sub">Renseigne ton revenu mensuel dans Gestion du budget pour activer le suivi du mois.</div>'; return; }
-  const totalBudgetDep = budget.charges + budget.plaisir;
-  const totalSpentDep = spent.charges + spent.plaisir;
+  const totalBudgetDep = budget.charges + budget.plaisir + (budget.imprevus || 0);
+  const totalSpentDep = spent.charges + spent.plaisir + (spent.imprevus || 0);
   // Reste à dépenser = REVENU TOTAL − ce qui est déjà dépensé. Le « à prévoir » n'est pas soustrait (pense-bête).
   const reste = rev - totalSpentDep;
-  let rows = [...new Set([...Object.keys(budgetByCat), ...Object.keys(spentByCat).filter(c => BUDGET_BLOCK[c] === 'charges' || BUDGET_BLOCK[c] === 'plaisir')])]
+  let rows = [...new Set([...Object.keys(budgetByCat), ...Object.keys(spentByCat).filter(c => ['charges', 'plaisir', 'imprevus'].includes(BUDGET_BLOCK[c]))])]
     .map(cat => {
       const bud = Math.round(budgetByCat[cat] || 0);
       const sp = Math.round(spentByCat[cat] || 0);
@@ -4055,6 +4085,16 @@ function removeBudgetEvent(i) {
   saveBudgetPrepNow();
   renderBudgetEvents();
 }
+// Modifier une note « à prévoir » (libellé ou montant) directement
+function editBudgetEvent(i, field, val) {
+  budgetData.events = budgetData.events || [];
+  const e = budgetData.events[i];
+  if (!e) return;
+  if (field === 'label') e.label = String(val).trim();
+  else if (field === 'amount') { const n = parseFloat(val); e.amount = (n > 0 ? n : 0); }
+  saveBudgetPrepNow();
+  renderBudgetEvents();
+}
 function renderBudgetEvents() {
   const el = $('bud-events-list');
   if (!el) return;
@@ -4065,9 +4105,10 @@ function renderBudgetEvents() {
   }
   const total = list.reduce((s, e) => s + Number(e.amount), 0);
   el.innerHTML = list.map((e, i) => `
-    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border-soft)">
-      <span style="flex:1;font-size:14px">${esc(e.label)}</span>
-      <span style="font-family:var(--fm);font-weight:700">${fmtD(e.amount)}</span>
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border-soft)">
+      <input class="inp" value="${esc(e.label)}" onchange="editBudgetEvent(${i},'label',this.value)" title="Modifier la note" style="flex:1;font-size:14px;padding:6px 8px">
+      <input class="inp" type="number" step="0.01" min="0" value="${e.amount}" onchange="editBudgetEvent(${i},'amount',this.value)" title="Modifier le montant" style="width:88px;text-align:right;font-family:var(--fm);font-weight:700;padding:6px 8px">
+      <span style="font-size:11px;color:var(--muted)">€</span>
       <button onclick="removeBudgetEvent(${i})" style="background:none;border:none;color:var(--tender-rose);cursor:pointer;font-size:16px;line-height:1" title="Retirer">✕</button>
     </div>`).join('') +
     `<div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;font-weight:800;font-size:15px">
@@ -4079,10 +4120,13 @@ function normalizeBudgetPct(changed) {
   const c = Math.max(0, Math.min(100, parseInt($('bud-pct-charges').value) || 0));
   const p = Math.max(0, Math.min(100, parseInt($('bud-pct-plaisir').value) || 0));
   const e = Math.max(0, Math.min(100, parseInt($('bud-pct-epargne').value) || 0));
+  const im = $('bud-pct-imprevus') ? Math.max(0, Math.min(100, parseInt($('bud-pct-imprevus').value) || 0)) : 0;
   budgetData.pct_charges = c;
   budgetData.pct_plaisir = p;
   budgetData.pct_epargne = e;
-  const total = c + p + e;
+  budgetData.pct_imprevus = im;
+  _ensureSubBudget()._pctImprevus = im; // persisté dans le jsonb (pas de colonne SQL à ajouter)
+  const total = c + p + e + im;
   const totalEl = $('bud-total-pct');
   totalEl.textContent = total + '%';
   totalEl.style.color = total === 100 ? 'var(--sage)' : total > 100 ? 'var(--tender-rose)' : 'var(--peach)';
@@ -4097,6 +4141,9 @@ function _doBudgetSave() {
   budgetData.pct_charges = Math.max(0, Math.min(100, parseInt($('bud-pct-charges').value) || 0));
   budgetData.pct_plaisir = Math.max(0, Math.min(100, parseInt($('bud-pct-plaisir').value) || 0));
   budgetData.pct_epargne = Math.max(0, Math.min(100, parseInt($('bud-pct-epargne').value) || 0));
+  if ($('bud-pct-imprevus')) budgetData.pct_imprevus = Math.max(0, Math.min(100, parseInt($('bud-pct-imprevus').value) || 0));
+  // L'Imprévus est stocké dans le jsonb sub_budget (pas de colonne SQL dédiée)
+  _ensureSubBudget()._pctImprevus = budgetData.pct_imprevus || 0;
   const key = budgetKey();
   const payload = {
     user_id: currentUser.id, month: key + '-01',
@@ -4160,12 +4207,14 @@ function renderBudget() {
 
   const rev = parseFloat($('bud-revenu').value) || 0;
   budgetData.revenu_mensuel = rev;
+  if ($('bud-pct-imprevus')) $('bud-pct-imprevus').value = budgetData.pct_imprevus || 0;
   renderBudgetStatus('budget-alert-page', false, budgetKey());
   renderBudgetEvents();
   const c = budgetData.pct_charges;
   const p = budgetData.pct_plaisir;
   const e = budgetData.pct_epargne;
-  const total = c + p + e;
+  const im = budgetData.pct_imprevus || 0;
+  const total = c + p + e + im;
   $('bud-total-pct').textContent = total + '%';
   $('bud-total-pct').style.color = total === 100 ? 'var(--sage)' : '#E53935';
   $('bud-total-pct').style.fontWeight = '900';
@@ -4174,6 +4223,7 @@ function renderBudget() {
   const revCharges = Math.round(rev * c / 100);
   const revPlaisir = Math.round(rev * p / 100);
   const revEpargne = Math.round(rev * e / 100);
+  const revImprevus = Math.round(rev * im / 100);
 
   $('bud-breakdown').innerHTML = `
     <div class="bud-breakdown-item charges">
@@ -4186,6 +4236,11 @@ function renderBudget() {
       <div class="bud-breakdown-val">${fmt(revPlaisir)}</div>
       <div class="bud-breakdown-sub">Sorties, mode, cosmétique, loisirs, abonnements</div>
     </div>
+    ${im > 0 ? `<div class="bud-breakdown-item" style="border-left-color:#E8A317">
+      <div class="bud-breakdown-title" style="color:#B7791F">⚡ Imprévus (${im}%)</div>
+      <div class="bud-breakdown-val">${fmt(revImprevus)}</div>
+      <div class="bud-breakdown-sub">Ta réserve pour les coups durs / dépenses non prévues</div>
+    </div>` : ''}
     <div class="bud-breakdown-item epargne">
       <div class="bud-breakdown-title">🌱 Épargne & Investissement (${e}%)</div>
       <div class="bud-breakdown-val">${fmt(revEpargne)}</div>
@@ -4267,8 +4322,9 @@ function renderBudget() {
       </div>`;
   };
 
+  const _im = budgetData.pct_imprevus || 0;
   const grandTotalPct = ['charges','plaisir','epargne'].reduce((s, k) =>
-    s + (subBudget[k] || []).reduce((ss, it) => ss + Number(it.pct || 0), 0), 0);
+    s + (subBudget[k] || []).reduce((ss, it) => ss + Number(it.pct || 0), 0), 0) + _im;
   const grandTotalAmt = Math.round(rev * grandTotalPct / 100);
 
   $('bud-suggestions').innerHTML = `
@@ -4277,6 +4333,10 @@ function renderBudget() {
     </div>
     ${renderBloc('charges', '🏠 Charges', c, '#DD7B85')}
     ${renderBloc('plaisir', '🌸 Plaisir', p, '#F4A993')}
+    ${_im > 0 ? `<div class="bud-sub-bloc" style="border-left:4px solid #E8A317;padding-left:14px;margin-bottom:20px">
+      <div style="font-weight:800;color:#B7791F;font-size:14px">⚡ Imprévus — ${_im}% (${fmt(Math.round(rev * _im / 100))})</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Une seule catégorie « Imprévus ». Ajuste son % avec le curseur en haut.</div>
+    </div>` : ''}
     ${renderBloc('epargne', '🌱 Épargne', e, '#7FB89E')}
     <div class="bud-grand-total">
       <span>TOTAL GÉNÉRAL</span>
