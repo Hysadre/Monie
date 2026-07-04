@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v55'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v56'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -4142,20 +4142,28 @@ function renderBudgetStatus(containerId, compact, monthKey) {
         <div style="font-size:10px;color:${color};margin-top:2px">${status}</div>
       </div>`;
   };
-  // ── Prévision fin de mois : uniquement pour le mois réel en cours, à mi-parcours ──
+  // ── Estimation « rythme récent » : moyenne des dépenses des 3 derniers mois COMPLETS ──
+  // (pas d'extrapolation du mois en cours → plus de chiffre absurde ; comparée à TON revenu)
   let forecastHtml = '';
   const _now = new Date();
   const _curKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}`;
-  if (key === _curKey) {
-    const dayEl = _now.getDate();
-    const daysIn = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate();
-    if (dayEl >= 3 && dayEl < daysIn && totalSpentDep > 0) {
-      const projSpent = Math.round(totalSpentDep / dayEl * daysIn);
-      const projReste = rev - projSpent;
-      const over = projSpent > totalBudgetDep;
-      forecastHtml = `<div style="padding:10px 12px;border-radius:12px;background:${projReste >= 0 ? 'rgba(232,163,23,0.10)' : 'rgba(229,57,53,0.10)'};font-size:12px;line-height:1.5;margin-bottom:14px">
-        <b>📈 Projection fin de mois</b> <span style="color:var(--muted)">(jour ${dayEl}/${daysIn})</span><br>
-        À ce rythme, tu finirais autour de <b>${fmt(projSpent)}</b> de dépenses → il te resterait <b style="color:${projReste >= 0 ? 'var(--sage)' : '#E53935'}">${fmt(projReste)}</b>.${over ? ` <span style="color:#B7791F">⚠ au-dessus de ton budget (${fmt(totalBudgetDep)})</span>` : ''}
+  if (key === _curKey && rev > 0) {
+    let sumM = 0, nM = 0;
+    for (let i = 1; i <= 3; i++) {
+      const d = new Date(_now.getFullYear(), _now.getMonth() - i, 1);
+      const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const mtx = transactions.filter(t => t.date_op.startsWith(mk) && t.type === 'sortie');
+      if (mtx.length) { sumM += mtx.reduce((s, t) => s + Math.abs(Number(t.amount)), 0); nM++; }
+    }
+    if (nM > 0) {
+      const avgM = Math.round(sumM / nM);
+      const projReste = rev - avgM;
+      const over = avgM > rev;
+      forecastHtml = `<div style="padding:10px 12px;border-radius:12px;background:${over ? 'rgba(229,57,53,0.10)' : 'rgba(232,163,23,0.10)'};font-size:12px;line-height:1.5;margin-bottom:14px">
+        <b>📈 Ton rythme récent</b> <span style="color:var(--muted)">(moyenne de tes ${nM} dernier${nM > 1 ? 's' : ''} mois)</span><br>
+        Tu dépenses en moyenne <b>${fmt(avgM)}/mois</b>. Sur ton revenu de <b>${fmt(rev)}</b>, il te resterait ~<b style="color:${projReste >= 0 ? 'var(--sage)' : '#E53935'}">${fmt(projReste)}</b>.
+        ${over ? `<br><span style="color:#B7791F">⚠ Ces derniers mois, tu as dépensé plus que ton revenu — vise un retour à l'équilibre.</span>` : ''}
+        <br><span style="color:var(--muted);font-size:11px">Estimation indicative sur tes derniers mois — pas une fatalité 🌱</span>
       </div>`;
     }
   }
