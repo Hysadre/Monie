@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v51'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v52'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -4535,55 +4535,64 @@ let aiBusy = false;
 // Construit un résumé chiffré et compact des finances (jamais le relevé brut).
 function buildAIContext(opts = {}) {
   if (!Array.isArray(transactions) || !transactions.length) return "Aucune transaction enregistrée pour l'instant.";
-  const now = new Date();
-  const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const curYear = opts.year && opts.year !== '-1' ? String(opts.year) : String(now.getFullYear());
   const sIn = a => a.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
   const sOut = a => a.filter(t => t.type === 'sortie').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
   const sEp = a => a.filter(t => t.type === 'epargne').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
   const L = [];
 
-  // Mois courant
-  const cur = transactions.filter(t => t.date_op.startsWith(curKey));
-  L.push(`Mois en cours (${curKey}) : revenus ${Math.round(sIn(cur))}€, dépenses ${Math.round(sOut(cur))}€, épargne ${Math.round(sEp(cur))}€.`);
-
-  // Année analysée
-  const yr = transactions.filter(t => t.date_op.startsWith(curYear));
-  const yIn = sIn(yr), yOut = sOut(yr), yEp = sEp(yr);
-  const nMonths = new Set(yr.map(t => t.date_op.slice(0, 7))).size || 1;
-  L.push(`Année ${curYear} : revenus ${Math.round(yIn)}€, dépenses ${Math.round(yOut)}€, épargne ${Math.round(yEp)}€, taux d'épargne ${yIn > 0 ? Math.round(yEp / yIn * 100) : 0}% (sur ${nMonths} mois).`);
-
-  // Top catégories de dépense de l'année
-  const catTot = {};
-  yr.filter(t => t.type === 'sortie').forEach(t => { catTot[t.category] = (catTot[t.category] || 0) + Math.abs(Number(t.amount)); });
-  const top = Object.entries(catTot).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  if (top.length) L.push('Top dépenses ' + curYear + ' par catégorie : ' + top.map(([c, v]) => `${c} ${Math.round(v)}€`).join(', ') + '.');
-
-  // Évolution 6 derniers mois (net)
-  const evo = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const m = transactions.filter(t => t.date_op.startsWith(k));
-    evo.push(`${k}: net ${Math.round(sIn(m) - sOut(m))}€`);
+  // ── Périmètre EXACT choisi par l'utilisatrice (plus de biais « mois en cours ») ──
+  const period = opts.periodType || 'all';
+  let scope, label;
+  if (period === 'month' && opts.month) {
+    scope = transactions.filter(t => t.date_op.startsWith(opts.month));
+    label = `${MONTHS[parseInt(opts.month.slice(5, 7)) - 1]} ${opts.month.slice(0, 4)}`;
+  } else if (period === 'year' && opts.year) {
+    scope = transactions.filter(t => t.date_op.startsWith(String(opts.year)));
+    label = `année ${opts.year}`;
+  } else {
+    scope = transactions.slice();
+    label = 'TOUTES les années confondues';
   }
-  L.push('6 derniers mois (solde net) : ' + evo.join(' · ') + '.');
+  L.push(`PÉRIODE ANALYSÉE (à respecter strictement) : ${label}.`);
+  if (!scope.length) return `Aucune transaction sur la période demandée (${label}).`;
 
-  // Budget du mois (si défini)
-  try {
-    if (typeof computeBudgetStatus === 'function') {
-      const b = computeBudgetStatus();
-      if (b && b.rev) {
-        L.push(`Budget du mois : revenu ${Math.round(b.rev)}€ ; charges ${Math.round(b.spent.charges)}/${b.budget.charges}€, plaisir ${Math.round(b.spent.plaisir)}/${b.budget.plaisir}€, épargne ${Math.round(b.spent.epargne)}/${b.budget.epargne}€.`);
-      }
-    }
-  } catch (e) {}
+  const nMonths = new Set(scope.map(t => t.date_op.slice(0, 7))).size || 1;
+  const tin = sIn(scope), tout = sOut(scope), tep = sEp(scope);
+  L.push(`Totaux sur la période : revenus ${Math.round(tin)}€, dépenses ${Math.round(tout)}€, épargne ${Math.round(tep)}€, sur ${nMonths} mois (~${Math.round(tout / nMonths)}€ de dépenses/mois). Taux d'épargne ${tin > 0 ? Math.round(tep / tin * 100) : 0}%.`);
 
-  // Objectifs d'épargne
+  // Familles ciblées (facultatif)
+  const fams = Array.isArray(opts.families) && opts.families.length ? opts.families : null;
+  const inFam = c => !fams || fams.includes(BUDGET_BLOCK[c]);
+  if (fams) L.push('FOCUS demandé sur les familles : ' + fams.map(f => FAMILY_LABEL[f] || f).join(', ') + '.');
+
+  // Dépenses par catégorie (filtrées par familles si demandé)
+  const catTot = {};
+  scope.filter(t => t.type === 'sortie' && inFam(t.category)).forEach(t => { catTot[t.category] = (catTot[t.category] || 0) + Math.abs(Number(t.amount)); });
+  const top = Object.entries(catTot).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  if (top.length) L.push('Dépenses par catégorie : ' + top.map(([c, v]) => `${c} ${Math.round(v)}€ (~${Math.round(v / nMonths)}€/mois)`).join(', ') + '.');
+
+  // Répartition par famille
+  const famTot = { charges: 0, plaisir: 0, imprevus: 0 };
+  scope.filter(t => t.type === 'sortie').forEach(t => { const b = BUDGET_BLOCK[t.category]; if (famTot[b] !== undefined) famTot[b] += Math.abs(Number(t.amount)); else famTot.charges += Math.abs(Number(t.amount)); });
+  L.push(`Répartition dépenses par famille : Charges ${Math.round(famTot.charges)}€, Plaisir ${Math.round(famTot.plaisir)}€, Imprévus ${Math.round(famTot.imprevus)}€ ; Épargne ${Math.round(tep)}€.`);
+
+  // Ventilation temporelle selon la période
+  if (period === 'all') {
+    const years = [...new Set(scope.map(t => t.date_op.slice(0, 4)))].sort();
+    L.push('Par année : ' + years.map(y => { const yt = scope.filter(t => t.date_op.startsWith(y)); return `${y} → dépenses ${Math.round(sOut(yt))}€, épargne ${Math.round(sEp(yt))}€`; }).join(' · ') + '.');
+  } else if (period === 'year') {
+    const parMois = [];
+    for (let m = 0; m < 12; m++) { const k = `${opts.year}-${String(m + 1).padStart(2, '0')}`; const mt = scope.filter(t => t.date_op.startsWith(k)); if (mt.length) parMois.push(`${MONTHS_SHORT[m]} ${Math.round(sOut(mt))}€`); }
+    if (parMois.length) L.push('Dépenses par mois : ' + parMois.join(', ') + '.');
+  }
+
+  // Objectifs d'épargne (toujours utile)
   if (Array.isArray(goalsList) && goalsList.length) {
     const act = goalsList.filter(g => g.statut === 'en_cours');
-    if (act.length) L.push('Objectifs en cours : ' + act.map(g => `${g.nom} ${Math.round(g.deja_epargne || 0)}/${Math.round(g.cible || 0)}€ (${g.cible > 0 ? Math.round((g.deja_epargne || 0) / g.cible * 100) : 0}%)`).join(', ') + '.');
+    if (act.length) L.push("Objectifs d'épargne en cours : " + act.map(g => `${g.nom} ${Math.round(g.deja_epargne || 0)}/${Math.round(g.cible || 0)}€`).join(', ') + '.');
   }
+
+  if (opts.focus) L.push("QUESTION PRÉCISE DE L'UTILISATRICE : " + opts.focus);
   return L.join('\n');
 }
 
@@ -4654,25 +4663,51 @@ async function sendAIChat() {
 }
 function onAIChatKey(ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); sendAIChat(); } }
 
-// ─── Conseils IA sur la page Analyse (dépense des tokens à chaque clic) ───
-async function runAIConseils() {
+// ─── Conseils IA : on POSE D'ABORD les questions (période, familles, focus) → PUIS on requête ───
+function runAIConseils() {
+  const years = [...new Set(transactions.map(t => t.date_op.slice(0, 4)))].sort().reverse();
+  const months = [...new Set(transactions.map(t => t.date_op.slice(0, 7)))].sort().reverse().slice(0, 12);
+  const periodOpts = '<option value="all">🌍 Toutes les années confondues</option>'
+    + years.map(y => `<option value="year:${y}">Année ${y}</option>`).join('')
+    + months.map(m => `<option value="month:${m}">${MONTHS[parseInt(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}</option>`).join('');
+  const famChecks = [['charges', '🏠 Charges'], ['plaisir', '🌸 Plaisir'], ['imprevus', '⚡ Imprévus'], ['epargne', '🌱 Épargne']]
+    .map(([k, l]) => `<label style="display:inline-flex;align-items:center;gap:5px;margin:0 12px 6px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="ai-fam" value="${k}"> ${l}</label>`).join('');
+  const body = `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="auth-field"><label>📅 Période à analyser</label>
+        <select class="select" id="ai-period" style="width:100%">${periodOpts}</select></div>
+      <div class="auth-field"><label>🎯 Familles à cibler <span style="font-weight:400;color:var(--muted);font-size:11px">— aucune cochée = tout</span></label>
+        <div style="display:flex;flex-wrap:wrap">${famChecks}</div></div>
+      <div class="auth-field"><label>💬 Ta question / ce que tu veux savoir <span style="font-weight:400;color:var(--muted);font-size:11px">(facultatif)</span></label>
+        <input class="inp" id="ai-focus" placeholder="Ex: où puis-je réduire ? comment atteindre mes objectifs ?" style="width:100%"></div>
+      <div style="font-size:11px;color:var(--muted);background:var(--peach-soft);padding:8px 10px;border-radius:8px;line-height:1.5">⚡ En cliquant sur <b>OK</b>, une requête est envoyée à l'IA (consomme des tokens). <b>Rien n'est envoyé tant que tu n'as pas validé.</b></div>
+    </div>`;
+  openModal('🤖 Analyse IA — que veux-tu analyser ?', 'Choisis la période et le focus avant de lancer.', () => {
+    const pv = ($('ai-period') && $('ai-period').value) || 'all';
+    const opts = {};
+    if (pv.startsWith('year:')) { opts.periodType = 'year'; opts.year = pv.slice(5); }
+    else if (pv.startsWith('month:')) { opts.periodType = 'month'; opts.month = pv.slice(6); }
+    else opts.periodType = 'all';
+    opts.families = [...document.querySelectorAll('.ai-fam:checked')].map(x => x.value);
+    opts.focus = ($('ai-focus') && $('ai-focus').value || '').trim();
+    _launchAIConseils(opts);
+  }, body);
+  // Pré-sélectionne la période du filtre de la page si c'est une année précise
+  const ySel = $('analyse-year');
+  if (ySel && ySel.value && ySel.value !== '-1' && $('ai-period')) $('ai-period').value = 'year:' + ySel.value;
+}
+async function _launchAIConseils(opts) {
   const out = $('ai-conseils-out');
   const btn = $('ai-conseils-btn');
-  if (!out) return;
-  if (aiBusy) return;
+  if (!out || aiBusy) return;
   aiBusy = true;
   if (btn) { btn.disabled = true; btn.textContent = '🤖 Analyse en cours…'; }
   const hint = $('ai-conseils-hint'); if (hint) hint.style.display = 'none';
   out.style.display = 'block';
   out.innerHTML = '<div class="ai-msg ai-msg-bot ai-typing">Monie analyse tes chiffres…</div>';
-  const ySel = $('analyse-year');
-  const year = ySel ? ySel.value : null;
   try {
-    const reply = await callMonieAI(
-      [{ role: 'user', content: 'Analyse ma situation financière sur la période sélectionnée et donne-moi un bilan personnalisé.' }],
-      'conseils',
-      { year }
-    );
+    const q = opts.focus ? opts.focus : "Analyse ma situation financière sur la période choisie et donne-moi un bilan personnalisé et des conseils concrets.";
+    const reply = await callMonieAI([{ role: 'user', content: q }], 'conseils', opts);
     out.innerHTML = `<div class="ai-conseils-card">${aiFmt(reply)}</div>`;
   } catch (e) {
     out.innerHTML = `<div class="ai-msg ai-msg-bot">⚠️ ${esc(e.message || 'IA indisponible')}<br><br><small>Vérifie que la fonction « monie-ai » est déployée sur Supabase et que la clé ANTHROPIC_API_KEY est configurée.</small></div>`;
