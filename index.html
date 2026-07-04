@@ -96,6 +96,7 @@
           <span style="color:var(--muted);font-size:14px">⚙</span>
         </div>
         <button class="logout-btn" onclick="logout()">Déconnexion</button>
+        <div id="app-version" style="text-align:center;font-size:10px;color:var(--muted);margin-top:8px">Monie —</div>
       </div>
     </aside>
 
@@ -761,6 +762,10 @@
             <div class="card-hd"><div class="card-title">Ta répartition suggérée</div></div>
             <div id="bud-breakdown"></div>
           </div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">💸 Réel dépensé par postes <span style="font-size:11px;font-weight:500;color:var(--muted)">— clique un poste pour voir ses catégories, puis une catégorie pour ses opérations</span></div></div>
+          <div id="bud-real-blocks"></div>
         </div>
         <div class="card">
           <div class="card-hd"><div class="card-title">Suggestions par sous-catégorie</div></div>

@@ -1692,7 +1692,7 @@ body::after {
 }
 .bud-sub-row {
   display: grid;
-  grid-template-columns: 1fr 70px auto 90px 30px;
+  grid-template-columns: 1fr 70px auto 90px 22px 30px;
   gap: 10px;
   align-items: center;
   padding: 6px 0;
@@ -1704,6 +1704,8 @@ body::after {
   color: var(--muted); font-size: 14px; padding: 4px; border-radius: 6px; line-height: 1;
 }
 .bud-sub-del:hover { color: var(--tender-rose); background: var(--tender-rose-soft); }
+.bud-sub-check { width: 18px; height: 18px; cursor: pointer; accent-color: var(--sage); }
+.bud-sub-row.done { opacity: 0.45; }
 .bud-sub-row:last-child { border-bottom: none; }
 .bud-sub-cat { display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bud-sub-inp {
@@ -1753,8 +1755,8 @@ body::after {
 }
 @media (max-width: 900px) {
   .bud-sub-row {
-    grid-template-columns: 1fr 60px auto 80px 26px;
-    gap: 6px;
+    grid-template-columns: 1fr 54px auto 72px 20px 24px;
+    gap: 5px;
     font-size: 12px;
   }
   .bud-sub-inp { padding: 5px 8px; font-size: 12px; }

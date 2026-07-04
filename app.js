@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
+const APP_VERSION = 'v47'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -625,6 +626,13 @@ async function loadAllData() {
   await loadProfile();
   console.log(`📊 ${transactions.length} transactions, ${rules.length} règles, profil chargé`);
 }
+
+// Affiche la version de l'app (témoin de déploiement) dès que possible
+(function showAppVersion() {
+  const apply = () => { const el = document.getElementById('app-version'); if (el) el.textContent = 'Monie ' + APP_VERSION; };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+  else apply();
+})();
 
 // Appliquer immédiatement le thème mémorisé en localStorage (évite le flash rose)
 (function initThemeEarly() {
@@ -1492,6 +1500,77 @@ function openKpiList(kind) {
   $('kpi-modal').style.display = 'flex';
 }
 function closeKpiList() { const m = $('kpi-modal'); if (m) m.style.display = 'none'; }
+
+// ─── 3e bloc « Réel dépensé par postes » (Gestion du budget) : Charges / Plaisir / Épargne ───
+function renderRealBlocks() {
+  const el = $('bud-real-blocks');
+  if (!el) return;
+  const key = budgetKey();
+  const { spent, budget } = computeBudgetStatus(key);
+  const blocks = [
+    { k: 'charges', emoji: '🏠', label: 'Charges & Nécessités', bg: 'var(--tender-rose-soft)', real: spent.charges, bud: budget.charges, isEp: false },
+    { k: 'plaisir', emoji: '🌸', label: 'Plaisir & Envies', bg: 'var(--peach-soft)', real: spent.plaisir, bud: budget.plaisir, isEp: false },
+    { k: 'epargne', emoji: '🌱', label: 'Épargne & Investissement', bg: 'var(--sage-soft)', real: spent.epargne, bud: budget.epargne, isEp: true }
+  ];
+  el.innerHTML = blocks.map(b => {
+    const pct = b.bud > 0 ? Math.round(b.real / b.bud * 100) : (b.real > 0 ? 100 : 0);
+    const over = !b.isEp && b.bud > 0 && b.real > b.bud;
+    const barColor = over ? '#E53935' : 'var(--sage)';
+    const w = Math.min(100, pct);
+    const verb = b.isEp ? 'mis de côté' : 'dépensé';
+    const cmp = b.isEp
+      ? (b.real >= b.bud ? '🎉 cible atteinte' : `cible ${fmt(b.bud)}`)
+      : (over ? `⚠️ dépassé de ${fmt(b.real - b.bud)}` : `reste ${fmt(b.bud - b.real)}`);
+    return `<div onclick="openBlockDetail('${b.k}','${key}')" style="cursor:pointer;padding:12px 14px;border-radius:12px;background:${b.bg};margin-bottom:10px" title="Voir le détail de ${b.label}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-weight:800;font-size:14px">${b.emoji} ${b.label} ›</span>
+        <span style="font-family:var(--fm);font-weight:800;color:${barColor}">${fmt(b.real)} / ${fmt(b.bud)}</span>
+      </div>
+      <div style="height:7px;background:rgba(0,0,0,0.07);border-radius:100px;overflow:hidden">
+        <div style="height:100%;width:${w}%;background:${barColor};border-radius:100px"></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">${b.real === 0 ? 'Rien ' + verb + ' pour l\'instant' : cmp}</div>
+    </div>`;
+  }).join('');
+}
+
+// Détail d'un poste : liste des catégories (charges/plaisir) ou des opérations d'épargne
+function openBlockDetail(blockKey, monthKey) {
+  const status = computeBudgetStatus(monthKey);
+  const meta = { charges: { emoji: '🏠', label: 'Charges' }, plaisir: { emoji: '🌸', label: 'Plaisir' }, epargne: { emoji: '🌱', label: 'Épargne' } }[blockKey] || { emoji: '📊', label: blockKey };
+  const mLbl = monthKey ? `${MONTHS[parseInt(monthKey.slice(5, 7)) - 1]} ${monthKey.slice(0, 4)}` : 'toutes périodes';
+  const list = $('kpi-modal-list');
+  set('kpi-modal-title', `${meta.emoji} ${meta.label}`);
+
+  if (blockKey === 'epargne') {
+    let scope = transactions.filter(t => t.type === 'epargne' && (!monthKey || t.date_op.startsWith(monthKey)));
+    scope = scope.slice().sort((a, b) => (a.date_op < b.date_op ? 1 : a.date_op > b.date_op ? -1 : 0));
+    const total = scope.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+    set('kpi-modal-sub', `${mLbl} · ${scope.length} opération(s) · ${fmt(total)} mis de côté`);
+    list.innerHTML = scope.length ? scope.map(t => `<div class="day-tx-item" style="cursor:pointer" onclick="closeKpiList();openTxEdit('${t.id}')" title="Cliquer pour modifier">
+        <div class="day-tx-icon" style="background:${catColor(t.category)}18;color:${catColor(t.category)}">${catIcon(t.category)}</div>
+        <div class="day-tx-info"><div class="tx-label">${esc(t.label)}</div><div class="tx-cat">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)} · ${esc(t.category || '')}</div></div>
+        <div class="day-tx-amt amt-save">${fmtD(Math.abs(Number(t.amount)))}</div>
+      </div>`).join('') : '<div class="empty-sub" style="padding:20px;text-align:center">Aucune épargne enregistrée ce mois.</div>';
+    $('kpi-modal').style.display = 'flex';
+    return;
+  }
+
+  const cats = Object.keys(status.spentByCat).filter(c => BUDGET_BLOCK[c] === blockKey && status.spentByCat[c] > 0);
+  cats.sort((a, b) => status.spentByCat[b] - status.spentByCat[a]);
+  const total = cats.reduce((s, c) => s + status.spentByCat[c], 0);
+  set('kpi-modal-sub', `${mLbl} · ${cats.length} catégorie(s) · ${fmt(total)} dépensés`);
+  list.innerHTML = cats.length ? cats.map(c => {
+    const sp = Math.round(status.spentByCat[c]);
+    const bud = Math.round(status.budgetByCat[c] || 0);
+    return `<div class="day-tx-item" style="cursor:pointer" onclick="openCatMonthList('${esc(c)}','${monthKey}')" title="Voir les opérations ${esc(c)}">
+      <div class="day-tx-icon" style="background:${catColor(c)}18;color:${catColor(c)}">${catIcon(c)}</div>
+      <div class="day-tx-info"><div class="tx-label">${esc(c)} ›</div><div class="tx-cat">${bud > 0 ? 'budget ' + fmt(bud) : 'hors budget'}</div></div>
+      <div class="day-tx-amt amt-out">${fmt(sp)}</div>
+    </div>`;
+  }).join('') : '<div class="empty-sub" style="padding:20px;text-align:center">Aucune dépense dans ce poste ce mois.</div>';
+  $('kpi-modal').style.display = 'flex';
+}
 
 // Liste éditable des dépenses d'UNE catégorie sur UN mois (clic sur une barre du budget)
 function openCatMonthList(cat, monthKey) {
@@ -3827,7 +3906,8 @@ function renderBudgetStatus(containerId, compact, monthKey) {
   if (!rev) { el.innerHTML = '<div class="empty-sub">Renseigne ton revenu mensuel dans Gestion du budget pour activer le suivi du mois.</div>'; return; }
   const totalBudgetDep = budget.charges + budget.plaisir;
   const totalSpentDep = spent.charges + spent.plaisir;
-  const reste = totalBudgetDep - totalSpentDep - aPrevoir;
+  // Reste à dépenser = REVENU TOTAL − ce qui est déjà dépensé. Le « à prévoir » n'est pas soustrait (pense-bête).
+  const reste = rev - totalSpentDep;
   let rows = [...new Set([...Object.keys(budgetByCat), ...Object.keys(spentByCat).filter(c => BUDGET_BLOCK[c] === 'charges' || BUDGET_BLOCK[c] === 'plaisir')])]
     .map(cat => {
       const bud = Math.round(budgetByCat[cat] || 0);
@@ -3838,7 +3918,8 @@ function renderBudgetStatus(containerId, compact, monthKey) {
     .sort((a, b) => (b.over - a.over) || (b.pct - a.pct));
   if (compact) rows = rows.filter(r => r.pct >= 80).slice(0, 6);
   const bar = (r) => {
-    const color = r.over ? '#E53935' : r.pct >= 80 ? 'var(--gold)' : 'var(--sage)';
+    // Binaire : tant que dépensé ≤ budget → vert (dans le budget) ; dès que dépensé > budget → rouge (dépassé)
+    const color = r.over ? '#E53935' : 'var(--sage)';
     const w = Math.min(100, r.pct);
     return `
       <div style="margin-bottom:10px;cursor:pointer" onclick="openCatMonthList('${esc(r.cat)}','${key}')" title="Voir les opérations ${esc(r.cat)} de ce mois">
@@ -3849,14 +3930,15 @@ function renderBudgetStatus(containerId, compact, monthKey) {
         <div style="height:6px;background:var(--border-soft);border-radius:100px;overflow:hidden">
           <div style="height:100%;width:${w}%;background:${color};border-radius:100px;transition:width .5s"></div>
         </div>
-        <div style="font-size:10px;color:${color};margin-top:2px">${r.over ? `⚠️ dépassé de ${fmt(r.sp - r.bud)}` : r.bud > 0 ? `reste ${fmt(r.bud - r.sp)}` : 'hors budget'}</div>
+        <div style="font-size:10px;color:${color};margin-top:2px">${r.over ? `⚠️ hors budget · dépassé de ${fmt(r.sp - r.bud)}` : r.bud > 0 ? `✓ dans le budget · reste ${fmt(r.bud - r.sp)}` : 'hors budget (poste non prévu)'}</div>
       </div>`;
   };
   el.innerHTML = `
     <div style="text-align:center;padding:12px;border-radius:12px;background:${reste >= 0 ? 'rgba(127,184,158,0.12)' : 'rgba(229,57,53,0.1)'};margin-bottom:14px">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Reste à dépenser · ${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}</div>
       <div style="font-size:26px;font-weight:900;color:${reste >= 0 ? 'var(--sage)' : '#E53935'};font-family:var(--fm)">${fmt(reste)}</div>
-      <div style="font-size:11px;color:var(--muted)">${fmt(totalSpentDep)} dépensés${aPrevoir > 0 ? ' · ' + fmt(aPrevoir) + ' à prévoir' : ''} · budget ${fmt(totalBudgetDep)}</div>
+      <div style="font-size:11px;color:var(--muted)">${fmt(rev)} de revenu − ${fmt(totalSpentDep)} déjà dépensés</div>
+      ${aPrevoir > 0 ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">📌 Pense-bête : ${fmt(aPrevoir)} de dépenses à prévoir (non déduites)</div>` : ''}
     </div>
     ${compact && !rows.length ? '<div class="empty-sub" style="text-align:center">👍 Tout est dans le budget pour l\'instant</div>' : ''}
     ${rows.map(bar).join('')}
@@ -4036,6 +4118,8 @@ function renderBudget() {
     </div>
   `;
 
+  renderRealBlocks();
+
   // ─── BLOCAGE si total ≠ 100% ──────────────
   if (total !== 100) {
     $('bud-suggestions').innerHTML = `
@@ -4081,7 +4165,7 @@ function renderBudget() {
         ${items.map((it, i) => {
           const amt = Math.round(rev * it.pct / 100);
           return `
-            <div class="bud-sub-row">
+            <div class="bud-sub-row${it.done ? ' done' : ''}">
               <div class="bud-sub-cat">
                 <span style="width:8px;height:8px;border-radius:50%;background:${catColor(it.cat)};display:inline-block"></span>
                 ${catIcon(it.cat)} ${esc(it.cat)}${it.note ? ` <span style="color:var(--muted);font-size:11px">${esc(it.note)}</span>` : ''}
@@ -4095,6 +4179,7 @@ function renderBudget() {
                        style="width:58px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
                 <span style="font-size:11px;color:var(--muted)">€</span>
               </div>
+              <input type="checkbox" class="bud-sub-check" ${it.done ? 'checked' : ''} onchange="toggleSubBudgetDone('${blocKey}',${i})" title="Coche quand c'est payé / réglé ✓" aria-label="Marquer comme payé">
               <button class="bud-sub-del" onclick="deleteSubBudgetLine('${blocKey}',${i})" title="Supprimer cette ligne">🗑</button>
             </div>`;
         }).join('')}
@@ -4154,6 +4239,19 @@ function deleteSubBudgetLine(blocKey, index) {
       saveBudgetPrep();
       renderBudget();
       toast(`✓ Ligne « ${removed.cat}${removed.note ? ' ' + removed.note : ''} » supprimée`, 'success');
+    }
+  } catch (e) { console.error(e); }
+}
+// Coche/décoche une ligne comme « payé / réglé » (pense-bête mensuel, sauvegardé avec le budget du mois)
+function toggleSubBudgetDone(blocKey, index) {
+  try {
+    let subBudget = budgetData.sub_budget;
+    if (!subBudget) subBudget = JSON.parse(JSON.stringify(DEFAULT_SUB_PCT));
+    if (subBudget[blocKey] && subBudget[blocKey][index]) {
+      subBudget[blocKey][index].done = !subBudget[blocKey][index].done;
+      budgetData.sub_budget = subBudget;
+      saveBudgetPrep();
+      renderBudget();
     }
   } catch (e) { console.error(e); }
 }
