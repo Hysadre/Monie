@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=5.0,minimum-scale=1.0,viewport-fit=cover">
+<meta name="theme-color" content="#FDFAF8">
+<title>Monie</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<!-- Icônes iOS (home screen "Ajouter à l'écran d'accueil") -->
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="152x152" href="icon-152.png">
+<link rel="apple-touch-icon" sizes="167x167" href="icon-167.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Monie">
+<link rel="manifest" href="manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══ AUTH ═══ -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-brand"><img src="favicon.svg" class="brand-logo" alt="Monie"><span class="brand-name">Monie</span></div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">Connexion</button>
+      <button class="auth-tab" onclick="switchAuthTab('signup')">Inscription</button>
+    </div>
+    <div id="auth-login">
+      <div class="auth-title">Bon retour 🌸</div>
+      <div class="auth-sub">Connecte-toi à ton budget perso</div>
+      <div class="auth-field"><label>Email</label><input class="inp" type="email" id="login-email" placeholder="ton@email.com" onkeydown="if(event.key==='Enter')login()"></div>
+      <div class="auth-field"><label>Mot de passe</label><input class="inp" type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()"></div>
+      <div id="login-error" class="auth-msg auth-msg-error"></div>
+      <button class="btn-auth" id="btn-login" onclick="login()">Se connecter →</button>
+    </div>
+    <div id="auth-signup" style="display:none">
+      <div class="auth-title">Bienvenue sur Monie 🌸</div>
+      <div class="auth-sub">Ton budget, en douceur</div>
+      <div class="auth-field"><label>Email</label><input class="inp" type="email" id="signup-email" placeholder="ton@email.com"></div>
+      <div class="auth-field"><label>Mot de passe</label><input class="inp" type="password" id="signup-password" placeholder="6 caractères minimum"></div>
+      <div class="auth-field"><label>Confirmer</label><input class="inp" type="password" id="signup-confirm" placeholder="Répète ton mot de passe"></div>
+      <div id="signup-error" class="auth-msg auth-msg-error"></div>
+      <button class="btn-auth" id="btn-signup" onclick="signup()">Créer mon compte →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div id="app" style="display:none">
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand" onclick="showTab('calendar')">
+        <img src="favicon.svg" class="brand-logo-sm" alt="M"><span class="brand-name-sm">Monie</span>
+      </div>
+      <nav class="nav">
+        <button class="nav-btn active" data-tab="calendar" onclick="showTab('calendar')">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Calendrier
+        </button>
+        <button class="nav-btn" data-tab="dashboard" onclick="showTab('dashboard')">
+          <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
+          Dashboard
+        </button>
+        <button class="nav-btn" data-tab="analyse" onclick="showTab('analyse')">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Analyse
+        </button>
+        <button class="nav-btn" data-tab="transactions" onclick="showTab('transactions')">
+          <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          Transactions
+        </button>
+        <!-- Import déplacé dans la page Transactions (bouton « Importer un relevé ») -->
+        <button class="nav-btn" data-tab="budget" onclick="showTab('budget')">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Gestion du budget
+        </button>
+        <button class="nav-btn" data-tab="epargne" onclick="showTab('epargne')">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Épargne
+        </button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="user-pill" onclick="showTab('profile')" style="cursor:pointer" title="Voir mon profil">
+          <div class="user-avatar" id="user-avatar">?</div>
+          <div style="display:flex;flex-direction:column;min-width:0;flex:1">
+            <span class="user-name" id="user-name" style="font-weight:800;font-size:12px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Mon compte</span>
+            <span class="user-email" id="user-email" style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</span>
+          </div>
+          <span style="color:var(--muted);font-size:14px">⚙</span>
+        </div>
+        <button class="logout-btn" onclick="logout()">Déconnexion</button>
+        <div id="app-version" style="text-align:center;font-size:10px;color:var(--muted);margin-top:8px">Monie —</div>
+      </div>
+    </aside>
+
+    <header class="mobile-header">
+      <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Menu">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+      </button>
+      <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;cursor:pointer" onclick="showTab('profile')" title="Mon profil">
+        <img src="favicon.svg" class="brand-logo-sm" alt="M">
+        <div style="min-width:0;overflow:hidden">
+          <div id="mobile-greeting" style="font-size:14px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Bonjour</div>
+          <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="mobile-email">—</div>
+        </div>
+      </div>
+      <button onclick="openSearch()" style="padding:8px 12px;font-size:11px;background:transparent;border:1px solid var(--border);border-radius:100px;color:var(--muted);cursor:pointer;flex-shrink:0" title="Rechercher" aria-label="Rechercher">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+      </button>
+      <button onclick="logout()" style="padding:8px 12px;font-size:11px;background:transparent;border:1px solid var(--border);border-radius:100px;color:var(--muted);cursor:pointer;flex-shrink:0" title="Déconnexion">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </header>
+
+    <!-- Overlay pour fermer la sidebar mobile -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <main class="main">
+      <!-- 📅 CALENDRIER -->
+      <div id="tab-calendar" class="tab active">
+        <div class="cal-hd">
+          <div>
+            <h1 class="page-title">Calendrier</h1>
+            <p class="page-sub">Ton budget, jour par jour</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select class="select" id="cal-month-select" onchange="setCalDate()"></select>
+            <select class="select" id="cal-year-select" onchange="setCalDate()"></select>
+            <div class="cal-nav">
+              <button onclick="changeCalMonth(-1)" aria-label="Mois précédent">‹</button>
+              <button onclick="changeCalMonth(1)" aria-label="Mois suivant">›</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="help-banner" id="help-calendar">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">📅</div>
+            <div class="help-banner-title">Comment ça marche — Calendrier</div>
+            <button class="help-banner-close" onclick="closeHelp('help-calendar')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            Vue calendaire de ton budget : chaque case = 1 jour avec ses <b>entrées (vert)</b> et <b>sorties (rose)</b>.
+            <ul>
+              <li><b>Clique un jour</b> pour voir le détail des transactions + saisir manuellement une nouvelle dépense</li>
+              <li><b>Change de mois</b> avec les sélecteurs (Mois / Année) ou les flèches ‹ ›</li>
+              <li>Les résumés du mois s'affichent en haut</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card" style="padding:16px 20px;margin-bottom:12px">
+          <div class="cal-summary">
+            <div class="cal-summary-item"><span class="cal-summary-lbl">Revenus mois</span><span class="cal-summary-val cal-in" id="cal-month-in">—</span></div>
+            <div class="cal-summary-item"><span class="cal-summary-lbl">Dépenses mois</span><span class="cal-summary-val cal-out" id="cal-month-out">—</span></div>
+            <div class="cal-summary-item"><span class="cal-summary-lbl">Solde</span><span class="cal-summary-val cal-balance" id="cal-month-bal">—</span></div>
+          </div>
+        </div>
+
+        <div class="calendar">
+          <div class="cal-weekdays">
+            <div class="cal-wd">Lun</div><div class="cal-wd">Mar</div><div class="cal-wd">Mer</div><div class="cal-wd">Jeu</div><div class="cal-wd">Ven</div><div class="cal-wd">Sam</div><div class="cal-wd">Dim</div>
+          </div>
+          <div class="cal-grid" id="cal-grid"></div>
+        </div>
+
+        <div class="card" id="day-detail-card" style="display:none">
+          <div class="card-hd">
+            <div>
+              <div class="card-title" id="day-detail-date">—</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px" id="day-detail-summary">—</div>
+            </div>
+            <button type="button" class="btn-ghost" id="day-tx-toggle" onclick="toggleDayList()" style="padding:6px 12px;font-size:12px">Masquer la liste</button>
+          </div>
+          <div id="day-tx-list" style="max-height:320px;overflow-y:auto"></div>
+          <div class="quick-add" id="quick-add-box">
+            <button type="button" class="quick-add-hd quick-add-toggle" onclick="toggleQuickAdd()" aria-expanded="true">
+              <span>➕ Saisir une opération pour ce jour</span>
+              <span id="quick-add-chevron">▼</span>
+            </button>
+            <div class="qa-form-v2" id="quick-add-form-wrap">
+              <!-- Étape 1 : Sortie / Entrée -->
+              <div class="qa-field">
+                <label class="qa-label">Type</label>
+                <div class="qa-type-toggle">
+                  <label class="qa-type-btn qa-type-out">
+                    <input type="radio" name="qa-type" value="sortie" checked onchange="updatePayMethodOptions()">
+                    <span>💸 Sortie</span>
+                  </label>
+                  <label class="qa-type-btn qa-type-in">
+                    <input type="radio" name="qa-type" value="entree" onchange="updatePayMethodOptions()">
+                    <span>💰 Entrée</span>
+                  </label>
+                  <label class="qa-type-btn qa-type-save">
+                    <input type="radio" name="qa-type" value="epargne" onchange="updatePayMethodOptions()">
+                    <span>🐷 Épargne</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Type d'épargne (visible seulement si type = Épargne) -->
+              <div class="qa-field" id="qa-epargne-box" style="display:none">
+                <label class="qa-label">Vers quel objectif ?</label>
+                <select class="select" id="qa-epargne-goal"><option value="">💰 Épargne classique (sans objectif)</option></select>
+              </div>
+
+              <!-- Étape 2 : Moyen de paiement -->
+              <div class="qa-field">
+                <label class="qa-label" id="qa-paymethod-label">Payé avec</label>
+                <select class="select" id="qa-paymethod"></select>
+              </div>
+
+              <!-- Étape 3 : Montant -->
+              <div class="qa-field">
+                <label class="qa-label">Montant</label>
+                <input class="inp" type="number" step="0.01" id="qa-amount" placeholder="0,00 €" inputmode="decimal">
+              </div>
+
+              <!-- Étape 4 : Libellé -->
+              <div class="qa-field">
+                <label class="qa-label">Libellé</label>
+                <input class="inp" type="text" id="qa-label" placeholder="Ex: Café Dolce">
+              </div>
+
+              <!-- Étape 5 : Catégorie -->
+              <div class="qa-field">
+                <label class="qa-label">Catégorie</label>
+                <select class="select" id="qa-cat"></select>
+              </div>
+
+              <button class="btn-primary qa-submit" onclick="quickAddTx()">✓ Ajouter</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 📊 DASHBOARD -->
+      <div id="tab-dashboard" class="tab">
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">Dashboard</h1>
+            <p class="page-sub" id="dash-greeting">Vue d'ensemble 🌸</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select class="select" id="dash-month-select" onchange="setDashDate()"></select>
+            <select class="select" id="dash-year-select" onchange="setDashDate()"></select>
+            <div class="cal-nav">
+              <button onclick="changeDashMonth(-1)" aria-label="Mois précédent">‹</button>
+              <button onclick="changeDashMonth(1)" aria-label="Mois suivant">›</button>
+            </div>
+          </div>
+        </div>
+        <div class="help-banner" id="help-dashboard">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">📊</div>
+            <div class="help-banner-title">Comment ça marche — Dashboard</div>
+            <button class="help-banner-close" onclick="closeHelp('help-dashboard')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            Ton résumé financier <b>mois par mois</b>, calculé automatiquement depuis tes transactions importées.
+            <ul>
+              <li><b>4 KPIs</b> en haut : Revenus, Dépenses, Solde net, Nombre d'ops</li>
+              <li><b>2 cartes performance</b> : compare ta gestion & ton épargne <b>vs le mois précédent</b></li>
+              <li><b>Courbe évolution</b> : tes revenus et dépenses sur 12 mois</li>
+              <li><b>Répartition</b> : ta consommation par catégorie (donut)</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 🎯 3 vues Dashboard : Global / Mensuel / Annuel -->
+        <div class="dash-view-tabs">
+          <button class="dash-view-btn active" data-view="global" onclick="setDashView('global')">🌍 Global</button>
+          <button class="dash-view-btn" data-view="mensuel" onclick="setDashView('mensuel')">📊 Mensuel</button>
+          <button class="dash-view-btn" data-view="annuel" onclick="setDashView('annuel')">📅 Annuel</button>
+        </div>
+
+        <div id="dash-view-global">
+        <div class="kpi-grid">
+          <div class="kpi kpi-sage kpi-click" onclick="openKpiList('entree')" title="Voir & modifier les entrées"><div class="kpi-label">Revenus mois ›</div><div class="kpi-val kpi-val-sage" id="dash-rev">—</div><div class="kpi-hint" id="dash-rev-hint">Ce mois</div></div>
+          <div class="kpi kpi-rose kpi-click" onclick="openKpiList('sortie')" title="Voir & modifier les dépenses"><div class="kpi-label">Dépenses mois ›</div><div class="kpi-val kpi-val-rose" id="dash-dep">—</div><div class="kpi-hint" id="dash-dep-hint">Ce mois</div></div>
+          <div class="kpi kpi-peach kpi-click" onclick="openKpiList('all')" title="Voir & modifier toutes les opérations"><div class="kpi-label">Solde mois ›</div><div class="kpi-val" id="dash-bal">—</div><div class="kpi-hint" id="dash-bal-hint">—</div></div>
+          <div class="kpi kpi-gold kpi-click" onclick="openKpiList('all')" title="Voir & modifier toutes les opérations"><div class="kpi-label">Nb opérations ›</div><div class="kpi-val kpi-val-gold" id="dash-count">—</div><div class="kpi-hint">transactions</div></div>
+        </div>
+
+        <!-- 📆 Totaux annuels -->
+        <div class="kpi-grid" style="margin-top:8px">
+          <div class="kpi kpi-sage"><div class="kpi-label">Revenus année</div><div class="kpi-val kpi-val-sage" id="dash-year-total-rev">—</div><div class="kpi-hint">Cumul</div></div>
+          <div class="kpi kpi-rose"><div class="kpi-label">Dépenses année</div><div class="kpi-val kpi-val-rose" id="dash-year-total-dep">—</div><div class="kpi-hint">Cumul</div></div>
+          <div class="kpi kpi-peach"><div class="kpi-label">Solde année</div><div class="kpi-val" id="dash-year-total-bal">—</div><div class="kpi-hint">Cumul annuel</div></div>
+          <div class="kpi kpi-gold"><div class="kpi-label">Année</div><div class="kpi-val kpi-val-gold" id="dash-year-display">—</div><div class="kpi-hint">Sélectionnée</div></div>
+        </div>
+
+        <!-- 🌸 Performance cards vs M-1 -->
+        <div class="perf-grid">
+          <div class="perf-card" id="perf-money">
+            <div class="perf-header">
+              <div>
+                <div class="perf-label">💰 Gestion globale</div>
+                <div class="perf-val" id="perf-money-val">—</div>
+              </div>
+              <div class="perf-icon sage" id="perf-money-icon">📊</div>
+            </div>
+            <div class="perf-body">
+              <div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:2px">vs mois précédent</div>
+                <span class="perf-badge neutral" id="perf-money-badge">
+                  <span class="perf-badge-arrow">—</span>
+                  <span id="perf-money-delta">—</span>
+                </span>
+              </div>
+              <canvas class="perf-mini" id="perf-money-chart"></canvas>
+            </div>
+          </div>
+          <div class="perf-card" id="perf-savings">
+            <div class="perf-header">
+              <div>
+                <div class="perf-label">🎯 Épargne</div>
+                <div class="perf-val" id="perf-savings-val">—</div>
+              </div>
+              <div class="perf-icon lavender" id="perf-savings-icon">🌱</div>
+            </div>
+            <div class="perf-body">
+              <div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:2px">vs mois précédent</div>
+                <span class="perf-badge neutral" id="perf-savings-badge">
+                  <span class="perf-badge-arrow">—</span>
+                  <span id="perf-savings-delta">—</span>
+                </span>
+              </div>
+              <canvas class="perf-mini" id="perf-savings-chart"></canvas>
+            </div>
+          </div>
+        </div>
+        <!-- Widget Prochain objectif d'épargne -->
+        <div class="card" id="dash-goal-widget" style="display:none;background:linear-gradient(135deg, var(--sage-soft), var(--peach-soft));border:none">
+          <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+            <div style="width:56px;height:56px;background:white;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0" id="dash-goal-emoji">🎯</div>
+            <div style="flex:1;min-width:180px">
+              <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px" id="dash-goal-lbl">Prochain objectif</div>
+              <div style="font-size:18px;font-weight:800;color:var(--ink);margin-bottom:6px" id="dash-goal-name">—</div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="flex:1;height:8px;background:rgba(255,255,255,0.6);border-radius:100px;overflow:hidden">
+                  <div id="dash-goal-fill" style="height:100%;background:linear-gradient(90deg,var(--sage),var(--gold));width:0%;border-radius:100px;transition:width 0.5s"></div>
+                </div>
+                <span id="dash-goal-pct" style="font-family:var(--fm);font-weight:800;font-size:16px;color:var(--sage);min-width:40px;text-align:right">0%</span>
+              </div>
+              <div style="font-size:12px;color:var(--muted);margin-top:6px" id="dash-goal-info">—</div>
+            </div>
+            <button class="btn-primary" onclick="showTab('epargne')" style="flex-shrink:0">Voir mes objectifs →</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hd"><div class="card-title">🎯 Budget du mois <span style="font-size:11px;font-weight:500;color:var(--muted)">— réel vs budget validé</span></div>
+            <button class="btn-ghost" onclick="showTab('budget')" style="padding:6px 10px;font-size:12px">Ajuster →</button></div>
+          <div id="budget-alert-dash"></div>
+        </div>
+
+        <div class="grid-2-1">
+          <div class="card">
+            <div class="card-hd">
+              <div class="card-title">Évolution <span id="dash-evo-year" style="font-size:12px;font-weight:700;color:var(--rose)"></span></div>
+              <select id="dash-evo-range" class="select select-mini" onchange="setEvoRange(this.value)">
+                <option value="30d">30 jours</option>
+                <option value="6m" selected>6 mois</option>
+                <option value="12m">12 mois</option>
+              </select>
+            </div>
+            <div style="height:220px"><canvas id="chart-evolution"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-hd">
+              <div class="card-title">Par catégorie <span id="dash-cat-period" style="font-size:12px;font-weight:700;color:var(--rose)"></span></div>
+              <select id="dash-cat-view" class="select select-mini" onchange="setCatView(this.value)">
+                <option value="blocks" selected>Charges / Plaisir / Épargne</option>
+                <option value="cats">Détail catégories</option>
+              </select>
+            </div>
+            <div style="height:160px;display:flex;align-items:center;justify-content:center"><canvas id="chart-categories"></canvas></div>
+            <div id="cat-legend" style="margin-top:12px"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd">
+            <div class="card-title">Tendance des dépenses <span id="cat-trend-year" style="font-size:12px;font-weight:700;color:var(--rose)"></span></div>
+            <select id="cat-trend-select" class="select select-mini" onchange="setCatTrend(this.value)"></select>
+          </div>
+          <div style="height:240px"><canvas id="chart-cat-trend"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">Top dépenses du mois <span style="font-size:11px;font-weight:500;color:var(--muted)">— vert = dans le budget, rouge = dépassement du poste</span></div></div>
+          <div id="top-expenses" style="overflow-x:auto"></div>
+        </div>
+        </div> <!-- /dash-view-global -->
+
+        <!-- 📊 VUE MENSUELLE (embarquée dans Dashboard) -->
+        <div id="dash-view-mensuel" style="display:none">
+          <div class="card">
+            <div class="card-hd"><div class="card-title">📊 Vue mensuelle — accès rapide</div></div>
+            <div style="text-align:center;padding:40px 20px">
+              <div style="font-size:14px;color:var(--muted);margin-bottom:12px">Consulte le suivi mensuel complet</div>
+              <button class="btn-primary" onclick="showTab('suivi')">Ouvrir le Suivi mensuel →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 📅 VUE ANNUELLE (embarquée dans Dashboard) -->
+        <div id="dash-view-annuel" style="display:none">
+          <div class="card">
+            <div class="card-hd"><div class="card-title">📅 Vue annuelle — accès rapide</div></div>
+            <div style="text-align:center;padding:40px 20px">
+              <div style="font-size:14px;color:var(--muted);margin-bottom:12px">Consulte la vue annuelle complète</div>
+              <button class="btn-primary" onclick="showTab('annuelle')">Ouvrir la Vue annuelle →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 💸 TRANSACTIONS -->
+      <div id="tab-transactions" class="tab">
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">Transactions</h1>
+            <p class="page-sub"><span id="tx-total-count">0</span> opérations enregistrées</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-ghost" onclick="showTab('calendar')" title="Saisir une opération">➕ Ajouter</button>
+            <button class="btn-primary" onclick="document.getElementById('tx-import-file').click()" title="Importer un relevé CSV / PDF / JSON">📤 Importer un relevé</button>
+            <input type="file" id="tx-import-file" accept=".csv,.pdf,.json" style="display:none" onchange="handleImportFromTx(this.files[0])">
+          </div>
+        </div>
+        <!-- Aperçu d'import intégré à la page Transactions -->
+        <div id="tx-import-preview" style="display:none;margin-bottom:16px"></div>
+        <div class="help-banner" id="help-transactions">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">💸</div>
+            <div class="help-banner-title">Comment ça marche — Transactions</div>
+            <button class="help-banner-close" onclick="closeHelp('help-transactions')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            La <b>liste complète</b> de tes opérations, toutes années confondues.
+            <ul>
+              <li><b>Recherche</b> par mot-clé (ex: "shein", "uber") pour retrouver une transaction précise</li>
+              <li><b>Filtre par catégorie</b> pour voir toutes tes dépenses "Mode" par exemple</li>
+              <li>Chaque ligne montre : date · catégorie · libellé · montant coloré (entrée vert / sortie rose)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd tx-header-mobile">
+            <div class="card-title">Toutes tes opérations <span id="tx-filter-count" style="font-size:11px;font-weight:500;color:var(--muted);margin-left:6px"></span></div>
+            <div class="tx-filter-row">
+              <input class="inp" type="search" id="tx-search" placeholder="🔍 Rechercher..." oninput="onTxSearchInput()">
+              <select class="select" id="tx-filter-cat" onchange="onTxFilterChange()"><option value="all">Toutes catégories</option></select>
+              <select class="select" id="tx-filter-subcat" onchange="onTxFilterChange()" title="Filtrer par sous-catégorie"><option value="all">Toutes sous-cat.</option></select>
+              <select class="select" id="tx-filter-year" onchange="onTxFilterChange()"><option value="all">Toutes années</option></select>
+              <select class="select" id="tx-filter-month" onchange="onTxFilterChange()"><option value="all">Tous mois</option></select>
+              <input class="inp" type="date" id="tx-filter-date" onchange="onTxFilterChange()" title="Filtrer par date exacte">
+              <button class="btn-ghost" onclick="clearTxFilters()" style="padding:8px 12px;font-size:12px" title="Effacer filtres">✕ Reset</button>
+              <button class="btn-primary" onclick="exportTxCsv()" style="padding:8px 14px;font-size:12px" title="Exporter en CSV">📥 Exporter</button>
+            </div>
+          </div>
+          <div id="tx-list-all" class="tx-list"></div>
+        </div>
+      </div>
+
+      <!-- 📤 IMPORT -->
+      <div id="tab-import" class="tab">
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">Import</h1>
+            <p class="page-sub">Balance ton relevé, on catégorise tout</p>
+          </div>
+        </div>
+        <div class="help-banner" id="help-import">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">📤</div>
+            <div class="help-banner-title">Comment ça marche — Import</div>
+            <button class="help-banner-close" onclick="closeHelp('help-import')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            Glisse ton relevé bancaire (<b>CSV, PDF ou JSON</b>) et Monie s'occupe de tout.
+            <ul>
+              <li><b>Catégorisation auto</b> : Monie reconnaît les marchands connus (SFR, Netflix, Carrefour…) et les classe</li>
+              <li><b>3 onglets</b> : "À vérifier" (non reconnus) / "Catégorisées" (par toi) / "Auto" (par Monie)</li>
+              <li><b>Change une catégorie</b> pour enseigner à Monie — elle appliquera la règle aux transactions similaires</li>
+              <li><b>Détection de doublons</b> : si tu as saisi la même transaction manuellement, Monie te propose de fusionner</li>
+              <li><b>Supprimer</b> (✕) une transaction pour l'exclure de cet import (elle reviendra au prochain)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('import-file').click()">
+          <div class="drop-zone-icon">📥</div>
+          <div class="drop-zone-title">Glisse ton relevé ici</div>
+          <div class="drop-zone-sub">Ou clique pour choisir un fichier</div>
+          <div class="drop-zone-formats">Formats acceptés : CSV, PDF, JSON</div>
+        </div>
+        <input type="file" id="import-file" accept=".csv,.pdf,.json" style="display:none" onchange="handleImportFile(this.files[0])">
+        <div id="import-preview" style="margin-top:20px;display:none"></div>
+      </div>
+
+      <!-- 📈 SUIVI MENSUEL -->
+      <div id="tab-suivi" class="tab">
+        <!-- 🎯 Navigation entre les 3 vues -->
+        <div class="dash-view-tabs">
+          <button class="dash-view-btn" onclick="showTab('dashboard')">🌍 Global</button>
+          <button class="dash-view-btn active">📊 Mensuel</button>
+          <button class="dash-view-btn" onclick="showTab('annuelle')">📅 Annuel</button>
+        </div>
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">Suivi mensuel</h1>
+            <p class="page-sub">Le solde de tes comptes en fin de mois, mois par mois</p>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <select class="select" id="suivi-year" onchange="renderSuivi()"></select>
+            <button class="btn-ghost" onclick="resyncSuivi()">🔄 Sync</button>
+          </div>
+        </div>
+
+        <!-- Explainer accordéon (comme les autres pages) -->
+        <div class="help-banner" id="help-suivi">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">📊</div>
+            <div class="help-banner-title">Comment ça marche — Suivi mensuel</div>
+            <button class="help-banner-close" onclick="closeHelp('help-suivi')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            <b>Tableau de suivi mois par mois</b> : saisis les soldes de tes comptes en fin de mois pour voir combien il te reste et comment ça évolue.
+            <ul>
+              <li><b style="color:var(--rose)">🏦 Comptes courants</b> — LCL, Bourso, Espèces, Banque Postale, Autre <b>(soldes à saisir)</b></li>
+              <li><b style="color:var(--plum)">🌱 Épargne</b> — Livret A, LDDS, Assurance vie, Esalia, Investissements. La colonne <b>Total ép.</b> = ton épargne totale</li>
+              <li><b>💎 Total</b> — Comptes courants + Épargne = ce qu'il te reste réellement en fin de mois</li>
+              <li><b style="color:var(--gold)">📈 Évolution vs N-1</b> — Différence en € et % par rapport au mois précédent</li>
+              <li>⧉ <b>Astuce</b> : le bouton <b>« M-1 »</b> recopie les soldes du mois précédent (gain de temps quand ça bouge peu)</li>
+              <li>🔒 <b>Rassuré·e</b> : ce que tu saisis n'est <b>jamais écrasé</b> par les imports. Ta saisie manuelle a toujours la priorité.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card" id="suivi-chart-card">
+          <div class="card-hd"><div class="card-title">📈 Évolution de ton patrimoine</div></div>
+          <div style="height:210px"><canvas id="suivi-chart"></canvas></div>
+        </div>
+        <div id="suivi-chart-empty" class="empty" style="display:none">
+          <div class="empty-title">Ta courbe de patrimoine apparaîtra ici</div>
+          <div class="empty-sub">Saisis les soldes de tes comptes ci-dessous pour la voir se dessiner.</div>
+        </div>
+
+        <div class="card">
+          <div class="suivi-wrap">
+            <table class="suivi-table">
+              <thead>
+                <tr>
+                  <th rowspan="2">Mois</th>
+                  <th colspan="5" class="th-group-pat">🏦 COMPTES COURANTS</th>
+                  <th colspan="6" class="th-group-ep">🌱 ÉPARGNE</th>
+                  <th rowspan="2" class="th-group-total">💎 TOTAL</th>
+                  <th colspan="2" class="th-group-evo">📈 ÉVOLUTION vs N-1</th>
+                </tr>
+                <tr>
+                  <th>LCL</th><th>Bourso</th><th>Espèces</th><th>B. Postale</th><th>Autre</th>
+                  <th>Livret A</th><th>LDDS</th><th>Ass. vie</th><th>Esalia</th><th>Invest.</th><th>Total ép.</th>
+                  <th>Valeur</th><th>%</th>
+                </tr>
+              </thead>
+              <tbody id="suivi-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 📊 VUE ANNUELLE -->
+      <div id="tab-annuelle" class="tab">
+        <!-- 🎯 Navigation entre les 3 vues -->
+        <div class="dash-view-tabs">
+          <button class="dash-view-btn" onclick="showTab('dashboard')">🌍 Global</button>
+          <button class="dash-view-btn" onclick="showTab('suivi')">📊 Mensuel</button>
+          <button class="dash-view-btn active">📅 Annuel</button>
+        </div>
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">Vue annuelle</h1>
+            <p class="page-sub">Répartition mensuelle par catégorie</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select class="select" id="annuelle-year" onchange="renderVueAnnuelle()"></select>
+          </div>
+        </div>
+        <div class="help-banner" id="help-annuelle">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">📊</div>
+            <div class="help-banner-title">Comment ça marche — Vue annuelle</div>
+            <button class="help-banner-close" onclick="closeHelp('help-annuelle')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            <b>Tableau croisé catégories × mois</b> pour voir ta répartition annuelle en un coup d'œil.
+            <ul>
+              <li>Section <b>Revenus (vert)</b> : Salaire, Tickets resto, Remboursements</li>
+              <li>Section <b>Dépenses (rose)</b> : toutes tes catégories de sorties</li>
+              <li><b>Solde net</b> mensuel en bas (Revenus - Dépenses)</li>
+              <li>La colonne <b>TOTAL</b> à droite = ton cumul annuel par catégorie</li>
+              <li>Change l'année dans le sélecteur en haut à droite</li>
+            </ul>
+          </div>
+        </div>
+        <div class="kpi-grid kpi-row-3" style="grid-template-columns:repeat(3,1fr)">
+          <div class="kpi kpi-sage"><div class="kpi-label">Revenus année</div><div class="kpi-val kpi-val-sage" id="annuelle-rev">—</div><div class="kpi-hint" id="annuelle-rev-hint">—</div></div>
+          <div class="kpi kpi-rose"><div class="kpi-label">Dépenses année</div><div class="kpi-val kpi-val-rose" id="annuelle-dep">—</div><div class="kpi-hint" id="annuelle-dep-hint">—</div></div>
+          <div class="kpi kpi-peach"><div class="kpi-label">Solde net</div><div class="kpi-val" id="annuelle-bal">—</div><div class="kpi-hint" id="annuelle-bal-hint">—</div></div>
+        </div>
+        <div class="card" id="annuelle-chart-card">
+          <div class="card-hd"><div class="card-title">Revenus vs Dépenses par mois <span style="font-size:11px;font-weight:500;color:var(--muted)">— hors virements internes</span></div></div>
+          <div style="height:220px"><canvas id="annuelle-chart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="suivi-wrap">
+            <table class="annuelle-table">
+              <thead>
+                <tr>
+                  <th>Catégorie / Mois</th>
+                  <th>Jan</th><th>Fév</th><th>Mar</th><th>Avr</th><th>Mai</th><th>Juin</th>
+                  <th>Juil</th><th>Août</th><th>Sep</th><th>Oct</th><th>Nov</th><th>Déc</th>
+                  <th>TOTAL</th>
+                </tr>
+              </thead>
+              <tbody id="annuelle-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 🔎 ANALYSE -->
+      <div id="tab-analyse" class="tab">
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">Analyse</h1>
+            <p class="page-sub">Comprends où va vraiment ton argent, en détail</p>
+          </div>
+          <select class="select" id="analyse-year" onchange="renderAnalyse()"></select>
+        </div>
+
+        <div class="kpi-grid kpi-row-3" style="grid-template-columns:repeat(3,1fr)">
+          <div class="kpi kpi-sage" title="Part de tes revenus mise de côté (opérations type Épargne ÷ revenus) sur la période choisie"><div class="kpi-label">Taux d'épargne</div><div class="kpi-val kpi-val-sage" id="an-taux">—</div><div class="kpi-hint" id="an-taux-hint">—</div></div>
+          <div class="kpi kpi-peach" title="Total mis de côté (opérations de type Épargne) sur la période choisie"><div class="kpi-label">Épargné (période)</div><div class="kpi-val" id="an-ep">—</div><div class="kpi-hint" id="an-ep-hint">—</div></div>
+          <div class="kpi kpi-rose" title="Ce qui te reste en moyenne chaque mois après dépenses et épargne"><div class="kpi-label">Reste à vivre /mois</div><div class="kpi-val" id="an-rav">—</div><div class="kpi-hint">en moyenne</div></div>
+          <div class="kpi kpi-gold" title="Moyenne de tes dépenses courantes par mois sur la période"><div class="kpi-label">Dépense moy. /mois</div><div class="kpi-val kpi-val-gold" id="an-depmoy">—</div><div class="kpi-hint" id="an-depmoy-hint">—</div></div>
+          <div class="kpi" title="Ta catégorie de dépense la plus lourde sur la période"><div class="kpi-label">Poste n°1</div><div class="kpi-val" id="an-top" style="font-size:18px">—</div><div class="kpi-hint" id="an-top-hint">—</div></div>
+          <div class="kpi kpi-peach" title="Part de tes dépenses courantes classées « plaisir » (vs « charges »)"><div class="kpi-label">Part « plaisir »</div><div class="kpi-val" id="an-ratio">—</div><div class="kpi-hint">des dépenses courantes</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-hd"><div class="card-title">🔍 Zoom sur une catégorie <span style="font-size:11px;font-weight:500;color:var(--muted)">— détail par sous-catégorie</span></div>
+            <select class="select" id="analyse-cat" onchange="renderAnalyse()"></select>
+          </div>
+          <div class="grid-2-1">
+            <div style="height:230px;display:flex;align-items:center;justify-content:center"><canvas id="analyse-donut"></canvas></div>
+            <div id="analyse-sublist"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hd">
+            <div class="card-title">🤖 Conseils IA <span style="font-size:11px;font-weight:500;color:var(--muted)">— une analyse personnalisée de tes vrais chiffres</span></div>
+            <button class="btn-primary" id="ai-conseils-btn" onclick="runAIConseils()" style="padding:6px 12px;font-size:13px" title="Analyse IA personnalisée (consomme des tokens à chaque clic)">🤖 Analyse IA</button>
+          </div>
+          <div id="ai-conseils-out" style="display:none;margin-bottom:4px"></div>
+          <div id="ai-conseils-hint" class="empty-sub" style="padding:8px 0">Clique sur <b>🤖 Analyse IA</b> pour recevoir un bilan personnalisé de la période sélectionnée (revenus, dépenses, épargne, pistes concrètes).</div>
+        </div>
+
+        <!-- Règles de catégorisation (marchand → catégorie / sous-catégorie) -->
+        <div class="card">
+          <div class="card-hd">
+            <div class="card-title">🏷️ Mes règles de catégorisation <span style="font-size:11px;font-weight:500;color:var(--muted)">— « quand le libellé contient X → catégorie Y »</span></div>
+            <button class="btn-primary" onclick="openRuleForm()" style="padding:6px 12px;font-size:13px">+ Nouvelle règle</button>
+          </div>
+          <p class="page-sub" style="margin:0 0 12px">Ces règles s'appliquent automatiquement à l'import et à la saisie. Tu peux ré-catégoriser tout l'historique après modification.</p>
+          <div id="rules-list"></div>
+        </div>
+      </div>
+
+      <!-- 💡 PRÉPA BUDGET -->
+      <div id="tab-budget" class="tab">
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">Gestion du budget</h1>
+            <p class="page-sub">Un budget par mois — navigue et compare</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select class="select" id="budget-month-select" onchange="setBudgetMonth()"></select>
+            <select class="select" id="budget-year-select" onchange="setBudgetMonth()"></select>
+            <button class="btn-ghost" id="budget-copy-prev" onclick="copyPrevBudget()" style="padding:8px 12px;font-size:12px;display:none" title="Reprendre le budget du mois précédent">📋 Copier M-1</button>
+            <button class="btn-ghost" id="budget-delete" onclick="deleteBudgetMonth()" style="padding:8px 12px;font-size:12px;display:none;color:var(--tender-rose);border-color:var(--tender-rose)" title="Supprimer le budget enregistré de ce mois">🗑 Supprimer</button>
+          </div>
+        </div>
+        <div class="help-banner" id="help-budget">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">💡</div>
+            <div class="help-banner-title">Comment ça marche — Gestion du budget</div>
+            <button class="help-banner-close" onclick="closeHelp('help-budget')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            Utilise la <b>règle 50/30/20</b> pour répartir ton revenu de façon saine :
+            <ul>
+              <li><b style="color:var(--tender-rose)">50% Charges</b> (loyer, alimentation, transports, santé, factures)</li>
+              <li><b style="color:var(--peach)">30% Plaisir</b> (sorties, restos, mode, cosmétique, loisirs)</li>
+              <li><b style="color:var(--sage)">20% Épargne</b> (Livret A, PEA, objectifs perso)</li>
+            </ul>
+            <b>Comment utiliser :</b> Saisis ton salaire mensuel → Monie calcule automatiquement combien allouer à chaque bloc + détaille par sous-catégorie (Loyer, Alimentation, Mode…).
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">📊 Où en es-tu ce mois-ci ? <span style="font-size:11px;font-weight:500;color:var(--muted)">— dépenses réelles vs budget</span></div></div>
+          <div id="budget-alert-page"></div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">📌 À prévoir ce mois-ci <span style="font-size:11px;font-weight:500;color:var(--muted)">— les dépenses que tu sais devoir faire</span></div></div>
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+            <input class="inp" id="bud-event-label" placeholder="Ex: Uber aéroport, cadeau anniv, Ilévia…" style="flex:1;min-width:170px" onkeydown="if(event.key==='Enter')addBudgetEvent()">
+            <input class="inp" id="bud-event-amount" type="number" step="0.01" placeholder="€" style="width:100px" onkeydown="if(event.key==='Enter')addBudgetEvent()">
+            <button class="btn-primary" onclick="addBudgetEvent()" style="padding:8px 18px">+ Ajouter</button>
+          </div>
+          <div id="bud-events-list"></div>
+        </div>
+        <div class="card" id="recurring-card" style="display:none">
+          <div class="card-hd"><div class="card-title">🔁 Récurrents détectés <span style="font-size:11px;font-weight:500;color:var(--muted)">— tes dépenses qui reviennent chaque mois (abonnements, loyer…)</span></div></div>
+          <div id="recurring-list"></div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-hd"><div class="card-title">Ton revenu mensuel</div></div>
+            <div class="field-group">
+              <label class="field-label">Salaire net</label>
+              <input class="inp" type="number" id="bud-revenu" placeholder="Ex: 2200" oninput="renderBudget()" onchange="saveBudgetPrepNow()" step="0.01">
+            </div>
+            <div class="field-group" style="margin-top:16px">
+              <div class="field-label" style="margin-bottom:8px">Répartition (total = 100%)</div>
+              <div class="bud-slider-row">
+                <div class="dot-col" style="background:var(--tender-rose)"></div>
+                <span>Charges</span>
+                <input class="inp" type="number" id="bud-pct-charges" value="50" min="0" max="100" oninput="normalizeBudgetPct('charges')" onchange="saveBudgetPrepNow()" style="width:70px">
+                <span>%</span>
+              </div>
+              <div class="bud-slider-row">
+                <div class="dot-col" style="background:var(--peach)"></div>
+                <span>Plaisir</span>
+                <input class="inp" type="number" id="bud-pct-plaisir" value="30" min="0" max="100" oninput="normalizeBudgetPct('plaisir')" onchange="saveBudgetPrepNow()" style="width:70px">
+                <span>%</span>
+              </div>
+              <div class="bud-slider-row">
+                <div class="dot-col" style="background:var(--sage)"></div>
+                <span>Épargne</span>
+                <input class="inp" type="number" id="bud-pct-epargne" value="20" min="0" max="100" oninput="normalizeBudgetPct('epargne')" onchange="saveBudgetPrepNow()" style="width:70px">
+                <span>%</span>
+              </div>
+              <div class="bud-slider-row">
+                <div class="dot-col" style="background:#E8A317"></div>
+                <span>⚡ Imprévus</span>
+                <input class="inp" type="number" id="bud-pct-imprevus" value="0" min="0" max="100" oninput="normalizeBudgetPct('imprevus')" onchange="saveBudgetPrepNow()" style="width:70px">
+                <span>%</span>
+              </div>
+              <div style="margin-top:8px;font-size:12px;color:var(--muted);text-align:right">
+                Total : <span id="bud-total-pct" style="font-weight:700;color:var(--sage)">100%</span>
+              </div>
+            </div>
+            <button class="btn-primary" onclick="saveBudgetManual()" style="width:100%;margin-top:18px;padding:12px;font-size:15px">💾 Sauvegarder mon budget</button>
+          </div>
+          <div class="card">
+            <div class="card-hd"><div class="card-title">Ta répartition suggérée</div></div>
+            <div id="bud-breakdown"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">💸 Réel dépensé par postes <span style="font-size:11px;font-weight:500;color:var(--muted)">— clique un poste pour voir ses catégories, puis une catégorie pour ses opérations</span></div></div>
+          <div id="bud-real-blocks"></div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">Suggestions par sous-catégorie</div></div>
+          <div id="bud-suggestions"></div>
+        </div>
+      </div>
+
+      <!-- 📈 INVESTISSEMENTS -->
+      <div id="tab-invest" class="tab">
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">Investissements</h1>
+            <p class="page-sub">Suis la performance de tes placements</p>
+          </div>
+          <button class="btn-primary" onclick="openInvestForm()">+ Ajouter</button>
+        </div>
+        <div class="help-banner" id="help-invest">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">📈</div>
+            <div class="help-banner-title">Comment ça marche — Investissements</div>
+            <button class="help-banner-close" onclick="closeHelp('help-invest')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            Trace tes <b>placements financiers</b> (PEA, Trading 212, Livret A, LDDS, Assurance vie, Crypto…) et suis ta performance globale.
+            <ul>
+              <li><b>Clique "+ Ajouter"</b> pour renseigner un placement : nom, type, montant investi, valeur actuelle, date d'ouverture</li>
+              <li>Monie calcule automatiquement la <b>performance en %</b> (gain ou perte)</li>
+              <li>3 KPIs globaux en haut : <b>Total investi</b> (ton apport), <b>Valeur actuelle</b> (portefeuille), <b>Performance</b> (%)</li>
+              <li><b>Mets à jour</b> la valeur actuelle régulièrement pour suivre l'évolution</li>
+              <li>Ex : "PEA Bourso" — 5 000 € investis → 5 340 € actuel → <b>+6,8%</b></li>
+            </ul>
+          </div>
+        </div>
+        <div class="kpi-grid kpi-row-3" style="grid-template-columns:repeat(3,1fr)">
+          <div class="kpi kpi-sage"><div class="kpi-label">Total investi</div><div class="kpi-val kpi-val-sage" id="inv-total-inv">—</div><div class="kpi-hint">apport cumulé</div></div>
+          <div class="kpi kpi-peach"><div class="kpi-label">Valeur actuelle</div><div class="kpi-val" id="inv-total-val">—</div><div class="kpi-hint">portefeuille</div></div>
+          <div class="kpi kpi-gold"><div class="kpi-label">Performance</div><div class="kpi-val kpi-val-gold" id="inv-perf">—</div><div class="kpi-hint" id="inv-perf-hint">—</div></div>
+        </div>
+        <div id="inv-list"></div>
+      </div>
+
+      <!-- 🎯 ÉPARGNE -->
+      <div id="tab-epargne" class="tab">
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">Épargne</h1>
+            <p class="page-sub">Tes objectifs & ta capacité</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select class="select" id="ep-month-select" onchange="setEpDate()"></select>
+            <select class="select" id="ep-year-select" onchange="setEpDate()"></select>
+            <button class="btn-primary" onclick="openGoalForm()">+ Nouvel objectif</button>
+          </div>
+        </div>
+        <div class="help-banner" id="help-epargne">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">🎯</div>
+            <div class="help-banner-title">Comment ça marche — Épargne</div>
+            <button class="help-banner-close" onclick="closeHelp('help-epargne')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            <b>Définis tes objectifs</b> (vacances, ordi, fonds d'urgence…) et suis ta progression au fil du temps.
+            <ul>
+              <li><b>Clique "+ Nouvel objectif"</b> pour créer une cible : nom, emoji, couleur, montant, date cible</li>
+              <li>Chaque objectif a une <b>jauge de progression</b> colorée + le rythme mensuel requis pour tenir la deadline</li>
+              <li><b>"+ Contribuer"</b> pour ajouter un montant à ton épargne (avec shortcuts +10€, +50€, +100€…)</li>
+              <li><b>🏆 Atteint !</b> quand tu remplis 100% → passe dans l'historique</li>
+              <li><b>💤 Abandonner</b> si tu changes d'avis (réactivable plus tard)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi kpi-sage" title="Somme de tes opérations de type Épargne sur le mois choisi ci-dessus"><div class="kpi-label">Épargné ce mois</div><div class="kpi-val kpi-val-sage" id="ep-year">—</div><div class="kpi-hint" id="ep-year-hint">—</div></div>
+          <div class="kpi kpi-peach" title="Somme des montants cibles de tous tes objectifs en cours"><div class="kpi-label">Cible active</div><div class="kpi-val" id="ep-cible">—</div><div class="kpi-hint" id="ep-cible-hint">tous objectifs</div></div>
+          <div class="kpi kpi-rose" title="Cumul, sur tous tes objectifs en cours, de ce qu'il reste à mettre pour atteindre 100%"><div class="kpi-label">Reste à épargner</div><div class="kpi-val kpi-val-rose" id="ep-ecart">—</div><div class="kpi-hint" id="ep-ecart-hint">pour tout finir</div></div>
+          <div class="kpi kpi-gold" title="Part de tes revenus du mois que tu as mise de côté (épargne du mois ÷ revenus du mois)"><div class="kpi-label">Taux d'épargne</div><div class="kpi-val kpi-val-gold" id="ep-rate">—</div><div class="kpi-hint" id="ep-rate-hint">% des revenus du mois</div></div>
+        </div>
+
+        <!-- Objectifs en cours -->
+        <div class="card">
+          <div class="card-hd">
+            <div class="card-title">🎯 Objectifs en cours <span class="import-tab-count" id="goals-active-count">0</span></div>
+          </div>
+          <div id="goals-active-list"></div>
+        </div>
+
+        <!-- Objectifs atteints (historique) -->
+        <div class="card" id="goals-achieved-card" style="display:none">
+          <div class="card-hd">
+            <div class="card-title">🏆 Objectifs atteints <span class="import-tab-count" id="goals-achieved-count">0</span></div>
+            <button class="btn-ghost" onclick="toggleAchievedList()" id="toggle-achieved-btn" style="padding:6px 12px;font-size:12px">Voir</button>
+          </div>
+          <div id="goals-achieved-list" style="display:none"></div>
+        </div>
+
+        <!-- Objectifs abandonnés (historique) -->
+        <div class="card" id="goals-abandoned-card" style="display:none">
+          <div class="card-hd">
+            <div class="card-title">💤 Abandonnés <span class="import-tab-count" id="goals-abandoned-count">0</span></div>
+            <button class="btn-ghost" onclick="toggleAbandonedList()" id="toggle-abandoned-btn" style="padding:6px 12px;font-size:12px">Voir</button>
+          </div>
+          <div id="goals-abandoned-list" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- ⚙ RÉGLAGES / PROFIL -->
+      <div id="tab-profile" class="tab">
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">Réglages du profil</h1>
+            <p class="page-sub">Compte, sécurité et apparence</p>
+          </div>
+        </div>
+        <div class="help-banner" id="help-profile">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">⚙</div>
+            <div class="help-banner-title">Comment ça marche — Réglages</div>
+            <button class="help-banner-close" onclick="closeHelp('help-profile')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            <b>Personnalise ton expérience Monie :</b>
+            <ul>
+              <li><b>Identité</b> : pseudo + avatar (emoji) affichés en haut</li>
+              <li><b>Sécurité</b> : change ton email ou ton mot de passe à tout moment</li>
+              <li><b>Apparence</b> : choisis parmi 5 palettes selon ton humeur (rose, océan, forêt, nuit, sobre)</li>
+              <li><b>Emojis</b> : activable / désactivable si tu veux quelque chose de plus sobre</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Bloc 1 : Identité -->
+        <div class="card">
+          <div class="card-hd"><div class="card-title">👤 Mon identité</div></div>
+          <div style="display:flex;flex-direction:column;gap:14px;max-width:520px">
+            <div class="qa-field">
+              <label class="qa-label">Pseudo affiché</label>
+              <input class="inp" type="text" id="profile-name" placeholder="Ex: Marie, Jean, Miss Budget…">
+            </div>
+
+            <!-- Photo perso -->
+            <div class="qa-field">
+              <label class="qa-label">Ta photo (facultative)</label>
+              <div class="avatar-upload">
+                <div class="avatar-big-preview" id="avatar-big-preview">🌸</div>
+                <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+                  <input type="file" id="avatar-file" accept="image/*" style="display:none" onchange="openAvatarCropper(this.files[0])">
+                  <button class="btn-ghost" onclick="document.getElementById('avatar-file').click()">📷 Choisir une photo</button>
+                  <button class="btn-ghost" onclick="removeAvatar()" id="avatar-remove-btn" style="display:none;font-size:11px;padding:6px 10px">🗑 Retirer la photo</button>
+                  <div style="font-size:11px;color:var(--muted)">JPG / PNG · tu recadres toi-même la photo</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="qa-field">
+              <label class="qa-label">Ou choisis un emoji</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap" id="profile-avatar-picker">
+                <button class="avatar-pick" data-emoji="🐝">🐝</button>
+                <button class="avatar-pick" data-emoji="🍯">🍯</button>
+                <button class="avatar-pick" data-emoji="🌸">🌸</button>
+                <button class="avatar-pick" data-emoji="🐻">🐻</button>
+                <button class="avatar-pick" data-emoji="🦊">🦊</button>
+                <button class="avatar-pick" data-emoji="🐼">🐼</button>
+                <button class="avatar-pick" data-emoji="🦁">🦁</button>
+                <button class="avatar-pick" data-emoji="🐨">🐨</button>
+                <button class="avatar-pick" data-emoji="🐧">🐧</button>
+                <button class="avatar-pick" data-emoji="🦉">🦉</button>
+                <button class="avatar-pick" data-emoji="🐳">🐳</button>
+                <button class="avatar-pick" data-emoji="⭐">⭐</button>
+                <button class="avatar-pick" data-emoji="🌙">🌙</button>
+                <button class="avatar-pick" data-emoji="⚡">⚡</button>
+                <button class="avatar-pick" data-emoji="🔥">🔥</button>
+                <button class="avatar-pick" data-emoji="💎">💎</button>
+                <button class="avatar-pick" data-emoji="🎯">🎯</button>
+                <button class="avatar-pick" data-emoji="🍀">🍀</button>
+              </div>
+            </div>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+              <input type="checkbox" id="profile-show-emojis" style="width:18px;height:18px;accent-color:var(--rose)">
+              <span style="font-size:14px;font-weight:600">Afficher les emojis dans l'interface (fleurs, cœurs…)</span>
+            </label>
+            <button class="btn-primary" onclick="saveProfile()" style="align-self:flex-start">✓ Enregistrer</button>
+          </div>
+        </div>
+
+        <!-- Bloc 2 : Sécurité -->
+        <div class="card">
+          <div class="card-hd"><div class="card-title">🔒 Sécurité du compte</div></div>
+          <div style="display:flex;flex-direction:column;gap:20px;max-width:520px">
+            <!-- Changer email -->
+            <div>
+              <div class="qa-field">
+                <label class="qa-label">Adresse email</label>
+                <input class="inp" type="email" id="profile-email" placeholder="nouveau@email.com">
+              </div>
+              <button class="btn-ghost" onclick="changeEmail()" style="margin-top:8px">Modifier l'email</button>
+              <div style="font-size:11px;color:var(--muted);margin-top:6px">Un email de confirmation te sera envoyé sur les 2 adresses.</div>
+            </div>
+
+            <!-- Changer mot de passe -->
+            <div style="border-top:1px dashed var(--border);padding-top:16px">
+              <div class="qa-field">
+                <label class="qa-label">Nouveau mot de passe</label>
+                <input class="inp" type="password" id="profile-new-pwd" placeholder="Min. 6 caractères">
+              </div>
+              <div class="qa-field" style="margin-top:8px">
+                <label class="qa-label">Confirmer le mot de passe</label>
+                <input class="inp" type="password" id="profile-new-pwd2" placeholder="Retape le même">
+              </div>
+              <button class="btn-ghost" onclick="changePassword()" style="margin-top:8px">Modifier le mot de passe</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bloc : Tes données (sauvegarde / RGPD) -->
+        <div class="card">
+          <div class="card-hd"><div class="card-title">💾 Tes données</div></div>
+          <div style="max-width:640px">
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Télécharge une <b>sauvegarde complète</b> de tout ce que Monie sait de toi (transactions, budgets, objectifs…) au format JSON. Garde-la précieusement : c'est ton filet de sécurité.</p>
+            <button class="btn-primary" onclick="exportAllData()">⬇️ Télécharger ma sauvegarde (JSON)</button>
+            <div style="border-top:1px dashed var(--border);margin-top:18px;padding-top:16px">
+              <div style="font-size:13px;font-weight:700;color:var(--tender-rose);margin-bottom:6px">Zone sensible</div>
+              <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Supprimer définitivement toutes tes données (transactions, budgets, objectifs). Irréversible — pense à télécharger ta sauvegarde d'abord.</p>
+              <button class="btn-ghost" onclick="wipeAllData()" style="color:var(--tender-rose);border-color:var(--tender-rose-soft)">🗑 Tout supprimer (RGPD)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bloc 3 : Apparence -->
+        <div class="card">
+          <div class="card-hd"><div class="card-title">🎨 Apparence</div></div>
+          <div style="max-width:640px">
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Choisis la palette qui te ressemble. C'est sauvegardé sur ton compte, donc tu retrouves ton thème sur tous tes appareils.</p>
+            <div class="theme-picker">
+              <button class="theme-card" data-theme="rose" onclick="setTheme('rose')">
+                <div class="theme-swatch" style="background:linear-gradient(135deg,#E76F51,#DD7B85,#F4A993)"></div>
+                <div class="theme-name">🌸 Rose framboise</div>
+                <div class="theme-sub">Girly, douce, féminine</div>
+              </button>
+              <button class="theme-card" data-theme="ocean" onclick="setTheme('ocean')">
+                <div class="theme-swatch" style="background:linear-gradient(135deg,#2E6D8F,#4FC3F7,#B0D8DE)"></div>
+                <div class="theme-name">🌊 Océan</div>
+                <div class="theme-sub">Frais, apaisant, marin</div>
+              </button>
+              <button class="theme-card" data-theme="foret" onclick="setTheme('foret')">
+                <div class="theme-swatch" style="background:linear-gradient(135deg,#556B2F,#8FBC8F,#D2B48C)"></div>
+                <div class="theme-name">🌲 Forêt</div>
+                <div class="theme-sub">Nature, terreux, calme</div>
+              </button>
+              <button class="theme-card" data-theme="nuit" onclick="setTheme('nuit')">
+                <div class="theme-swatch" style="background:linear-gradient(135deg,#1F2937,#4C1D95,#7C3AED)"></div>
+                <div class="theme-name">🌙 Nuit</div>
+                <div class="theme-sub">Sombre, tamisé, élégant</div>
+              </button>
+              <button class="theme-card" data-theme="sobre" onclick="setTheme('sobre')">
+                <div class="theme-swatch" style="background:linear-gradient(135deg,#334155,#64748B,#94A3B8)"></div>
+                <div class="theme-name">🏢 Sobre</div>
+                <div class="theme-sub">Pro, neutre, minimaliste</div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bloc 4 : Zone dangereuse -->
+        <div class="card" style="border-color:rgba(229,57,53,0.3)">
+          <div class="card-hd"><div class="card-title" style="color:#E53935">⚠ Zone sensible</div></div>
+          <div style="max-width:520px">
+            <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Supprimer ton compte est <b>irréversible</b> : toutes tes transactions, règles, objectifs et investissements seront effacés définitivement.</p>
+            <button class="btn-ghost" onclick="requestDeleteAccount()" style="border-color:#E53935;color:#E53935">Supprimer mon compte</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- BOTTOM NAV mobile -->
+    <nav class="bottom-nav">
+      <button class="bnav-btn active" data-tab="calendar" onclick="showTab('calendar')">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Agenda
+      </button>
+      <button class="bnav-btn" data-tab="dashboard" onclick="showTab('dashboard')">
+        <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
+        Résumé
+      </button>
+      <button class="bnav-btn" data-tab="transactions" onclick="showTab('transactions')">
+        <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        Ops
+      </button>
+      <button class="bnav-btn" data-tab="analyse" onclick="showTab('analyse')">
+        <svg viewBox="0 0 24 24"><path d="M21 21H4a1 1 0 01-1-1V3"/><path d="M7 14l3-3 3 3 5-6"/></svg>
+        Analyse
+      </button>
+      <button class="bnav-btn" data-tab="epargne" onclick="showTab('epargne')">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Épargne
+      </button>
+    </nav>
+  </div>
+</div>
+
+<button class="fab" onclick="quickAddOpen()" style="display:none" id="fab-add">+</button>
+<div id="toast" class="toast"></div>
+<div id="modal" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-title" id="modal-title">—</div>
+    <div class="modal-msg" id="modal-msg">—</div>
+    <div id="modal-body"></div>
+    <div class="modal-btns">
+      <button class="btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn-primary" id="modal-confirm" onclick="confirmModal()">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- 🤖 Chatbot IA flottant (toutes pages) -->
+<button id="ai-chat-fab" class="ai-chat-fab" onclick="toggleAIChat()" title="Demander à Monie" aria-label="Assistant IA">💬</button>
+<div id="ai-chat-panel" class="ai-chat-panel" style="display:none">
+  <div class="ai-chat-head">
+    <div class="ai-chat-title">🌸 Monie — ton assistante budget</div>
+    <button class="ai-chat-close" onclick="toggleAIChat(false)" aria-label="Fermer">✕</button>
+  </div>
+  <div id="ai-chat-msgs" class="ai-chat-msgs"></div>
+  <div class="ai-chat-inputbar">
+    <textarea id="ai-chat-input" class="ai-chat-input" rows="1" placeholder="Pose ta question…" onkeydown="onAIChatKey(event)"></textarea>
+    <button class="ai-chat-send" onclick="sendAIChat()" aria-label="Envoyer">➤</button>
+  </div>
+</div>
+
+<!-- Éditeur de règle de catégorisation -->
+<div id="rule-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeRuleForm()">
+  <div class="modal-box" style="max-width:440px;width:92vw">
+    <div class="modal-title" id="rule-modal-title">Nouvelle règle</div>
+    <div class="modal-msg" style="margin-bottom:14px">Quand le libellé d'une opération contient le texte ci-dessous, elle est classée dans la catégorie choisie.</div>
+    <input type="hidden" id="rule-id">
+    <div class="qa-field" style="margin-bottom:12px">
+      <label class="qa-label">Le libellé contient…</label>
+      <input class="inp" id="rule-pattern" placeholder="ex : franprix, sncf, netflix" style="text-transform:lowercase;width:100%">
+    </div>
+    <div class="qa-field" style="margin-bottom:12px">
+      <label class="qa-label">Catégorie</label>
+      <select class="select" id="rule-category" style="width:100%"></select>
+    </div>
+    <div class="qa-field" style="margin-bottom:12px">
+      <label class="qa-label">Sous-catégorie (facultatif)</label>
+      <input class="inp" id="rule-subcat" placeholder="ex : Courses, Train, Streaming" style="width:100%">
+    </div>
+    <div class="qa-field" style="margin-bottom:4px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="rule-generic"> Règle générique (priorité basse, appliquée en dernier)
+      </label>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-ghost" onclick="closeRuleForm()">Annuler</button>
+      <button class="btn-primary" onclick="saveRuleForm()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Liste éditable des opérations (clic sur une carte KPI) -->
+<div id="kpi-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeKpiList()">
+  <div class="modal-box" style="max-width:560px;width:92vw;max-height:82vh;display:flex;flex-direction:column">
+    <div class="modal-title" id="kpi-modal-title" style="margin-bottom:4px">Opérations</div>
+    <div class="modal-msg" id="kpi-modal-sub" style="margin-bottom:10px">—</div>
+    <div id="kpi-modal-list" style="overflow-y:auto;flex:1;margin:0 -4px"></div>
+    <div class="modal-btns"><button class="btn-ghost" onclick="closeKpiList()">Fermer</button></div>
+  </div>
+</div>
+
+<!-- 🔍 Recherche globale (⌘K) -->
+<div id="search-modal" class="modal-overlay" style="display:none;align-items:flex-start" onclick="if(event.target===this)closeSearch()">
+  <div class="modal-box" style="max-width:600px;width:94vw;max-height:80vh;margin-top:8vh;display:flex;flex-direction:column">
+    <input class="inp" id="search-input" placeholder="🔍 Rechercher une opération, un marchand, un montant…" oninput="doGlobalSearch()" style="width:100%;font-size:15px;padding:12px 14px" autocomplete="off">
+    <div id="search-results" style="overflow-y:auto;flex:1;margin:12px -4px 0"></div>
+    <div class="modal-btns"><button class="btn-ghost" onclick="closeSearch()">Fermer (Échap)</button></div>
+  </div>
+</div>
+
+<!-- Recadrage de la photo de profil -->
+<div id="crop-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="max-width:340px">
+    <div class="modal-title">Recadre ta photo</div>
+    <div class="modal-msg" style="margin-bottom:12px">Glisse la photo pour la repositionner, puis ajuste le zoom.</div>
+    <div id="crop-viewport" class="crop-viewport">
+      <img id="crop-img" class="crop-img" alt="" draggable="false">
+      <div class="crop-ring"></div>
+    </div>
+    <div class="crop-zoom">
+      <span style="font-size:13px">🔍</span>
+      <input type="range" id="crop-zoom" min="1" max="3" step="0.01" value="1">
+    </div>
+    <div class="modal-btns">
+      <button class="btn-ghost" onclick="closeAvatarCropper()">Annuler</button>
+      <button class="btn-primary" onclick="confirmAvatarCrop()">✓ Valider</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+  // Enregistre le service worker (mode hors-ligne). Chemin relatif → marche sous /Monie/.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+</script>
+</body>
+</html>

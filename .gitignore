@@ -1,0 +1,29 @@
+# ⚠️ Données bancaires personnelles — NE JAMAIS committer/publier.
+# GitHub Pages sert le repo en PUBLIC : tout fichier ici serait accessible à l'URL.
+monie_import_v2.json
+*_import_*.json
+*export*.csv
+monie_transactions_*.csv
+monie-sauvegarde-*.json
+
+# Fichiers de travail non déployés
+Améliorer/
+*.zip
+
+# Secrets éventuels
+.env
+.env.*
+*.local
+
+# Système
+.DS_Store
+Thumbs.db
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+
+# Supabase CLI (fichiers temporaires locaux)
+supabase/.temp/
+supabase/.branches/
