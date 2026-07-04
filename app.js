@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v47'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v48'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1471,8 +1471,27 @@ function getDashScopeTx() {
   return transactions.filter(t => t.date_op.startsWith(monthPrefix));
 }
 
+// ─── Navigation « fil d'Ariane » dans la fenêtre modale (poste → catégorie → transactions) ───
+let _navStack = [];
+// nav : 'root' (ou omis) = nouvelle ouverture (réinitialise) · 'push' = on descend d'un niveau · 'back' = retour
+function _navEnter(selfThunk, nav) {
+  if (nav === 'push') _navStack.push(selfThunk);
+  else if (nav === 'back') { /* déjà géré par navBack */ }
+  else _navStack = [selfThunk]; // racine
+}
+function _backBtnHtml() {
+  if (_navStack.length <= 1) return '';
+  return `<button onclick="navBack()" style="background:transparent;border:1.5px solid var(--border);border-radius:100px;padding:6px 14px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;margin-bottom:12px">‹ Précédent</button>`;
+}
+function navBack() {
+  _navStack.pop();
+  const prev = _navStack[_navStack.length - 1];
+  if (prev) prev(); else closeKpiList();
+}
+
 // ─── Liste éditable des opérations derrière une carte KPI ───
-function openKpiList(kind) {
+function openKpiList(kind, nav) {
+  _navEnter(() => openKpiList(kind, 'back'), nav);
   let scope = getDashScopeTx();
   const titles = { entree: '💚 Entrées', sortie: '🌹 Dépenses', epargne: '🐷 Épargne', all: '📋 Toutes les opérations' };
   if (kind !== 'all') scope = scope.filter(t => t.type === kind);
@@ -1484,9 +1503,9 @@ function openKpiList(kind) {
   set('kpi-modal-sub', `${periodLbl} · ${scope.length} opération${scope.length > 1 ? 's' : ''} · ${fmt(total)}`);
   const list = $('kpi-modal-list');
   if (!scope.length) {
-    list.innerHTML = '<div class="empty-sub" style="padding:20px;text-align:center">Aucune opération sur cette période.</div>';
+    list.innerHTML = _backBtnHtml() + '<div class="empty-sub" style="padding:20px;text-align:center">Aucune opération sur cette période.</div>';
   } else {
-    list.innerHTML = scope.map(t => {
+    list.innerHTML = _backBtnHtml() + scope.map(t => {
       const sign = t.type === 'entree' ? '+' : (t.type === 'epargne' ? '' : '-');
       const amtCls = t.type === 'entree' ? 'amt-in' : t.type === 'epargne' ? 'amt-save' : 'amt-out';
       return `<div class="day-tx-item" style="cursor:pointer" onclick="closeKpiList();openTxEdit('${t.id}')" title="Cliquer pour modifier">
@@ -1499,7 +1518,7 @@ function openKpiList(kind) {
   }
   $('kpi-modal').style.display = 'flex';
 }
-function closeKpiList() { const m = $('kpi-modal'); if (m) m.style.display = 'none'; }
+function closeKpiList() { const m = $('kpi-modal'); if (m) m.style.display = 'none'; _navStack = []; }
 
 // ─── 3e bloc « Réel dépensé par postes » (Gestion du budget) : Charges / Plaisir / Épargne ───
 function renderRealBlocks() {
@@ -1535,7 +1554,8 @@ function renderRealBlocks() {
 }
 
 // Détail d'un poste : liste des catégories (charges/plaisir) ou des opérations d'épargne
-function openBlockDetail(blockKey, monthKey) {
+function openBlockDetail(blockKey, monthKey, nav) {
+  _navEnter(() => openBlockDetail(blockKey, monthKey, 'back'), nav);
   const status = computeBudgetStatus(monthKey);
   const meta = { charges: { emoji: '🏠', label: 'Charges' }, plaisir: { emoji: '🌸', label: 'Plaisir' }, epargne: { emoji: '🌱', label: 'Épargne' } }[blockKey] || { emoji: '📊', label: blockKey };
   const mLbl = monthKey ? `${MONTHS[parseInt(monthKey.slice(5, 7)) - 1]} ${monthKey.slice(0, 4)}` : 'toutes périodes';
@@ -1547,11 +1567,11 @@ function openBlockDetail(blockKey, monthKey) {
     scope = scope.slice().sort((a, b) => (a.date_op < b.date_op ? 1 : a.date_op > b.date_op ? -1 : 0));
     const total = scope.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
     set('kpi-modal-sub', `${mLbl} · ${scope.length} opération(s) · ${fmt(total)} mis de côté`);
-    list.innerHTML = scope.length ? scope.map(t => `<div class="day-tx-item" style="cursor:pointer" onclick="closeKpiList();openTxEdit('${t.id}')" title="Cliquer pour modifier">
+    list.innerHTML = _backBtnHtml() + (scope.length ? scope.map(t => `<div class="day-tx-item" style="cursor:pointer" onclick="closeKpiList();openTxEdit('${t.id}')" title="Cliquer pour modifier">
         <div class="day-tx-icon" style="background:${catColor(t.category)}18;color:${catColor(t.category)}">${catIcon(t.category)}</div>
         <div class="day-tx-info"><div class="tx-label">${esc(t.label)}</div><div class="tx-cat">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)} · ${esc(t.category || '')}</div></div>
         <div class="day-tx-amt amt-save">${fmtD(Math.abs(Number(t.amount)))}</div>
-      </div>`).join('') : '<div class="empty-sub" style="padding:20px;text-align:center">Aucune épargne enregistrée ce mois.</div>';
+      </div>`).join('') : '<div class="empty-sub" style="padding:20px;text-align:center">Aucune épargne enregistrée ce mois.</div>');
     $('kpi-modal').style.display = 'flex';
     return;
   }
@@ -1560,20 +1580,21 @@ function openBlockDetail(blockKey, monthKey) {
   cats.sort((a, b) => status.spentByCat[b] - status.spentByCat[a]);
   const total = cats.reduce((s, c) => s + status.spentByCat[c], 0);
   set('kpi-modal-sub', `${mLbl} · ${cats.length} catégorie(s) · ${fmt(total)} dépensés`);
-  list.innerHTML = cats.length ? cats.map(c => {
+  list.innerHTML = _backBtnHtml() + (cats.length ? cats.map(c => {
     const sp = Math.round(status.spentByCat[c]);
     const bud = Math.round(status.budgetByCat[c] || 0);
-    return `<div class="day-tx-item" style="cursor:pointer" onclick="openCatMonthList('${esc(c)}','${monthKey}')" title="Voir les opérations ${esc(c)}">
+    return `<div class="day-tx-item" style="cursor:pointer" onclick="openCatMonthList('${esc(c)}','${monthKey}','push')" title="Voir les opérations ${esc(c)}">
       <div class="day-tx-icon" style="background:${catColor(c)}18;color:${catColor(c)}">${catIcon(c)}</div>
       <div class="day-tx-info"><div class="tx-label">${esc(c)} ›</div><div class="tx-cat">${bud > 0 ? 'budget ' + fmt(bud) : 'hors budget'}</div></div>
       <div class="day-tx-amt amt-out">${fmt(sp)}</div>
     </div>`;
-  }).join('') : '<div class="empty-sub" style="padding:20px;text-align:center">Aucune dépense dans ce poste ce mois.</div>';
+  }).join('') : '<div class="empty-sub" style="padding:20px;text-align:center">Aucune dépense dans ce poste ce mois.</div>');
   $('kpi-modal').style.display = 'flex';
 }
 
 // Liste éditable des dépenses d'UNE catégorie sur UN mois (clic sur une barre du budget)
-function openCatMonthList(cat, monthKey) {
+function openCatMonthList(cat, monthKey, nav) {
+  _navEnter(() => openCatMonthList(cat, monthKey, 'back'), nav);
   let scope = transactions.filter(t => t.type === 'sortie' && t.category === cat && (!monthKey || t.date_op.startsWith(monthKey)));
   scope = scope.slice().sort((a, b) => (a.date_op < b.date_op ? 1 : a.date_op > b.date_op ? -1 : 0));
   const total = scope.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
@@ -1599,9 +1620,9 @@ function openCatMonthList(cat, monthKey) {
 
   const list = $('kpi-modal-list');
   if (!scope.length) {
-    list.innerHTML = budHtml + '<div class="empty-sub" style="padding:20px;text-align:center">Aucune dépense dans cette catégorie ce mois.</div>';
+    list.innerHTML = _backBtnHtml() + budHtml + '<div class="empty-sub" style="padding:20px;text-align:center">Aucune dépense dans cette catégorie ce mois.</div>';
   } else {
-    list.innerHTML = budHtml + `<div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:4px 2px 8px">Dépenses réelles (${fmt(total)})</div>` + scope.map(t => `<div class="day-tx-item" style="cursor:pointer" onclick="closeKpiList();openTxEdit('${t.id}')" title="Cliquer pour modifier / recatégoriser">
+    list.innerHTML = _backBtnHtml() + budHtml + `<div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:4px 2px 8px">Dépenses réelles (${fmt(total)})</div>` + scope.map(t => `<div class="day-tx-item" style="cursor:pointer" onclick="closeKpiList();openTxEdit('${t.id}')" title="Cliquer pour modifier / recatégoriser">
         <div class="day-tx-icon" style="background:${catColor(t.category)}18;color:${catColor(t.category)}">${catIcon(t.category)}</div>
         <div class="day-tx-info"><div class="tx-label">${esc(t.label)}</div><div class="tx-cat">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)} · ${esc(t.sub_category || 'sans sous-catégorie')}</div></div>
         <div class="day-tx-amt amt-out">-${fmtD(Math.abs(Number(t.amount)))}</div>
