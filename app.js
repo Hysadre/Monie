@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v62'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v63'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1608,6 +1608,24 @@ async function contributeToGoal(goalId, montant) {
   await sb.from('epargne_contributions').insert({ objectif_id: goalId, user_id: currentUser.id, montant });
   g.deja_epargne = newDeja;
   _goalMilestone(g, oldDeja, newDeja);
+}
+// Retirer / utiliser de l'argent épargné sur un objectif (quand tu dépenses ce que tu as mis de côté)
+async function withdrawFromGoal(id) {
+  const g = goalsList.find(x => x.id === id); if (!g) return;
+  const dispo = Number(g.deja_epargne || 0);
+  const v = prompt(`Combien utiliser / retirer de « ${g.nom} » ? (disponible : ${Math.round(dispo)} €)`, '');
+  if (v === null) return;
+  let montant = parseFloat((v || '').replace(',', '.'));
+  if (!(montant > 0)) { toast('Montant invalide', 'error'); return; }
+  montant = Math.min(montant, dispo);
+  const newDeja = Math.max(0, dispo - montant);
+  const r = await dbGuard(sb.from('epargne_objectifs').update({ deja_epargne: newDeja }).eq('id', id), 'Retrait impossible');
+  if (!r.ok) return;
+  try { await sb.from('epargne_contributions').insert({ objectif_id: id, user_id: currentUser.id, montant: -montant }); } catch (e) {}
+  g.deja_epargne = newDeja;
+  await loadGoals();
+  renderEpargne();
+  toast(`✓ ${fmt(montant)} utilisés depuis « ${g.nom} »`, 'success');
 }
 // Célèbre le franchissement d'un palier (25/50/75/100 %) d'un objectif
 function _goalMilestone(g, oldD, newD) {
@@ -3614,7 +3632,6 @@ async function resyncSuivi() {
 // ═══ ÉPARGNE ═══════════════════════════════════════════════════
 function renderEpargne() {
   renderRemboursements();
-  renderEnveloppes();
   renderDettes();
   if ($('ep-month-select')) $('ep-month-select').value = epargneMonth;
   if ($('ep-year-select')) $('ep-year-select').value = epargneYear;
@@ -3743,7 +3760,8 @@ function renderGoalCard(g, isAchieved = false, isAbandoned = false) {
       ? `<button class="goal-btn" onclick="reactivateGoal('${g.id}')" title="Réactiver">🔄 Réactiver</button>
          <button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier">✏️</button>
          <button class="goal-btn danger" onclick="deleteGoal('${g.id}')" title="Supprimer">🗑️</button>`
-      : `<button class="goal-btn primary" onclick="openContribForm('${g.id}')" title="Ajouter une contribution">+ Contribuer</button>
+      : `<button class="goal-btn primary" onclick="openContribForm('${g.id}')" title="Ajouter de l'argent">+ Ajouter</button>
+         ${Number(g.deja_epargne) > 0 ? `<button class="goal-btn" onclick="withdrawFromGoal('${g.id}')" title="Utiliser / retirer de l'argent épargné">− Utiliser</button>` : ''}
          <button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier">✏️</button>
          <button class="goal-btn" onclick="postponeGoal('${g.id}')" title="Reporter la date cible">📅 Reporter</button>
          ${pct >= 100 ? `<button class="goal-btn" onclick="markAchieved('${g.id}')" title="Marquer terminé" style="color:var(--gold);border-color:var(--gold)">🏆 Terminer</button>` : ''}
