@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v60'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v61'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1927,6 +1927,8 @@ function renderDashboard() {
   if (typeof renderDashAlerts === 'function') renderDashAlerts();
   if (typeof renderDashRecap === 'function') renderDashRecap();
   if (typeof renderPatrimoine === 'function') renderPatrimoine();
+  if (typeof renderGamification === 'function') renderGamification();
+  if (typeof applyDashHidden === 'function') applyDashHidden();
 
   set('dash-month-lbl', isGlobal
     ? '🌍 Global (toutes tes tx)'
@@ -5353,4 +5355,55 @@ function renderDettes() {
       </div>
     </div>`;
   }).join('');
+}
+
+// ═══ 🔥 GAMIFICATION (séries + badges) ═══
+function renderGamification() {
+  const el = $('dash-gamif'); if (!el) return;
+  const now = new Date();
+  let streak = 0;
+  for (let i = 1; i <= 36; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const hasData = transactions.some(t => t.date_op.startsWith(k));
+    if (!hasData) break;
+    const ep = transactions.filter(t => t.date_op.startsWith(k) && t.type === 'epargne').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+    if (ep > 0) streak++; else break;
+  }
+  const totalEp = transactions.filter(t => t.type === 'epargne').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const nAtteints = (goalsList || []).filter(g => g.statut === 'atteint').length;
+  const nMonths = new Set(transactions.map(t => t.date_op.slice(0, 7))).size;
+  const badges = [];
+  if (totalEp > 0) badges.push('🌱 Épargnant·e');
+  if (totalEp >= 1000) badges.push('🐷 1 000 € épargnés');
+  if (totalEp >= 5000) badges.push('💰 5 000 € épargnés');
+  if (nAtteints >= 1) badges.push(`🏆 ${nAtteints} objectif(s) atteint(s)`);
+  if (nMonths >= 6) badges.push(`📆 ${nMonths} mois suivis`);
+  if (!streak && !badges.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div style="text-align:center;min-width:96px"><div style="font-size:26px">🔥</div><div style="font-size:22px;font-weight:900;font-family:var(--fm)">${streak}</div><div style="font-size:11px;color:var(--muted)">mois d'épargne d'affilée</div></div>
+      <div style="flex:1;min-width:160px;display:flex;flex-wrap:wrap;gap:6px">${badges.map(b => `<span style="background:var(--sage-soft);color:var(--sage);border-radius:100px;padding:5px 12px;font-size:12px;font-weight:600">${b}</span>`).join('') || '<span style="font-size:12px;color:var(--muted)">Mets de l\'argent de côté pour lancer ta série 🌱</span>'}</div>
+    </div></div>`;
+}
+
+// ═══ ⚙️ DASHBOARD PERSONNALISABLE (masquer/afficher des blocs) ═══
+const DASH_BLOCKS = [
+  { id: 'dash-alerts', label: '🔔 Alertes à surveiller' },
+  { id: 'dash-recap', label: '📅 Récap du mois' },
+  { id: 'dash-patrimoine', label: '💎 Patrimoine' },
+  { id: 'dash-gamif', label: '🔥 Séries & badges' }
+];
+function _getDashHidden() { try { return JSON.parse(localStorage.getItem('monie_dash_hidden') || '[]'); } catch (e) { return []; } }
+function applyDashHidden() { const hid = _getDashHidden(); DASH_BLOCKS.forEach(b => { const el = $(b.id); if (el && el.dataset.forcedEmpty !== '1') el.style.display = hid.includes(b.id) ? 'none' : ''; }); }
+function openDashCustomize() {
+  const hid = _getDashHidden();
+  const body = `<div style="display:flex;flex-direction:column;gap:10px">${DASH_BLOCKS.map(b => `<label style="display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer"><input type="checkbox" class="dash-block-tog" value="${b.id}" ${hid.includes(b.id) ? '' : 'checked'} style="width:18px;height:18px;accent-color:var(--rose)"> ${b.label}</label>`).join('')}</div>`;
+  openModal('⚙️ Personnaliser le tableau de bord', 'Coche les blocs que tu veux voir apparaître.', () => {
+    const shown = [...document.querySelectorAll('.dash-block-tog:checked')].map(x => x.value);
+    const hidden = DASH_BLOCKS.map(b => b.id).filter(id => !shown.includes(id));
+    try { localStorage.setItem('monie_dash_hidden', JSON.stringify(hidden)); } catch (e) {}
+    applyDashHidden();
+    toast('✓ Tableau de bord personnalisé', 'success');
+  }, body);
 }
