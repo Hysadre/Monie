@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v57'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v58'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1330,7 +1330,102 @@ function populateCategorySelects() {
   // Filter select
   const catsAll = Object.keys(CAT_META).sort();
   const filtCur = $('tx-filter-cat').value;
-  $('tx-filter-cat').innerHTML = '<option value="all">Toutes catégories</option>' + catsAll.map(c => `<option value="${c}" ${filtCur === c ? 'selected' : ''}>${c}</option>`).join('');
+  const nTodo = transactions.filter(_txNeedsCat).length;
+  $('tx-filter-cat').innerHTML = '<option value="all">Toutes catégories</option>'
+    + `<option value="__todo__" ${filtCur === '__todo__' ? 'selected' : ''}>🏷️ À catégoriser${nTodo ? ' (' + nTodo + ')' : ''}</option>`
+    + catsAll.map(c => `<option value="${c}" ${filtCur === c ? 'selected' : ''}>${c}</option>`).join('');
+}
+// ─── 🔔 Alertes intelligentes (dépense inhabituelle, budget dépassé) ───
+function computeAlerts() {
+  const alerts = [];
+  const now = new Date();
+  const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  // 1) Dépense inhabituelle ce mois (bien au-dessus de la moyenne de sa catégorie)
+  const catSum = {}, catN = {};
+  transactions.filter(t => t.type === 'sortie').forEach(t => { catSum[t.category] = (catSum[t.category] || 0) + Math.abs(Number(t.amount)); catN[t.category] = (catN[t.category] || 0) + 1; });
+  let big = null;
+  transactions.filter(t => t.date_op.startsWith(curKey) && t.type === 'sortie').forEach(t => {
+    const a = Math.abs(Number(t.amount));
+    const avg = catN[t.category] > 2 ? catSum[t.category] / catN[t.category] : a;
+    if (a > 50 && a > avg * 2.5 && (!big || a > big.a)) big = { t, a, avg };
+  });
+  if (big) alerts.push({ icon: '👀', tone: 'warn', text: `Dépense inhabituelle : <b>${esc(big.t.label)}</b> à ${fmt(big.a)} — d'habitude ~${fmt(big.avg)} en ${esc(big.t.category)}.` });
+  // 2) Budget de famille dépassé ce mois
+  try {
+    const b = computeBudgetStatus();
+    if (b && b.rev) {
+      [['charges', 'Charges'], ['plaisir', 'Plaisir'], ['imprevus', 'Imprévus']].forEach(([k, lbl]) => {
+        if (b.budget[k] > 0 && b.spent[k] > b.budget[k]) alerts.push({ icon: '⚠️', tone: 'danger', text: `Budget <b>${lbl}</b> dépassé : ${fmt(b.spent[k])} / ${fmt(b.budget[k])}.` });
+      });
+    }
+  } catch (e) {}
+  return alerts.slice(0, 3);
+}
+function renderDashAlerts() {
+  const el = $('dash-alerts'); if (!el) return;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem('monie_alerts_dismissed') === new Date().toISOString().slice(0, 10); } catch (e) {}
+  if (dismissed) { el.innerHTML = ''; return; }
+  const alerts = computeAlerts();
+  if (!alerts.length) { el.innerHTML = ''; return; }
+  const bg = { warn: 'rgba(232,163,23,0.12)', danger: 'rgba(229,57,53,0.10)', info: 'rgba(127,184,158,0.12)' };
+  el.innerHTML = `<div class="card" style="margin-bottom:16px;padding:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-size:13px">🔔 À surveiller</b><button class="btn-ghost" style="padding:4px 10px;font-size:11px" onclick="dismissDashAlerts()">Masquer aujourd'hui</button></div>
+    ${alerts.map(a => `<div style="display:flex;gap:10px;padding:8px 10px;border-radius:10px;background:${bg[a.tone] || bg.info};font-size:13px;line-height:1.5;margin-bottom:6px"><span>${a.icon}</span><span>${a.text}</span></div>`).join('')}
+  </div>`;
+}
+function dismissDashAlerts() {
+  try { localStorage.setItem('monie_alerts_dismissed', new Date().toISOString().slice(0, 10)); } catch (e) {}
+  const el = $('dash-alerts'); if (el) el.innerHTML = '';
+}
+
+// ─── 📅 Récap mensuel automatique (généré par l'IA à la demande) ───
+function renderDashRecap() {
+  const el = $('dash-recap'); if (!el) return;
+  const now = new Date();
+  const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastKey = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}`;
+  const hasData = transactions.some(t => t.date_op.startsWith(lastKey));
+  let dismissed = false;
+  try { dismissed = localStorage.getItem('monie_recap_seen') === lastKey; } catch (e) {}
+  if (!hasData || dismissed) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="card" id="dash-recap-card" style="margin-bottom:16px;background:linear-gradient(135deg,var(--lavender-soft),var(--sage-soft));border:none">
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div style="font-size:28px">📅</div>
+      <div style="flex:1;min-width:180px">
+        <div style="font-weight:800;font-size:15px">Ton récap de ${MONTHS[last.getMonth()]} ${last.getFullYear()} est prêt</div>
+        <div style="font-size:12px;color:var(--muted)">Un bilan personnalisé de ton mois, généré par l'IA.</div>
+      </div>
+      <button class="btn-primary" onclick="generateMonthlyRecap('${lastKey}')">✨ Voir le récap</button>
+      <button class="btn-ghost" style="padding:6px 10px;font-size:12px" onclick="dismissRecap('${lastKey}')">Plus tard</button>
+    </div>
+    <div id="dash-recap-out" style="margin-top:14px"></div>
+  </div>`;
+}
+function dismissRecap(key) { try { localStorage.setItem('monie_recap_seen', key); } catch (e) {} const el = $('dash-recap'); if (el) el.innerHTML = ''; }
+async function generateMonthlyRecap(monthKey) {
+  const out = $('dash-recap-out'); if (!out || aiBusy) return;
+  aiBusy = true;
+  out.innerHTML = '<div class="ai-msg ai-msg-bot ai-typing">Monie prépare ton récap…</div>';
+  try {
+    const reply = await callMonieAI(
+      [{ role: 'user', content: `Fais-moi un récap chaleureux et concret de mon mois : ce qui s'est bien passé, les points de vigilance, et 2 conseils pour le mois prochain. Reste sous 200 mots.` }],
+      'conseils',
+      { periodType: 'month', month: monthKey }
+    );
+    out.innerHTML = `<div class="ai-conseils-card">${aiFmt(reply)}</div>`;
+    try { localStorage.setItem('monie_recap_seen', monthKey); } catch (e) {}
+  } catch (e) {
+    out.innerHTML = `<div class="ai-msg ai-msg-bot">⚠️ ${esc(e.message || 'IA indisponible')}</div>`;
+  } finally { aiBusy = false; }
+}
+
+// Une opération « à catégoriser » = sans catégorie ou rangée dans « Autres »
+function _txNeedsCat(t) { return !t.category || t.category === 'Autres'; }
+function showTodoTx() {
+  if ($('tx-filter-cat')) $('tx-filter-cat').value = '__todo__';
+  if (typeof txRenderLimit !== 'undefined') txRenderLimit = TX_PAGE;
+  renderTransactionsList();
 }
 
 // Moyens de paiement adaptés selon Sortie / Entrée
@@ -1761,6 +1856,8 @@ function renderDashboard() {
   const isGlobalYear = dashYear === -1;
   const isGlobalMonth = dashMonth === -1;
   const isGlobal = isGlobalYear || isGlobalMonth;
+  if (typeof renderDashAlerts === 'function') renderDashAlerts();
+  if (typeof renderDashRecap === 'function') renderDashRecap();
 
   set('dash-month-lbl', isGlobal
     ? '🌍 Global (toutes tes tx)'
@@ -2261,7 +2358,8 @@ function renderTransactionsList() {
   }
 
   const allFiltered = transactions.filter(t => {
-    if (filtCat !== 'all' && t.category !== filtCat) return false;
+    if (filtCat === '__todo__') { if (!_txNeedsCat(t)) return false; }
+    else if (filtCat !== 'all' && t.category !== filtCat) return false;
     if (filtYear !== 'all' && !t.date_op.startsWith(filtYear)) return false;
     if (filtMonth !== 'all' && t.date_op.slice(5, 7) !== filtMonth) return false;
     if (filtDate && t.date_op !== filtDate) return false;
@@ -2298,13 +2396,28 @@ function renderTransactionsList() {
       </div>`;
   }
 
-  if (!filtered.length) { list.innerHTML = bulkHtml + '<div class="empty"><div class="empty-title">Aucune transaction</div></div>'; return; }
+  // Bandeau « file à catégoriser »
+  const nTodo = transactions.filter(_txNeedsCat).length;
+  let todoBanner = '';
+  if (nTodo > 0 && filtCat !== '__todo__') {
+    todoBanner = `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;background:rgba(232,163,23,0.12);margin-bottom:12px;font-size:13px">
+      <span>🏷️</span><span style="flex:1"><b>${nTodo}</b> opération(s) à catégoriser (rangées dans « Autres »).</span>
+      <button class="btn-ghost" style="padding:6px 12px;font-size:12px" onclick="showTodoTx()">Traiter →</button>
+    </div>`;
+  } else if (filtCat === '__todo__') {
+    todoBanner = `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;background:rgba(127,184,158,0.12);margin-bottom:12px;font-size:13px">
+      <span>🏷️</span><span style="flex:1">${nTodo ? `File à catégoriser — ${nTodo} restante(s). Change la catégorie de chaque ligne.` : '🎉 Rien à catégoriser, tout est rangé !'}</span>
+      <button class="btn-ghost" style="padding:6px 12px;font-size:12px" onclick="clearTxFilters()">Voir tout</button>
+    </div>`;
+  }
+
+  if (!filtered.length) { list.innerHTML = bulkHtml + todoBanner + '<div class="empty"><div class="empty-title">Aucune transaction</div></div>'; return; }
 
   const allChecked = filtered.every(t => txSelectedIds.has(t.id));
   const PM_SHORT = { carte: 'Carte', especes: 'Espèces', ticket_resto: 'Ticket resto', cheque: 'Chèque', prelevement: 'Prélèvement', virement: 'Virement' };
   const typeSign = t => t.type === 'entree' ? '+' : (t.type === 'epargne' ? '' : '-');
   const typeCls = t => t.type === 'entree' ? 'amt-in' : (t.type === 'epargne' ? 'amt-save' : 'amt-out');
-  list.innerHTML = bulkHtml + `
+  list.innerHTML = bulkHtml + todoBanner + `
     <div class="tx-table-wrap">
     <table class="tx-table">
       <thead><tr>
@@ -4219,6 +4332,20 @@ function renderBudgetStatus(containerId, compact, monthKey) {
       </div>`;
     }
   }
+  // ── 💧 Reste à vivre par jour (le chiffre du quotidien) ──
+  let dailyHtml = '';
+  if (key === _curKey && rev > 0) {
+    const dayEl = _now.getDate();
+    const daysIn = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate();
+    const daysLeft = Math.max(1, daysIn - dayEl + 1);
+    const freeLeft = Math.max(0, reste - aPrevoir);
+    const perDay = Math.round(freeLeft / daysLeft);
+    dailyHtml = `<div style="text-align:center;padding:12px;border-radius:12px;background:rgba(127,184,158,0.10);margin-bottom:14px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">💧 Reste à vivre par jour</div>
+      <div style="font-size:24px;font-weight:900;color:var(--sage);font-family:var(--fm)">${fmt(perDay)}<span style="font-size:13px;color:var(--muted)"> /jour</span></div>
+      <div style="font-size:11px;color:var(--muted)">≈ ${fmt(perDay * 7)}/semaine · ${daysLeft} jour(s) restant(s)${aPrevoir > 0 ? ` · après tes ${fmt(aPrevoir)} à prévoir` : ''}</div>
+    </div>`;
+  }
   el.innerHTML = `
     <div style="text-align:center;padding:12px;border-radius:12px;background:${reste >= 0 ? 'rgba(127,184,158,0.12)' : 'rgba(229,57,53,0.1)'};margin-bottom:14px">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Reste à dépenser · ${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}</div>
@@ -4226,6 +4353,7 @@ function renderBudgetStatus(containerId, compact, monthKey) {
       <div style="font-size:11px;color:var(--muted)">${fmt(rev)} de revenu − ${fmt(totalSpentDep)} déjà dépensés</div>
       ${aPrevoir > 0 ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">📌 Pense-bête : ${fmt(aPrevoir)} de dépenses à prévoir (non déduites)</div>` : ''}
     </div>
+    ${dailyHtml}
     ${forecastHtml}
     ${!rows.length ? '<div class="empty-sub" style="text-align:center;padding:8px 0">👍 Rien à surveiller pour l\'instant — les postes réglés ou non entamés sont masqués</div>' : ''}
     ${rows.map(bar).join('')}
