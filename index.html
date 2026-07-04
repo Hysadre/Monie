@@ -726,6 +726,10 @@
           </div>
           <div id="bud-events-list"></div>
         </div>
+        <div class="card" id="recurring-card" style="display:none">
+          <div class="card-hd"><div class="card-title">🔁 Récurrents détectés <span style="font-size:11px;font-weight:500;color:var(--muted)">— tes dépenses qui reviennent chaque mois (abonnements, loyer…)</span></div></div>
+          <div id="recurring-list"></div>
+        </div>
         <div class="grid-2">
           <div class="card">
             <div class="card-hd"><div class="card-title">Ton revenu mensuel</div></div>
@@ -982,6 +986,20 @@
                 <input class="inp" type="password" id="profile-new-pwd2" placeholder="Retape le même">
               </div>
               <button class="btn-ghost" onclick="changePassword()" style="margin-top:8px">Modifier le mot de passe</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bloc : Tes données (sauvegarde / RGPD) -->
+        <div class="card">
+          <div class="card-hd"><div class="card-title">💾 Tes données</div></div>
+          <div style="max-width:640px">
+            <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Télécharge une <b>sauvegarde complète</b> de tout ce que Monie sait de toi (transactions, budgets, objectifs…) au format JSON. Garde-la précieusement : c'est ton filet de sécurité.</p>
+            <button class="btn-primary" onclick="exportAllData()">⬇️ Télécharger ma sauvegarde (JSON)</button>
+            <div style="border-top:1px dashed var(--border);margin-top:18px;padding-top:16px">
+              <div style="font-size:13px;font-weight:700;color:var(--tender-rose);margin-bottom:6px">Zone sensible</div>
+              <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Supprimer définitivement toutes tes données (transactions, budgets, objectifs). Irréversible — pense à télécharger ta sauvegarde d'abord.</p>
+              <button class="btn-ghost" onclick="wipeAllData()" style="color:var(--tender-rose);border-color:var(--tender-rose-soft)">🗑 Tout supprimer (RGPD)</button>
             </div>
           </div>
         </div>

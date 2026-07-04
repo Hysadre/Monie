@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v53'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v54'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -2342,6 +2342,53 @@ function exportTxCsv() {
   toast(`✓ ${filtered.length} tx exportées`, 'success');
 }
 
+// ─── Sauvegarde complète (JSON) de toutes tes données ───
+function exportAllData() {
+  try {
+    const dump = {
+      _meta: { app: 'Monie', version: (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?'), compte: currentUser ? currentUser.email : null },
+      transactions: transactions || [],
+      budgets: (typeof budgetByMonth !== 'undefined' ? budgetByMonth : {}),
+      objectifs: (typeof goalsList !== 'undefined' ? goalsList : []),
+      contributions: (typeof contribList !== 'undefined' ? contribList : []),
+      investissements: (typeof investissements !== 'undefined' ? investissements : []),
+      suivi_mensuel: (typeof suiviData !== 'undefined' ? suiviData : {}),
+      regles: (typeof rules !== 'undefined' ? rules : []),
+      profil: (typeof userProfile !== 'undefined' ? userProfile : null)
+    };
+    const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = url; a.download = `monie-sauvegarde-${stamp}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('✓ Sauvegarde téléchargée', 'success');
+  } catch (e) { toast('Erreur export : ' + (e.message || e), 'error'); }
+}
+
+// ─── Suppression totale des données (RGPD) — double garde-fou ───
+function wipeAllData() {
+  const body = `<div style="font-size:13px;line-height:1.6">
+    Cette action supprime <b>définitivement</b> toutes tes transactions, budgets, objectifs, contributions, placements et règles. <b style="color:var(--tender-rose)">C'est irréversible.</b><br><br>
+    Pour confirmer, écris <b>SUPPRIMER</b> ci-dessous :
+    <input class="inp" id="wipe-confirm" placeholder="SUPPRIMER" style="width:100%;margin-top:10px" autocomplete="off">
+  </div>`;
+  openModal('🗑 Tout supprimer ?', 'Télécharge d\'abord ta sauvegarde si tu veux la garder.', async () => {
+    const v = ($('wipe-confirm') && $('wipe-confirm').value || '').trim().toUpperCase();
+    if (v !== 'SUPPRIMER') { toast('Tape SUPPRIMER (en majuscules) pour confirmer', 'error'); return false; }
+    toast('Suppression en cours…');
+    const uid = currentUser.id;
+    const tables = ['transactions', 'epargne_contributions', 'epargne_objectifs', 'investissements', 'tracker_mensuel', 'budget_mensuel', 'budget_prep', 'merchant_rules'];
+    for (const tbl of tables) {
+      const r = await sb.from(tbl).delete().eq('user_id', uid);
+      if (r.error) console.warn('wipe', tbl, r.error.message);
+    }
+    toast('✓ Toutes tes données ont été supprimées', 'success');
+    setTimeout(() => location.reload(), 1200);
+  }, body);
+}
+
 // Édition complète d'une transaction (date, libellé, montant, type, catégorie, paiement)
 function _updateTxFamHint() {
   const sel = $('txedit-cat'); const hint = $('txedit-fam-hint');
@@ -4066,6 +4113,23 @@ function renderBudgetStatus(containerId, compact, monthKey) {
         <div style="font-size:10px;color:${color};margin-top:2px">${status}</div>
       </div>`;
   };
+  // ── Prévision fin de mois : uniquement pour le mois réel en cours, à mi-parcours ──
+  let forecastHtml = '';
+  const _now = new Date();
+  const _curKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}`;
+  if (key === _curKey) {
+    const dayEl = _now.getDate();
+    const daysIn = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate();
+    if (dayEl >= 3 && dayEl < daysIn && totalSpentDep > 0) {
+      const projSpent = Math.round(totalSpentDep / dayEl * daysIn);
+      const projReste = rev - projSpent;
+      const over = projSpent > totalBudgetDep;
+      forecastHtml = `<div style="padding:10px 12px;border-radius:12px;background:${projReste >= 0 ? 'rgba(232,163,23,0.10)' : 'rgba(229,57,53,0.10)'};font-size:12px;line-height:1.5;margin-bottom:14px">
+        <b>📈 Projection fin de mois</b> <span style="color:var(--muted)">(jour ${dayEl}/${daysIn})</span><br>
+        À ce rythme, tu finirais autour de <b>${fmt(projSpent)}</b> de dépenses → il te resterait <b style="color:${projReste >= 0 ? 'var(--sage)' : '#E53935'}">${fmt(projReste)}</b>.${over ? ` <span style="color:#B7791F">⚠ au-dessus de ton budget (${fmt(totalBudgetDep)})</span>` : ''}
+      </div>`;
+    }
+  }
   el.innerHTML = `
     <div style="text-align:center;padding:12px;border-radius:12px;background:${reste >= 0 ? 'rgba(127,184,158,0.12)' : 'rgba(229,57,53,0.1)'};margin-bottom:14px">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Reste à dépenser · ${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}</div>
@@ -4073,6 +4137,7 @@ function renderBudgetStatus(containerId, compact, monthKey) {
       <div style="font-size:11px;color:var(--muted)">${fmt(rev)} de revenu − ${fmt(totalSpentDep)} déjà dépensés</div>
       ${aPrevoir > 0 ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">📌 Pense-bête : ${fmt(aPrevoir)} de dépenses à prévoir (non déduites)</div>` : ''}
     </div>
+    ${forecastHtml}
     ${!rows.length ? '<div class="empty-sub" style="text-align:center;padding:8px 0">👍 Rien à surveiller pour l\'instant — les postes réglés ou non entamés sont masqués</div>' : ''}
     ${rows.map(bar).join('')}
     ${!compact ? `<div style="margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--sage-soft);font-size:12px;line-height:1.6">
@@ -4142,6 +4207,59 @@ function renderBudgetEvents() {
     `<div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;font-weight:800;font-size:15px">
        <span>Total à prévoir</span><span style="color:var(--rose)">${fmt(total)}</span>
      </div>`;
+}
+
+// ─── Détection des dépenses récurrentes (abonnements, loyer…) ───
+let _recurringCache = [];
+function detectRecurring() {
+  const byKey = {};
+  transactions.filter(t => t.type === 'sortie').forEach(t => {
+    const k = t.merchant_key || merchantKey(t.label);
+    if (!k || k.length < 3) return;
+    (byKey[k] = byKey[k] || []).push(t);
+  });
+  const rec = [];
+  Object.entries(byKey).forEach(([k, arr]) => {
+    const months = new Set(arr.map(t => t.date_op.slice(0, 7)));
+    if (months.size < 3) return; // récurrent = présent sur au moins 3 mois différents
+    const amts = arr.map(t => Math.abs(Number(t.amount)));
+    const avg = amts.reduce((s, a) => s + a, 0) / amts.length;
+    if (avg < 3) return;
+    const variance = amts.reduce((s, a) => s + (a - avg) ** 2, 0) / amts.length;
+    const cv = avg > 0 ? Math.sqrt(variance) / avg : 1;
+    if (cv > 0.45) return; // montant trop variable → pas un vrai récurrent fixe
+    const last = arr.slice().sort((a, b) => (a.date_op < b.date_op ? 1 : -1))[0];
+    rec.push({ label: last.label, avg: Math.round(avg), months: months.size, category: last.category });
+  });
+  return rec.sort((a, b) => b.avg - a.avg).slice(0, 15);
+}
+function renderRecurring() {
+  const card = $('recurring-card'); const list = $('recurring-list');
+  if (!card || !list) return;
+  _recurringCache = detectRecurring();
+  if (!_recurringCache.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const existing = new Set((budgetData.events || []).map(e => (e.label || '').toLowerCase()));
+  const totalMonthly = _recurringCache.reduce((s, r) => s + r.avg, 0);
+  list.innerHTML = _recurringCache.map((r, i) => {
+    const already = existing.has(r.label.toLowerCase());
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft)">
+      <div class="day-tx-icon" style="background:${catColor(r.category)}18;color:${catColor(r.category)};width:34px;height:34px;flex-shrink:0">${catIcon(r.category)}</div>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.label)}</div><div style="font-size:11px;color:var(--muted)">${esc(r.category)} · vu sur ${r.months} mois</div></div>
+      <div style="font-family:var(--fm);font-weight:700;white-space:nowrap">~${fmt(r.avg)}/mois</div>
+      <button class="btn-ghost" style="padding:5px 10px;font-size:12px;flex-shrink:0" onclick="addRecurringToPrevoir(${i})" ${already ? 'disabled' : ''}>${already ? '✓ ajouté' : '+ à prévoir'}</button>
+    </div>`;
+  }).join('') + `<div style="text-align:right;font-size:12px;color:var(--muted);margin-top:10px">Total récurrent estimé : <b>${fmt(totalMonthly)}/mois</b></div>`;
+}
+function addRecurringToPrevoir(i) {
+  const r = _recurringCache[i];
+  if (!r) return;
+  budgetData.events = budgetData.events || [];
+  budgetData.events.push({ label: r.label, amount: r.avg });
+  saveBudgetPrepNow();
+  renderBudgetEvents();
+  renderRecurring();
+  toast('✓ Ajouté à « à prévoir »', 'success');
 }
 
 function normalizeBudgetPct(changed) {
@@ -4238,6 +4356,7 @@ function renderBudget() {
   if ($('bud-pct-imprevus')) $('bud-pct-imprevus').value = budgetData.pct_imprevus || 0;
   renderBudgetStatus('budget-alert-page', false, budgetKey());
   renderBudgetEvents();
+  renderRecurring();
   const c = budgetData.pct_charges;
   const p = budgetData.pct_plaisir;
   const e = budgetData.pct_epargne;
