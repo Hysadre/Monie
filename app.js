@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v71'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v72'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -447,6 +447,10 @@ function closeModal() {
   m.classList.remove('show');
   m.style.display = 'none';
   _modalCb = null;
+}
+// Confirmation avant toute suppression définitive (à utiliser partout)
+function confirmDelete(msg, onYes) {
+  openModal('🗑 Supprimer ?', msg || 'Cette action est définitive. Confirmer la suppression ?', onYes);
 }
 // Fermeture au clavier (Échap)
 document.addEventListener('keydown', (e) => {
@@ -1446,9 +1450,12 @@ function renderAnalyseRecaps() {
   }).join('');
 }
 function deleteRecap(key) {
-  try { const r = _getRecaps(); delete r[key]; localStorage.setItem('monie_recaps', JSON.stringify(r)); } catch (e) {}
-  renderAnalyseRecaps();
-  toast('✓ Récap supprimé', 'success');
+  const lbl = `${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
+  confirmDelete(`Supprimer le récap de ${lbl} ?`, () => {
+    try { const r = _getRecaps(); delete r[key]; localStorage.setItem('monie_recaps', JSON.stringify(r)); } catch (e) {}
+    renderAnalyseRecaps();
+    toast('✓ Récap supprimé', 'success');
+  });
 }
 
 // ─── 💎 Suivi de patrimoine (net worth, à partir du suivi mensuel) ───
@@ -2268,16 +2275,30 @@ function renderCatTrend() {
 
 // ═══ PAGE ANALYSE ══════════════════════════════════════════════
 const ANALYSE_PALETTE = ['#E76F51', '#7FB89E', '#F4A993', '#7C3F58', '#E8B84D', '#DD7B85', '#B79CD6', '#4FC3F7', '#A0AEC0', '#D8B4DD'];
+function _populateAnalyseMonths() {
+  const mSel = $('analyse-month'); if (!mSel) return;
+  const cur = mSel.value;
+  mSel.innerHTML = '<option value="-1">Toute l\'année</option>' + MONTHS.map((m, i) => `<option value="${String(i + 1).padStart(2, '0')}">${m}</option>`).join('');
+  mSel.value = [...mSel.options].some(o => o.value === cur) ? cur : '-1';
+}
+function onAnalyseYearChange() { _populateAnalyseMonths(); renderAnalyse(); }
 function renderAnalyse() {
   const ySel = $('analyse-year');
   if (ySel && ySel.options.length === 0) {
     const years = [...new Set(transactions.map(t => t.date_op.slice(0, 4)))].sort().reverse();
     ySel.innerHTML = '<option value="-1">🌍 Toutes années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
     ySel.value = years[0] || '-1';
+    _populateAnalyseMonths();
   }
   const yr = ySel ? ySel.value : '-1';
   const isGlobal = yr === '-1';
-  const scope = isGlobal ? transactions : transactions.filter(t => t.date_op.startsWith(yr));
+  const mSel = $('analyse-month');
+  let mo = mSel ? mSel.value : '-1';
+  // Le mois n'a de sens que sur une année précise
+  if (mSel) { mSel.disabled = isGlobal; if (isGlobal) { mo = '-1'; mSel.value = '-1'; } }
+  const singleMonth = !isGlobal && mo !== '-1';
+  const scope = isGlobal ? transactions
+    : (singleMonth ? transactions.filter(t => t.date_op.startsWith(`${yr}-${mo}`)) : transactions.filter(t => t.date_op.startsWith(yr)));
   const exp = scope.filter(t => t.type === 'sortie' && t.category !== 'Transactions');
   const totalIn = scope.filter(t => t.type === 'entree').reduce((s, t) => s + Number(t.amount), 0);
   const totalOut = exp.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
@@ -2291,14 +2312,23 @@ function renderAnalyse() {
   // 1 · Taux d'épargne
   set('an-taux', tauxEp + '%');
   set('an-taux-hint', tauxEp >= 20 ? 'Excellent 🎯' : tauxEp >= 10 ? 'Correct' : 'À muscler');
-  // 2 · Épargné sur la période (flux type Épargne)
+  // Nombre de jours de référence si un mois précis est choisi
+  let dref = 0;
+  if (singleMonth) {
+    const y = parseInt(yr), m = parseInt(mo);
+    const now = new Date();
+    const isCur = y === now.getFullYear() && (m - 1) === now.getMonth();
+    dref = isCur ? now.getDate() : new Date(y, m, 0).getDate();
+  }
+  // 2 · Épargné sur la période
   set('an-ep', fmt(Math.round(epargne)));
-  set('an-ep-hint', `${fmt(Math.round(epargne / months))}/mois`);
-  // 3 · Reste à vivre /mois
-  set('an-rav', fmt(Math.round(solde / months)));
-  // 4 · Dépense moyenne /mois
-  set('an-depmoy', fmt(Math.round(totalOut / months)));
-  set('an-depmoy-hint', `sur ${months} mois`);
+  set('an-ep-hint', singleMonth ? 'ce mois-ci' : `${fmt(Math.round(epargne / months))}/mois`);
+  // 3 · Reste à vivre (adapte le libellé si mois précis)
+  if (singleMonth) { set('an-rav-label', 'Reste ce mois'); set('an-rav', fmt(Math.round(solde))); set('an-rav-hint', 'revenus − dépenses − épargne'); }
+  else { set('an-rav-label', 'Reste à vivre /mois'); set('an-rav', fmt(Math.round(solde / months))); set('an-rav-hint', 'en moyenne'); }
+  // 4 · Dépense moyenne /mois OU /jour (si un mois précis est sélectionné)
+  if (singleMonth) { set('an-depmoy-label', 'Dépense moy. /jour'); set('an-depmoy', fmt(Math.round(totalOut / Math.max(1, dref)))); set('an-depmoy-hint', `sur ${dref} jour(s)`); }
+  else { set('an-depmoy-label', 'Dépense moy. /mois'); set('an-depmoy', fmt(Math.round(totalOut / months))); set('an-depmoy-hint', `sur ${months} mois`); }
   // 5 · Poste n°1 (catégorie de dépense la plus lourde)
   const catTot = {};
   exp.forEach(t => { catTot[t.category] = (catTot[t.category] || 0) + Math.abs(Number(t.amount)); });
@@ -2348,6 +2378,38 @@ function renderAnalyse() {
         <span style="color:var(--muted);font-size:11px;min-width:40px;text-align:right">${catTotal > 0 ? Math.round(v / catTotal * 100) : 0}%</span>
       </div>`).join('') : '';
   $('analyse-sublist').innerHTML = `<div style="font-weight:800;font-size:15px;margin-bottom:10px">${catIcon(cat)} ${esc(cat)} — ${fmt(catTotal)}</div>` + subHtml + pmHtml;
+
+  // ── 📊 Graphe : répartition par famille (donut) ──
+  const FAM_COL = { charges: '#DD7B85', plaisir: '#E8B84D', imprevus: '#E8A317', epargne: '#9B7FC0' };
+  const FAM_LBL = { charges: '🏠 Charges', plaisir: '🎈 Plaisir', imprevus: '⚡ Imprévus', epargne: '🐷 Épargne' };
+  const famTot = { charges: 0, plaisir: 0, imprevus: 0, epargne: 0 };
+  scope.forEach(t => {
+    const a = Math.abs(Number(t.amount));
+    if (t.type === 'epargne') { famTot.epargne += a; return; }
+    if (t.type !== 'sortie' || t.category === 'Transactions') return;
+    const b = BUDGET_BLOCK[t.category];
+    if (famTot[b] !== undefined) famTot[b] += a; else famTot.charges += a;
+  });
+  const famOrder = ['charges', 'plaisir', 'imprevus', 'epargne'].filter(k => famTot[k] > 0);
+  const famTotal = famOrder.reduce((s, k) => s + famTot[k], 0);
+  if (typeof updateChart === 'function') updateChart('an-family-chart', 'doughnut', { labels: famOrder.map(k => FAM_LBL[k]), datasets: [{ data: famOrder.map(k => famTot[k]), backgroundColor: famOrder.map(k => FAM_COL[k]), borderWidth: 0 }] }, { plugins: { legend: { display: false } }, cutout: '62%' });
+  if ($('an-family-legend')) $('an-family-legend').innerHTML = famOrder.map(k => { const pct = famTotal ? Math.round(famTot[k] / famTotal * 100) : 0; return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;border-bottom:1px solid var(--border-soft)"><span style="width:10px;height:10px;border-radius:2px;background:${FAM_COL[k]}"></span><span style="flex:1">${FAM_LBL[k]}</span><span style="font-family:var(--fm);color:var(--muted)">${fmt(famTot[k])} · ${pct}%</span></div>`; }).join('') || '<div class="empty-sub">Aucun mouvement</div>';
+
+  // ── 📈 Graphe : dépenses dans le temps (par an / mois / jour selon la sélection) ──
+  const evoLabels = [], evoData = [];
+  const sumOutKey = key => Math.round(transactions.filter(t => t.type === 'sortie' && t.category !== 'Transactions' && t.date_op.startsWith(key)).reduce((s, t) => s + Math.abs(Number(t.amount)), 0));
+  if (isGlobal) {
+    [...new Set(transactions.map(t => t.date_op.slice(0, 4)))].sort().forEach(y => { evoLabels.push(y); evoData.push(sumOutKey(y)); });
+    set('an-evo-lbl', '· par année');
+  } else if (singleMonth) {
+    const y = parseInt(yr), m = parseInt(mo), days = new Date(y, m, 0).getDate();
+    for (let d = 1; d <= days; d++) { evoLabels.push(String(d)); evoData.push(sumOutKey(`${yr}-${mo}-${String(d).padStart(2, '0')}`)); }
+    set('an-evo-lbl', '· par jour');
+  } else {
+    for (let m = 0; m < 12; m++) { evoLabels.push(MONTHS_SHORT[m]); evoData.push(sumOutKey(`${yr}-${String(m + 1).padStart(2, '0')}`)); }
+    set('an-evo-lbl', '· par mois');
+  }
+  if (typeof updateChart === 'function') updateChart('an-evo-chart', 'bar', { labels: evoLabels, datasets: [{ data: evoData, backgroundColor: '#E76F51', borderRadius: 4, borderSkipped: false }] }, { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#A0AEC0', autoSkip: true, maxRotation: 0 }, grid: { display: false } }, y: { ticks: { color: '#A0AEC0', callback: v => v.toLocaleString('fr-FR') + ' €' }, grid: { color: '#F5E7EA' } } } });
 
   // Les conseils sont désormais générés par l'IA (bouton « 🤖 Analyse IA »).
   renderRulesList();
@@ -4544,9 +4606,12 @@ function addBudgetEvent() {
 }
 function removeBudgetEvent(i) {
   budgetData.events = budgetData.events || [];
-  budgetData.events.splice(i, 1);
-  saveBudgetPrepNow();
-  renderBudgetEvents();
+  const e = budgetData.events[i]; if (!e) return;
+  confirmDelete(`Retirer « ${esc(e.label || 'cette note')} » de tes dépenses à prévoir ?`, () => {
+    budgetData.events.splice(i, 1);
+    saveBudgetPrepNow();
+    renderBudgetEvents();
+  });
 }
 // Modifier une note « à prévoir » (libellé ou montant) directement
 function editBudgetEvent(i, field, val) {
@@ -4846,7 +4911,7 @@ function renderBudget() {
                   <input class="inp" list="subdl-${blocKey}-${i}" value="${esc(sc.name || '')}" onchange="renameSubcatBudget('${blocKey}',${i},${j},this.value)" placeholder="Ex: Hygiène & entretien…" style="padding:5px 8px;font-size:12px">
                   <input type="number" min="0" step="0.5" value="${sc.pct || 0}" class="bud-sub-inp" onchange="updateSubcatBudget('${blocKey}',${i},${j},this.value)">
                   <span style="font-size:11px;color:var(--muted)">%</span>
-                  <span onclick="openPosteItems('${blocKey}',${i},${j})" style="cursor:pointer;font-family:var(--fm);font-size:12px;text-align:right;color:var(--rose);white-space:nowrap" title="Répartir en détail (produits ménagers, corps…)">${fmt(sAmt)} ›${nItems ? `<span style="font-size:9px"> (${nItems})</span>` : ''}</span>
+                  <button type="button" onclick="openPosteItems('${blocKey}',${i},${j})" title="Ouvrir le détail (sous-postes)" style="background:var(--rose-soft);border:1px solid var(--rose);color:var(--rose);border-radius:6px;padding:4px 6px;font-size:11px;font-family:var(--fm);cursor:pointer;white-space:nowrap">${fmt(sAmt)} ▾${nItems ? ` ·${nItems}` : ''}</button>
                   <input type="checkbox" class="bud-sub-check" ${sc.done ? 'checked' : ''} onchange="toggleSubcatDone('${blocKey}',${i},${j})" title="Cocher quand c'est validé / payé ✓">
                   <button class="bud-sub-del" onclick="deleteSubcatBudget('${blocKey}',${i},${j})" title="Supprimer">🗑</button>
                 </div>`;
@@ -4942,10 +5007,13 @@ function renameSubcatBudget(blocKey, i, j, name) {
   saveBudgetPrep(); renderBudget();
 }
 function deleteSubcatBudget(blocKey, i, j) {
-  const it = _budItem(blocKey, i); if (!it || !it.subs) return;
-  it.subs.splice(j, 1);
-  _openSubDetails.add(`${blocKey}-${i}`);
-  saveBudgetPrep(); renderBudget();
+  const it = _budItem(blocKey, i); if (!it || !it.subs || !it.subs[j]) return;
+  const nm = it.subs[j].name || 'ce poste';
+  confirmDelete(`Supprimer le poste « ${esc(nm)} » ?`, () => {
+    it.subs.splice(j, 1);
+    _openSubDetails.add(`${blocKey}-${i}`);
+    saveBudgetPrep(); renderBudget();
+  });
 }
 // Coche/décoche un poste comme « validé / acheté » (par mois)
 function toggleSubcatDone(blocKey, i, j) {
@@ -4998,22 +5066,23 @@ function _posteSave() { saveBudgetPrep(); renderPosteItems(); if (typeof renderB
 function addPosteItem() { const sc = _posteObj(); if (!sc) return; sc.items = sc.items || []; sc.items.push({ name: '', pct: 0 }); _posteSave(); }
 function updatePosteItemPct(k, v) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; sc.items[k].pct = Math.round(Math.max(0, parseFloat(v) || 0) * 10) / 10; _posteSave(); }
 function renamePosteItem(k, v) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; sc.items[k].name = (v || '').trim(); _posteSave(); }
-function deletePosteItem(k) { const sc = _posteObj(); if (!sc || !sc.items) return; sc.items.splice(k, 1); _posteSave(); }
+function deletePosteItem(k) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; const nm = sc.items[k].name || 'ce sous-poste'; confirmDelete(`Supprimer « ${esc(nm)} » ?`, () => { sc.items.splice(k, 1); _posteSave(); }); }
 function togglePosteItemDone(k) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; sc.items[k].done = !sc.items[k].done; _posteSave(); }
 // Supprime une ligne de la répartition détaillée (ex : fusionner « restos » dans Alimentation)
 function deleteSubBudgetLine(blocKey, index) {
-  try {
-    let subBudget = budgetData.sub_budget;
-    if (!subBudget) subBudget = JSON.parse(JSON.stringify(DEFAULT_SUB_PCT));
-    if (subBudget[blocKey] && subBudget[blocKey][index]) {
-      const removed = subBudget[blocKey][index];
+  let subBudget = budgetData.sub_budget;
+  if (!subBudget) subBudget = JSON.parse(JSON.stringify(DEFAULT_SUB_PCT));
+  if (!subBudget[blocKey] || !subBudget[blocKey][index]) return;
+  const removed = subBudget[blocKey][index];
+  confirmDelete(`Supprimer la ligne « ${esc(removed.cat)}${removed.note ? ' ' + esc(removed.note) : ''} » (et son détail) ?`, () => {
+    try {
       subBudget[blocKey].splice(index, 1);
       budgetData.sub_budget = subBudget;
       saveBudgetPrep();
       renderBudget();
-      toast(`✓ Ligne « ${removed.cat}${removed.note ? ' ' + removed.note : ''} » supprimée`, 'success');
-    }
-  } catch (e) { console.error(e); }
+      toast('✓ Ligne supprimée', 'success');
+    } catch (e) { console.error(e); }
+  });
 }
 // Coche/décoche une ligne comme « payé / réglé » (pense-bête mensuel, sauvegardé avec le budget du mois)
 function toggleSubBudgetDone(blocKey, index) {
@@ -5413,11 +5482,15 @@ async function settleRemboursement(id) {
   const e = remboursementsList.find(x => x.id === id); if (e) e.statut = 'regle';
   renderRemboursements(); toast('✓ Marqué réglé', 'success');
 }
-async function deleteRemboursement(id) {
-  const r = await dbGuard(sb.from('remboursements').delete().eq('id', id), 'Suppression impossible');
-  if (!r.ok) return;
-  remboursementsList = remboursementsList.filter(x => x.id !== id);
-  renderRemboursements();
+function deleteRemboursement(id) {
+  const e = remboursementsList.find(x => x.id === id);
+  confirmDelete(`Supprimer le remboursement${e ? ` « ${esc(e.tiers)} · ${fmt(e.montant)} »` : ''} ?`, async () => {
+    const r = await dbGuard(sb.from('remboursements').delete().eq('id', id), 'Suppression impossible');
+    if (!r.ok) return;
+    remboursementsList = remboursementsList.filter(x => x.id !== id);
+    renderRemboursements();
+    toast('✓ Supprimé', 'success');
+  });
 }
 function renderRemboursements() {
   const el = $('remb-list'); if (!el) return;

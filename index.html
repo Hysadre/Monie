@@ -657,16 +657,31 @@
             <h1 class="page-title">Analyse</h1>
             <p class="page-sub">Comprends où va vraiment ton argent, en détail</p>
           </div>
-          <select class="select" id="analyse-year" onchange="renderAnalyse()"></select>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select class="select" id="analyse-month" onchange="renderAnalyse()"><option value="-1">Toute l'année</option></select>
+            <select class="select" id="analyse-year" onchange="onAnalyseYearChange()"></select>
+          </div>
         </div>
 
         <div class="kpi-grid kpi-row-3" style="grid-template-columns:repeat(3,1fr)">
           <div class="kpi kpi-sage" title="Part de tes revenus mise de côté (opérations type Épargne ÷ revenus) sur la période choisie"><div class="kpi-label">Taux d'épargne</div><div class="kpi-val kpi-val-sage" id="an-taux">—</div><div class="kpi-hint" id="an-taux-hint">—</div></div>
           <div class="kpi kpi-peach" title="Total mis de côté (opérations de type Épargne) sur la période choisie"><div class="kpi-label">Épargné (période)</div><div class="kpi-val" id="an-ep">—</div><div class="kpi-hint" id="an-ep-hint">—</div></div>
-          <div class="kpi kpi-rose" title="Ce qui te reste en moyenne chaque mois après dépenses et épargne"><div class="kpi-label">Reste à vivre /mois</div><div class="kpi-val" id="an-rav">—</div><div class="kpi-hint">en moyenne</div></div>
-          <div class="kpi kpi-gold" title="Moyenne de tes dépenses courantes par mois sur la période"><div class="kpi-label">Dépense moy. /mois</div><div class="kpi-val kpi-val-gold" id="an-depmoy">—</div><div class="kpi-hint" id="an-depmoy-hint">—</div></div>
+          <div class="kpi kpi-rose" title="Ce qui te reste en moyenne chaque mois après dépenses et épargne"><div class="kpi-label" id="an-rav-label">Reste à vivre /mois</div><div class="kpi-val" id="an-rav">—</div><div class="kpi-hint" id="an-rav-hint">en moyenne</div></div>
+          <div class="kpi kpi-gold" title="Moyenne de tes dépenses par mois (ou par jour si tu choisis un mois précis)"><div class="kpi-label" id="an-depmoy-label">Dépense moy. /mois</div><div class="kpi-val kpi-val-gold" id="an-depmoy">—</div><div class="kpi-hint" id="an-depmoy-hint">—</div></div>
           <div class="kpi" title="Ta catégorie de dépense la plus lourde sur la période"><div class="kpi-label">Poste n°1</div><div class="kpi-val" id="an-top" style="font-size:18px">—</div><div class="kpi-hint" id="an-top-hint">—</div></div>
           <div class="kpi kpi-peach" title="Part de tes dépenses courantes classées « plaisir » (vs « charges »)"><div class="kpi-label">Part « plaisir »</div><div class="kpi-val" id="an-ratio">—</div><div class="kpi-hint">des dépenses courantes</div></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-hd"><div class="card-title">📊 Répartition par famille</div></div>
+            <div style="height:210px;display:flex;align-items:center;justify-content:center"><canvas id="an-family-chart"></canvas></div>
+            <div id="an-family-legend" style="margin-top:10px"></div>
+          </div>
+          <div class="card">
+            <div class="card-hd"><div class="card-title">📈 Dépenses dans le temps <span id="an-evo-lbl" style="font-size:11px;font-weight:500;color:var(--muted)"></span></div></div>
+            <div style="height:210px"><canvas id="an-evo-chart"></canvas></div>
+          </div>
         </div>
 
         <div class="card">
