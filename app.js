@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v80'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v81'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3763,7 +3763,7 @@ async function confirmImport() {
 let _ticketDraft = [];  // lignes en cours de revue
 
 // Compresse une image (canvas) → { data: base64 sans préfixe, media_type }
-function _compressImage(file, maxDim = 1500, quality = 0.8) {
+function _compressImage(file, maxDim = 1300, quality = 0.7) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -3817,19 +3817,28 @@ async function handleTicketPhoto(file) {
   if (!status || !review) { alert('Ouvre la page Courses pour scanner une photo.'); return; }
   review.style.display = 'none'; review.innerHTML = '';
   status.style.display = 'block';
-  status.innerHTML = `<div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px"><span class="spinner"></span> Monie lit ta photo… (ça peut prendre 10-20 secondes)</div>`;
+  // Chrono visible + étape en cours, pour qu'on VOIE que ça travaille (et où ça s'arrête)
+  let _t0 = 0, _step = 'Préparation de la photo…';
+  const setStatus = () => { status.innerHTML = `<div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px"><span class="spinner"></span> ${esc(_step)} <b style="font-family:var(--fm)">${_t0}s</b></div>`; };
+  setStatus();
+  const ticker = setInterval(() => { _t0++; setStatus(); }, 1000);
+  const showError = (msg) => { status.innerHTML = `<div style="padding:12px 14px;border-radius:10px;background:rgba(229,57,53,0.10);border:1px solid #E53935;color:#C62828;font-size:13px;line-height:1.5">⚠ <b>Échec de la lecture</b><br>${esc(msg)}</div>`; };
   try {
     const { data, media_type } = await _prepareTicketImage(file);
     console.log('[ticket] image prête', media_type, Math.round((data || '').length / 1024) + ' Ko (base64)');
+    if (!data) throw new Error('Image vide après préparation. Réessaie avec une autre photo.');
+    _step = 'Monie lit ta photo…';
+    setStatus();
     // Appel IA avec un délai max de 60s (évite de rester bloqué indéfiniment)
     const invokePromise = sb.functions.invoke('monie-ai', { body: { mode: 'ticket', image: data, media_type } });
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Temps dépassé (60s). Réessaie avec une photo plus légère / mieux cadrée.')), 60000));
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Temps dépassé (60s). La photo est peut-être trop lourde, ou l\'IA a mis trop de temps. Réessaie.')), 60000));
     const { data: res, error } = await Promise.race([invokePromise, timeout]);
     console.log('[ticket] réponse IA', { error, res });
-    if (error) throw new Error(error.message || 'Erreur de la fonction IA');
+    if (error) throw new Error((error.message || 'Erreur de la fonction IA') + ' — vérifie ta connexion et réessaie.');
     if (res && res.error) throw new Error(res.error);
     const items = Array.isArray(res?.items) ? res.items : [];
     if (!items.length) {
+      clearInterval(ticker);
       status.innerHTML = `<div class="empty-sub" style="padding:10px 0">😕 Aucun produit détecté sur la photo. Réessaie avec une photo plus nette, bien à plat et bien éclairée.</div>`;
       return;
     }
@@ -3846,13 +3855,16 @@ async function handleTicketPhoto(file) {
         sub_sub_category: ''
       };
     });
+    clearInterval(ticker);
     status.style.display = 'none';
     renderTicketReview();
   } catch (e) {
-    console.error(e);
-    status.innerHTML = `<div class="empty-sub" style="padding:10px 0;color:#E53935">⚠ ${esc(e.message || 'La lecture a échoué.')} <br><span style="color:var(--muted)">Si le problème persiste, vérifie que la fonction IA « monie-ai » est bien déployée.</span></div>`;
+    clearInterval(ticker);
+    console.error('[ticket] échec', e);
+    showError(e && e.message ? e.message : 'La lecture a échoué. Réessaie.');
   } finally {
-    $('ticket-file').value = '';
+    clearInterval(ticker);
+    if ($('ticket-file')) $('ticket-file').value = '';
   }
 }
 
