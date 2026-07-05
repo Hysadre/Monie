@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v64'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v65'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -4781,11 +4781,17 @@ function renderBudget() {
         ${items.map((it, i) => {
           const amt = Math.round(rev * it.pct / 100);
           const _done = catStat(it.cat).done;
+          const dkey = `${blocKey}-${i}`;
+          const open = _openSubDetails.has(dkey);
+          const subs = it.subs || [];
+          const subTotalPct = subs.reduce((s, x) => s + Number(x.pct || 0), 0);
+          const subOver = subTotalPct > Number(it.pct) + 0.001;
+          const subColor = subOver ? '#E53935' : (Math.abs(subTotalPct - Number(it.pct)) < 0.01 && subs.length ? 'var(--sage)' : 'var(--muted)');
           return `
             <div class="bud-sub-row${_done ? ' done' : ''}">
-              <div class="bud-sub-cat">
+              <div class="bud-sub-cat" onclick="toggleSubDetail('${blocKey}',${i})" style="cursor:pointer" title="Voir / remplir les postes de dépense">
                 <span style="width:8px;height:8px;border-radius:50%;background:${catColor(it.cat)};display:inline-block"></span>
-                ${catIcon(it.cat)} ${esc(it.cat)}${it.note ? ` <span style="color:var(--muted);font-size:11px">${esc(it.note)}</span>` : ''}
+                ${catIcon(it.cat)} ${esc(it.cat)} <span style="color:var(--muted);font-size:10px">${open ? '▾' : '▸'}</span>${subs.length ? ` <span style="font-size:10px;color:${subColor}">(${subs.length})</span>` : ''}${it.note ? ` <span style="color:var(--muted);font-size:11px">${esc(it.note)}</span>` : ''}
               </div>
               <input type="number" step="0.5" min="0" max="100" class="bud-sub-inp" value="${it.pct}"
                      onchange="updateSubBudget('${blocKey}',${i},this.value)">
@@ -4798,6 +4804,25 @@ function renderBudget() {
               </div>
               <input type="checkbox" class="bud-sub-check" ${_done ? 'checked' : ''} onchange="toggleCatDone('${esc(it.cat)}')" title="Coche quand c'est payé / réglé ✓ (partagé avec le détail du poste)" aria-label="Marquer comme payé">
               <button class="bud-sub-del" onclick="deleteSubBudgetLine('${blocKey}',${i})" title="Supprimer cette ligne">🗑</button>
+            </div>
+            <div id="subdetail-${blocKey}-${i}" style="display:${open ? '' : 'none'};margin:2px 0 12px 22px;padding:10px 12px;background:var(--bg);border-radius:10px">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Postes de « ${esc(it.cat)} » — la somme doit tenir dans <b>${it.pct}%</b> (${fmt(amt)})</div>
+              <datalist id="subdl-${blocKey}-${i}">${subcatDatalist(it.cat)}</datalist>
+              ${subs.map((sc, j) => {
+                const sAmt = Math.round(rev * (sc.pct || 0) / 100);
+                return `<div style="display:grid;grid-template-columns:1fr 52px auto 58px 26px;gap:6px;align-items:center;margin-bottom:6px">
+                  <input class="inp" list="subdl-${blocKey}-${i}" value="${esc(sc.name || '')}" onchange="renameSubcatBudget('${blocKey}',${i},${j},this.value)" placeholder="Ex: Hygiène, Dons…" style="padding:5px 8px;font-size:12px">
+                  <input type="number" min="0" step="0.5" value="${sc.pct || 0}" class="bud-sub-inp" onchange="updateSubcatBudget('${blocKey}',${i},${j},this.value)">
+                  <span style="font-size:11px;color:var(--muted)">%</span>
+                  <span style="font-family:var(--fm);font-size:12px;text-align:right;color:var(--muted)">${fmt(sAmt)}</span>
+                  <button class="bud-sub-del" onclick="deleteSubcatBudget('${blocKey}',${i},${j})" title="Supprimer">🗑</button>
+                </div>`;
+              }).join('')}
+              <button class="btn-ghost" style="padding:4px 10px;font-size:12px;margin-top:2px" onclick="addSubcatBudget('${blocKey}',${i})">+ Ajouter un poste</button>
+              <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;font-weight:700;border-top:1px solid var(--border-soft);padding-top:6px">
+                <span>Total postes</span>
+                <span style="color:${subColor}">${subTotalPct}% / ${it.pct}%${subOver ? ' ⚠ dépasse !' : (subs.length && Math.abs(subTotalPct - Number(it.pct)) < 0.01 ? ' ✓' : '')}</span>
+              </div>
             </div>`;
         }).join('')}
         <div class="bud-sub-total">
@@ -4848,6 +4873,46 @@ function updateSubBudget(blocKey, index, newPct) {
     saveBudgetPrep();          // enregistre dans budget_mensuel (mois affiché)
     renderBudget();
   } catch (e) { console.error(e); }
+}
+
+// ─── 3e niveau : postes de dépense d'une catégorie (doivent tenir dans le % de la catégorie) ───
+let _openSubDetails = new Set();
+function _budItem(blocKey, i) {
+  const sub = _ensureSubBudget();
+  return (sub[blocKey] && sub[blocKey][i]) ? sub[blocKey][i] : null;
+}
+function toggleSubDetail(blocKey, i) {
+  const key = `${blocKey}-${i}`;
+  const el = $(`subdetail-${blocKey}-${i}`);
+  if (_openSubDetails.has(key)) { _openSubDetails.delete(key); if (el) el.style.display = 'none'; }
+  else { _openSubDetails.add(key); if (el) el.style.display = ''; }
+  // maj de la flèche ▸/▾
+  renderBudget();
+}
+function addSubcatBudget(blocKey, i) {
+  const it = _budItem(blocKey, i); if (!it) return;
+  it.subs = it.subs || [];
+  it.subs.push({ name: '', pct: 0 });
+  _openSubDetails.add(`${blocKey}-${i}`);
+  saveBudgetPrep(); renderBudget();
+}
+function updateSubcatBudget(blocKey, i, j, pct) {
+  const it = _budItem(blocKey, i); if (!it || !it.subs || !it.subs[j]) return;
+  it.subs[j].pct = Math.round(Math.max(0, parseFloat(pct) || 0) * 10) / 10;
+  _openSubDetails.add(`${blocKey}-${i}`);
+  saveBudgetPrep(); renderBudget();
+}
+function renameSubcatBudget(blocKey, i, j, name) {
+  const it = _budItem(blocKey, i); if (!it || !it.subs || !it.subs[j]) return;
+  it.subs[j].name = (name || '').trim();
+  _openSubDetails.add(`${blocKey}-${i}`);
+  saveBudgetPrep(); renderBudget();
+}
+function deleteSubcatBudget(blocKey, i, j) {
+  const it = _budItem(blocKey, i); if (!it || !it.subs) return;
+  it.subs.splice(j, 1);
+  _openSubDetails.add(`${blocKey}-${i}`);
+  saveBudgetPrep(); renderBudget();
 }
 // Supprime une ligne de la répartition détaillée (ex : fusionner « restos » dans Alimentation)
 function deleteSubBudgetLine(blocKey, index) {
