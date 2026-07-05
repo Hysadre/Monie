@@ -242,16 +242,14 @@
 
               <!-- Étape 6 : Sous-catégorie -->
               <div class="qa-field">
-                <label class="qa-label">Sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(facultatif)</span></label>
-                <input class="inp" id="qa-subcat" list="qa-subcat-list" placeholder="Choisis ou saisis" onchange="updateQaSubsubs()">
-                <datalist id="qa-subcat-list"></datalist>
+                <label class="qa-label">Sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(choisis dans la liste)</span></label>
+                <select class="select" id="qa-subcat" onchange="onQaSubcatChange()"></select>
               </div>
 
               <!-- Étape 7 : Sous-sous-catégorie -->
               <div class="qa-field">
-                <label class="qa-label">Sous-sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(facultatif)</span></label>
-                <input class="inp" id="qa-subsub" list="qa-subsub-list" placeholder="Choisis ou saisis">
-                <datalist id="qa-subsub-list"></datalist>
+                <label class="qa-label">Sous-sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(choisis dans la liste)</span></label>
+                <select class="select" id="qa-subsub" onchange="onQaSubsubChange()"></select>
               </div>
 
               <button class="btn-primary qa-submit" onclick="quickAddTx()">✓ Ajouter</button>
@@ -528,17 +526,35 @@
         </div>
         <input type="file" id="import-file" accept=".csv,.pdf,.json" style="display:none" onchange="handleImportFile(this.files[0])">
         <div id="import-preview" style="margin-top:20px;display:none"></div>
+      </div>
 
-        <!-- 📸 Photographier une liste de courses / un ticket -->
-        <div class="card" style="margin-top:26px">
-          <div class="card-hd">
-            <div class="card-title">📸 Photographier une liste ou un ticket</div>
+      <!-- 🛒 COURSES -->
+      <div id="tab-courses" class="tab">
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">🛒 Listes de courses</h1>
+            <p class="page-sub">Photographie une liste ou un ticket — coche au fur et à mesure, réutilise, compare les prix</p>
           </div>
-          <p class="page-sub" style="margin:0 0 14px">
-            Prends en photo une <b>liste de courses</b> (même manuscrite) ou un <b>ticket de caisse</b>.
-            Monie lit les produits, tu les catégorises (catégorie → sous-catégorie → sous-sous-catégorie),
-            puis tu choisis de les ajouter en <b>transactions</b>, en <b>liste de courses</b>, ou les deux.
-          </p>
+        </div>
+        <div class="help-banner" id="help-courses">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">🛒</div>
+            <div class="help-banner-title">Comment ça marche — Courses</div>
+            <button class="help-banner-close" onclick="closeHelp('help-courses')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            <b>Prends une photo</b> d'une liste (même manuscrite) ou d'un ticket, juste ici en dessous. Monie lit les produits, tu vérifies, et tu choisis de les ajouter en transactions et/ou en liste de courses.
+            <ul>
+              <li><b>Coche</b> un produit quand il est dans ton panier</li>
+              <li><b>Réutilise</b> une ancienne liste : elle est recopiée (décochée) pour ton prochain mois</li>
+              <li><b>Compare les prix</b> : renseigne bien la <b>marque</b> pour voir la moins chère</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 📸 Scanner une liste / un ticket (directement ici) -->
+        <div class="card" style="margin-bottom:18px">
+          <div class="card-hd"><div class="card-title">📸 Photographier une liste ou un ticket</div></div>
           <div class="drop-zone" id="ticket-drop" onclick="document.getElementById('ticket-file').click()" style="border-color:var(--rose)">
             <div class="drop-zone-icon">📷</div>
             <div class="drop-zone-title">Prends une photo ou choisis une image</div>
@@ -549,34 +565,7 @@
           <div id="ticket-status" style="display:none;margin-top:16px"></div>
           <div id="ticket-review" style="display:none;margin-top:18px"></div>
         </div>
-      </div>
 
-      <!-- 🛒 COURSES -->
-      <div id="tab-courses" class="tab">
-        <div class="page-hd">
-          <div>
-            <h1 class="page-title">🛒 Listes de courses</h1>
-            <p class="page-sub">Tes produits scannés — coche au fur et à mesure, réutilise une liste, compare les prix</p>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center">
-            <button class="btn-ghost" onclick="showTab('import')" title="Ajouter par photo">📸 Scanner</button>
-          </div>
-        </div>
-        <div class="help-banner" id="help-courses">
-          <div class="help-banner-hd">
-            <div class="help-banner-icon">🛒</div>
-            <div class="help-banner-title">Comment ça marche — Courses</div>
-            <button class="help-banner-close" onclick="closeHelp('help-courses')">J'ai compris ✓</button>
-          </div>
-          <div class="help-banner-body">
-            Tes produits arrivent ici quand tu <b>scannes une liste ou un ticket</b> (page Import) et que tu choisis « liste de courses ».
-            <ul>
-              <li><b>Coche</b> un produit quand il est dans ton panier</li>
-              <li><b>Réutilise</b> une ancienne liste : elle est recopiée (décochée) pour ton prochain mois</li>
-              <li><b>Compare les prix</b> : renomme bien tes libellés / marques pour voir la moins chère</li>
-            </ul>
-          </div>
-        </div>
         <div class="dash-view-tabs" style="margin-bottom:16px">
           <button class="dash-view-btn active" id="courses-tab-listes" onclick="setCoursesView('listes')">📋 Mes listes</button>
           <button class="dash-view-btn" id="courses-tab-prix" onclick="setCoursesView('prix')">🏷️ Comparateur de prix</button>

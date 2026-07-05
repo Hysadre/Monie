@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v79'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v80'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1688,19 +1688,39 @@ function updatePayMethodOptions() {
 document.addEventListener('change', e => {
   if (e.target.matches('input[name="qa-type"]')) populateCategorySelects();
 });
-// Met à jour les suggestions de sous-catégorie du formulaire selon la catégorie choisie
+// Met à jour le menu déroulant de sous-catégorie du formulaire selon la catégorie choisie
 function updateQaSubcats() {
   const cat = $('qa-cat') ? $('qa-cat').value : '';
-  const dl = $('qa-subcat-list');
-  if (dl && typeof subcatDatalist === 'function') dl.innerHTML = subcatDatalist(cat);
-  if ($('qa-subcat')) $('qa-subcat').value = '';   // la sous-cat n'a plus de sens si la catégorie change
+  const sel = $('qa-subcat');
+  if (sel) sel.innerHTML = subcatOptions(cat, '');   // reset : la sous-cat n'a plus de sens si la catégorie change
   updateQaSubsubs();
 }
 function updateQaSubsubs() {
   const cat = $('qa-cat') ? $('qa-cat').value : '';
   const sub = $('qa-subcat') ? $('qa-subcat').value : '';
-  const dl = $('qa-subsub-list');
-  if (dl && typeof subsubDatalist === 'function') dl.innerHTML = subsubDatalist(cat, sub);
+  const sel = $('qa-subsub');
+  if (sel) sel.innerHTML = subsubOptions(cat, sub, '');
+}
+// Choix dans le menu sous-catégorie (gère « ➕ Autre… » → saisie libre)
+function onQaSubcatChange() {
+  const sel = $('qa-subcat'); if (!sel) return;
+  if (sel.value === '__custom__') {
+    const v = prompt('Nouvelle sous-catégorie :', '');
+    const cat = $('qa-cat') ? $('qa-cat').value : '';
+    sel.innerHTML = subcatOptions(cat, (v || '').trim());
+    if (v) sel.value = v.trim();
+  }
+  updateQaSubsubs();
+}
+function onQaSubsubChange() {
+  const sel = $('qa-subsub'); if (!sel) return;
+  if (sel.value === '__custom__') {
+    const v = prompt('Nouvelle sous-sous-catégorie :', '');
+    const cat = $('qa-cat') ? $('qa-cat').value : '';
+    const sub = $('qa-subcat') ? $('qa-subcat').value : '';
+    sel.innerHTML = subsubOptions(cat, sub, (v || '').trim());
+    if (v) sel.value = v.trim();
+  }
 }
 async function quickAddTx() {
   if (!selectedDay) { toast('Sélectionne un jour d\'abord', 'error'); return; }
@@ -3743,13 +3763,14 @@ async function confirmImport() {
 let _ticketDraft = [];  // lignes en cours de revue
 
 // Compresse une image (canvas) → { data: base64 sans préfixe, media_type }
-function _compressImage(file, maxDim = 1600, quality = 0.82) {
+function _compressImage(file, maxDim = 1500, quality = 0.8) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       try {
         let { width: w, height: h } = img;
+        if (!w || !h) { URL.revokeObjectURL(url); return reject(new Error('Dimensions image nulles')); }
         const scale = Math.min(1, maxDim / Math.max(w, h));
         w = Math.round(w * scale); h = Math.round(h * scale);
         const cv = document.createElement('canvas');
@@ -3760,26 +3781,56 @@ function _compressImage(file, maxDim = 1600, quality = 0.82) {
         resolve({ data: dataUrl.split(',')[1], media_type: 'image/jpeg' });
       } catch (e) { URL.revokeObjectURL(url); reject(e); }
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image illisible (format non supporté ?)')); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('canvas-failed')); };
     img.src = url;
   });
+}
+// Lit un fichier directement en base64 (secours si la conversion canvas échoue)
+function _fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => { const s = String(r.result || ''); resolve(s.split(',')[1] || ''); };
+    r.onerror = () => reject(new Error('Lecture du fichier impossible'));
+    r.readAsDataURL(file);
+  });
+}
+// Prépare l'image pour l'IA : compresse en JPEG, avec secours si le format bloque le canvas
+async function _prepareTicketImage(file) {
+  try {
+    return await _compressImage(file);
+  } catch (e) {
+    // Secours : si c'est déjà un format lisible par l'IA, on l'envoie brut
+    const t = (file.type || '').toLowerCase();
+    if (/(jpeg|jpg|png|webp|gif)/.test(t)) {
+      const data = await _fileToBase64(file);
+      return { data, media_type: t.includes('png') ? 'image/png' : (t.includes('webp') ? 'image/webp' : (t.includes('gif') ? 'image/gif' : 'image/jpeg')) };
+    }
+    // HEIC (photo iPhone) que le navigateur n'a pas su convertir
+    throw new Error('Ce format de photo (souvent HEIC des iPhones) n\'a pas pu être lu ici. Refais la photo, ou dans Réglages iPhone → Appareil photo → Formats → choisis « Le plus compatible » (JPEG).');
+  }
 }
 
 async function handleTicketPhoto(file) {
   if (!file) return;
   const status = $('ticket-status');
   const review = $('ticket-review');
+  if (!status || !review) { alert('Ouvre la page Courses pour scanner une photo.'); return; }
   review.style.display = 'none'; review.innerHTML = '';
   status.style.display = 'block';
-  status.innerHTML = `<div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px"><span class="spinner"></span> Monie lit ta photo… (quelques secondes)</div>`;
+  status.innerHTML = `<div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px"><span class="spinner"></span> Monie lit ta photo… (ça peut prendre 10-20 secondes)</div>`;
   try {
-    const { data, media_type } = await _compressImage(file);
-    const { data: res, error } = await sb.functions.invoke('monie-ai', { body: { mode: 'ticket', image: data, media_type } });
-    if (error) throw new Error(error.message || 'Erreur IA');
+    const { data, media_type } = await _prepareTicketImage(file);
+    console.log('[ticket] image prête', media_type, Math.round((data || '').length / 1024) + ' Ko (base64)');
+    // Appel IA avec un délai max de 60s (évite de rester bloqué indéfiniment)
+    const invokePromise = sb.functions.invoke('monie-ai', { body: { mode: 'ticket', image: data, media_type } });
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Temps dépassé (60s). Réessaie avec une photo plus légère / mieux cadrée.')), 60000));
+    const { data: res, error } = await Promise.race([invokePromise, timeout]);
+    console.log('[ticket] réponse IA', { error, res });
+    if (error) throw new Error(error.message || 'Erreur de la fonction IA');
     if (res && res.error) throw new Error(res.error);
     const items = Array.isArray(res?.items) ? res.items : [];
     if (!items.length) {
-      status.innerHTML = `<div class="empty-sub" style="padding:10px 0">😕 Aucun produit détecté. Réessaie avec une photo plus nette / mieux cadrée.</div>`;
+      status.innerHTML = `<div class="empty-sub" style="padding:10px 0">😕 Aucun produit détecté sur la photo. Réessaie avec une photo plus nette, bien à plat et bien éclairée.</div>`;
       return;
     }
     // Pré-catégorisation automatique de chaque ligne
@@ -3825,11 +3876,9 @@ function renderTicketReview() {
         <button class="bud-sub-del" onclick="ticketDeleteLine(${k})" title="Retirer cette ligne">🗑</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
-        <select class="select" onchange="ticketCat(${k},this.value)" style="font-size:12px;padding:6px">${_ticketCatSelect(k)}</select>
-        <input class="inp" list="ticket-sub-${k}" value="${esc(it.sub_category)}" onchange="ticketSub(${k},this.value)" placeholder="Sous-catégorie" style="padding:6px 8px;font-size:12px;min-width:0">
-        <datalist id="ticket-sub-${k}">${subcatDatalist(it.category)}</datalist>
-        <input class="inp" list="ticket-subsub-${k}" value="${esc(it.sub_sub_category)}" onchange="ticketField(${k},'sub_sub_category',this.value)" placeholder="Sous-sous-cat." style="padding:6px 8px;font-size:12px;min-width:0">
-        <datalist id="ticket-subsub-${k}">${subsubDatalist(it.category, it.sub_category)}</datalist>
+        <select class="select" title="Catégorie" onchange="ticketCat(${k},this.value)" style="font-size:12px;padding:6px">${_ticketCatSelect(k)}</select>
+        <select class="select" title="Sous-catégorie" onchange="ticketSubSelect(${k},this.value)" style="font-size:12px;padding:6px">${subcatOptions(it.category, it.sub_category)}</select>
+        <select class="select" title="Sous-sous-catégorie" onchange="ticketSubsubSelect(${k},this.value)" style="font-size:12px;padding:6px">${subsubOptions(it.category, it.sub_category, it.sub_sub_category)}</select>
       </div>
       <input class="inp" value="${esc(it.brand)}" onchange="ticketField(${k},'brand',this.value)" placeholder="Marque (pour comparer les prix — ex: Ariel)" style="padding:6px 8px;font-size:12px;margin-top:6px;width:100%;box-sizing:border-box">
     </div>`).join('');
@@ -3879,6 +3928,29 @@ function ticketSub(k, val) {
   if (!_ticketDraft[k]) return;
   _ticketDraft[k].sub_category = val;
   _ticketDraft[k].sub_sub_category = '';   // reset la sous-sous-cat quand la sous-cat change
+  renderTicketReview();
+}
+// Choix dans le menu déroulant sous-catégorie (gère « ➕ Autre… » → saisie libre)
+function ticketSubSelect(k, val) {
+  if (!_ticketDraft[k]) return;
+  if (val === '__custom__') {
+    const v = prompt('Nouvelle sous-catégorie :', _ticketDraft[k].sub_category || '');
+    if (v === null) { renderTicketReview(); return; }
+    ticketSub(k, (v || '').trim());
+    return;
+  }
+  ticketSub(k, val);
+}
+function ticketSubsubSelect(k, val) {
+  if (!_ticketDraft[k]) return;
+  if (val === '__custom__') {
+    const v = prompt('Nouvelle sous-sous-catégorie :', _ticketDraft[k].sub_sub_category || '');
+    if (v === null) { renderTicketReview(); return; }
+    _ticketDraft[k].sub_sub_category = (v || '').trim();
+    renderTicketReview();
+    return;
+  }
+  _ticketDraft[k].sub_sub_category = val;
   renderTicketReview();
 }
 function ticketAddLine() {
@@ -3948,10 +4020,12 @@ async function saveTicket() {
 
   ticketClear();
   await loadAllData();
+  await loadExtra();          // recharge la liste de courses (coursesList)
   const msg = dest === 'tx' ? '✓ Transactions ajoutées' : dest === 'list' ? `✓ ${valid.length} produit(s) dans ta liste de courses` : '✓ Transactions + liste enregistrées';
   toast(msg, 'success');
-  // La page « Courses » arrive en Phase 2 ; pour l'instant on reste ou on va aux transactions.
-  if (dest !== 'list' && $('tab-transactions')) showTab('transactions');
+  // On reste sur la page Courses et on rafraîchit la liste (le scanner est sur cette page).
+  if (typeof renderCourses === 'function') renderCourses();
+  if (dest === 'tx' && $('tab-transactions')) showTab('transactions');
 }
 
 // ═══ 🛒 PAGE COURSES (Phase 2) ═════════════════════════════════
@@ -3967,10 +4041,9 @@ function renderCourses() {
   const body = $('courses-body');
   if (!body) return;
   if (!coursesList.length) {
-    body.innerHTML = `<div class="empty" style="padding:40px 0;text-align:center">
+    body.innerHTML = `<div class="empty" style="padding:32px 0;text-align:center">
       <div class="empty-title">Aucune liste pour l'instant</div>
-      <div class="empty-sub" style="margin:8px 0 16px">Scanne une liste de courses ou un ticket depuis la page Import.</div>
-      <button class="btn-primary" onclick="showTab('import')">📸 Scanner une liste</button>
+      <div class="empty-sub" style="margin:8px 0 4px">Prends une photo d'une liste ou d'un ticket avec le bouton <b>📸 juste au-dessus</b> pour commencer.</div>
     </div>`;
     return;
   }
