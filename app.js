@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v77'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v78'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -96,6 +96,79 @@ const SUBCATS = {
   'Salaire': ['Salaire', 'Prime', 'Heures sup'],
   'Remboursements': ['Ami', 'Administratif', 'Banque', 'Achat marchand', 'Santé']
 };
+// Sous-SOUS-catégories prédéfinies : SUBSUBCATS[catégorie][sous-catégorie] = [niveau 3]
+// (listes déroulantes prêtes à l'emploi ; extensibles — les valeurs déjà utilisées s'ajoutent automatiquement)
+const SUBSUBCATS = {
+  'Alimentation': {
+    'Courses': ['Fruits & légumes', 'Viande', 'Poisson', 'Produits laitiers', 'Épicerie salée', 'Épicerie sucrée', 'Boissons', 'Surgelés', 'Pain & petit-déj', 'Bébé', 'Bio / Vrac'],
+    'Restos': ['Fast-food', 'Restaurant', 'Africain', 'Asiatique', 'Pizza', 'Brunch'],
+    'Livraison': ['Uber Eats', 'Deliveroo', 'Autre'],
+    'Boulangerie': ['Pain', 'Viennoiserie', 'Pâtisserie'],
+    'Café / Bar': ['Café', 'Bar', 'Salon de thé']
+  },
+  'Vie quotidienne': {
+    'Hygiène & entretien': ['Produits ménagers', 'Lessive', 'Vaisselle', 'Papier toilette / essuie-tout', 'Sacs poubelle', 'Désodorisant', 'Produits WC / salle de bain', 'Éponges / gants'],
+    'Maison & déco': ['Décoration', 'Linge de maison', 'Luminaire', 'Rangement', 'Plantes', 'Bougies'],
+    'Cuisine & ustensiles': ['Vaisselle', 'Ustensiles', 'Petit électroménager', 'Contenants / conservation'],
+    'Animaux': ['Nourriture', 'Litière', 'Accessoires', 'Vétérinaire'],
+    'Bricolage & réparations': ['Outils', 'Quincaillerie', 'Peinture', 'Électricité'],
+    'Papeterie & fournitures': ['Papeterie', 'Fournitures bureau', 'Cartouches / encre']
+  },
+  'Cosmétique': {
+    'Soins': ['Visage', 'Corps', 'Cheveux', 'Solaire', 'Mains & pieds'],
+    'Maquillage': ['Teint', 'Yeux', 'Lèvres', 'Ongles'],
+    'Coiffeur': ['Coupe', 'Couleur', 'Coiffure protectrice', 'Soin'],
+    'Parfum': ['Femme', 'Homme', 'Maison'],
+    'Ongles': ['Manucure', 'Pose', 'Vernis / matériel']
+  },
+  'Santé': {
+    'Pharmacie': ['Médicaments', 'Parapharmacie', 'Compléments', 'Hygiène', 'Premiers soins'],
+    'Médecin': ['Généraliste', 'Spécialiste', 'Gynéco', 'Dermato'],
+    'Optique': ['Lunettes', 'Lentilles', 'Produits'],
+    'Dentiste': ['Consultation', 'Soins', 'Orthodontie']
+  },
+  'Mode': {
+    'Vêtements': ['Haut', 'Bas', 'Robe', 'Manteau / veste', 'Pyjama / nuit'],
+    'Chaussures': ['Baskets', 'Talons', 'Bottes', 'Sandales'],
+    'Accessoires': ['Sac', 'Bijoux', 'Ceinture', 'Écharpe / bonnet', 'Lunettes de soleil'],
+    'Cheveux / perruques': ['Perruque', 'Tissage', 'Mèches / closure', 'Colle / entretien', 'Accessoires'],
+    'Sous-vêtements': ['Lingerie', 'Chaussettes', 'Collants']
+  },
+  'Transport': {
+    'Essence': ['Essence', 'Diesel', 'Recharge élec'],
+    'Train': ['SNCF', 'TER', 'TGV', 'Abonnement'],
+    'Bus / Métro': ['Ticket', 'Abonnement'],
+    'Uber / VTC': ['Uber', 'Bolt', 'Taxi']
+  },
+  'Abonnements': {
+    'Streaming': ['Netflix', 'Spotify', 'Disney+', 'Prime Video', 'YouTube', 'Canal+'],
+    'Téléphone': ['Forfait mobile', 'Recharge'],
+    'Internet': ['Box', 'Fibre'],
+    'IA': ['ChatGPT', 'Claude', 'Perplexity', 'Autre'],
+    'Salle de sport': ['Abonnement', 'Séance']
+  },
+  'Tech & Électronique': {
+    'Téléphone': ['Smartphone', 'Coque / protection', 'Chargeur'],
+    'Ordinateur / Tablette': ['PC portable', 'Tablette', 'Accessoires'],
+    'Audio / Casque': ['Écouteurs', 'Casque', 'Enceinte'],
+    'Accessoires': ['Câbles', 'Chargeur', 'Batterie externe', 'Stockage']
+  },
+  'Voyages': {
+    'Hébergement': ['Hôtel', 'Airbnb', 'Auberge'],
+    'Transport': ['Avion', 'Train', 'Location voiture', 'Bus'],
+    'Activités': ['Excursion', 'Musée', 'Parc'],
+    'Restauration': ['Restaurant', 'Snack']
+  },
+  'Amis & Famille': {
+    'Cadeaux': ['Anniversaire', 'Noël', 'Mariage', 'Naissance'],
+    'Famille': ['Aide', 'Envoi argent', 'Sortie']
+  },
+  'Divertissement': {
+    'Cinéma': ['Place', 'Abonnement', 'Confiseries'],
+    'Sorties': ['Bar', 'Boîte', 'Escape game', 'Bowling'],
+    'Jeux': ['Jeu vidéo', 'Jeu de société', 'Appli']
+  }
+};
 // Construit les <option> d'une sous-catégorie : prédéfinies + déjà utilisées + « Autre »
 function subcatOptions(category, current) {
   const cur = (current || '').trim();
@@ -124,6 +197,50 @@ function onSubcatSelect(id, val) {
   }
   updateTxSubcat(id, val);
 }
+
+// ── Niveau 3 : sous-sous-catégories (prédéfinies + déjà utilisées dans transactions & courses) ──
+function subsubList(category, subcategory) {
+  const sub = (subcategory || '').trim();
+  const predef = (SUBSUBCATS[category] && SUBSUBCATS[category][sub]) || [];
+  const src = [...(transactions || []), ...(coursesList || [])];
+  const used = [...new Set(src
+    .filter(t => t.category === category && (t.sub_category || '').trim() === sub)
+    .map(t => (t.sub_sub_category || '').trim()).filter(Boolean))];
+  return [...new Set([...predef, ...used])].sort();
+}
+function subsubOptions(category, subcategory, current) {
+  const cur = (current || '').trim();
+  const all = subsubList(category, subcategory);
+  if (cur && !all.includes(cur)) all.unshift(cur);
+  return `<option value="">— aucune —</option>`
+    + all.map(s => `<option value="${esc(s)}" ${s === cur ? 'selected' : ''}>${esc(s)}</option>`).join('')
+    + `<option value="__custom__">➕ Autre (saisir…)</option>`;
+}
+function subsubDatalist(category, subcategory) {
+  return subsubList(category, subcategory).map(s => `<option value="${esc(s)}">`).join('');
+}
+function onSubsubSelect(id, val) {
+  if (val === '__custom__') {
+    const tx = transactions.find(t => t.id === id);
+    const v = prompt('Nouvelle sous-sous-catégorie :', tx ? (tx.sub_sub_category || '') : '');
+    if (v === null) { renderTransactionsList(); return; }
+    updateTxSubsub(id, v);
+    return;
+  }
+  updateTxSubsub(id, val);
+}
+async function updateTxSubsub(id, val) {
+  const tx = transactions.find(t => t.id === id);
+  if (!tx) return;
+  if (!_hasSubsubCol) { toast('Lance d\'abord le SQL-V321 pour activer la sous-sous-catégorie', 'error'); return; }
+  const v = (val || '').trim() || null;
+  if ((tx.sub_sub_category || null) === v) return;
+  const { error } = await sb.from('transactions').update({ sub_sub_category: v }).eq('id', id);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  tx.sub_sub_category = v;
+  renderTransactionsList();
+}
+
 // Métadonnées des banques source (pastilles LCL / BoursoBank)
 const BANK_META = {
   'LCL':        { label: 'LCL',    color: '#0059A5', bg: '#E3EEFB' },
@@ -167,6 +284,12 @@ let remboursementsList = [];
 let enveloppesList = [];
 let dettesList = [];
 let coursesList = [];   // 🛒 liste de courses (table courses, SQL-V320)
+let _hasSubsubCol = true; // colonne transactions.sub_sub_category présente ? (détecté au chargement, SQL-V321)
+// Retire sub_sub_category d'un payload si la colonne n'existe pas encore (évite de casser avant le SQL-V321)
+function _sanitizeTx(obj) {
+  if (_hasSubsubCol || !obj || !('sub_sub_category' in obj)) return obj;
+  const o = { ...obj }; delete o.sub_sub_category; return o;
+}
 let showAchieved = false;
 let showAbandoned = false;
 let epargneMonth = new Date().getMonth();
@@ -691,6 +814,8 @@ async function loadAllData() {
     from += BATCH;
   }
   transactions = allTx;
+  // La colonne sub_sub_category existe-t-elle ? (SQL-V321). Si non, le front s'adapte au lieu de casser.
+  try { const c = await sb.from('transactions').select('sub_sub_category').limit(1); _hasSubsubCol = !c.error; } catch (e) { _hasSubsubCol = false; }
   const rulesRes = await sb.from('merchant_rules').select('*').or(`user_id.eq.${currentUser.id},user_id.is.null`).order('priority', { ascending: false });
   rules = rulesRes.data || [];
   await loadProfile();
@@ -1329,7 +1454,7 @@ function selectDay(dateStr) {
         <div class="day-tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}" title="${esc(t.payment_method || 'moyen non précisé')}">${payMethodIcon(t.payment_method) || catIcon(t.category)}</div>
         <div class="day-tx-info">
           <div class="day-tx-label">${esc(t.label)}${badge}</div>
-          <div class="day-tx-cat">${esc(t.category)}${t.sub_category ? ' · ' + esc(t.sub_category) : ''}</div>
+          <div class="day-tx-cat">${esc(t.category)}${t.sub_category ? ' · ' + esc(t.sub_category) : ''}${t.sub_sub_category ? ' · ' + esc(t.sub_sub_category) : ''}</div>
         </div>
         <div class="day-tx-amt ${t.type === 'entree' ? 'amt-in' : t.type === 'epargne' ? 'amt-save' : 'amt-out'}">${sign}${fmtD(Math.abs(Number(t.amount)))}</div>
         <span style="color:var(--rose);font-size:14px;margin-left:6px">✏️</span>
@@ -1567,6 +1692,14 @@ function updateQaSubcats() {
   const cat = $('qa-cat') ? $('qa-cat').value : '';
   const dl = $('qa-subcat-list');
   if (dl && typeof subcatDatalist === 'function') dl.innerHTML = subcatDatalist(cat);
+  if ($('qa-subcat')) $('qa-subcat').value = '';   // la sous-cat n'a plus de sens si la catégorie change
+  updateQaSubsubs();
+}
+function updateQaSubsubs() {
+  const cat = $('qa-cat') ? $('qa-cat').value : '';
+  const sub = $('qa-subcat') ? $('qa-subcat').value : '';
+  const dl = $('qa-subsub-list');
+  if (dl && typeof subsubDatalist === 'function') dl.innerHTML = subsubDatalist(cat, sub);
 }
 async function quickAddTx() {
   if (!selectedDay) { toast('Sélectionne un jour d\'abord', 'error'); return; }
@@ -1575,6 +1708,7 @@ async function quickAddTx() {
   const type = document.querySelector('input[name="qa-type"]:checked').value;
   const category = $('qa-cat').value;
   const subcat = ($('qa-subcat') && $('qa-subcat').value || '').trim() || null;
+  const subsubcat = ($('qa-subsub') && $('qa-subsub').value || '').trim() || null;
   const payMethod = $('qa-paymethod') ? $('qa-paymethod').value : null;
   if (!label || !amount || amount <= 0) { toast('Description et montant requis', 'error'); return; }
   // ⚠️ Alerte doublon : une opération du même montant existe déjà à ±3 jours ?
@@ -1600,11 +1734,12 @@ async function quickAddTx() {
     type: type,
     category: category,
     sub_category: subcat,
+    sub_sub_category: subsubcat,
     source: 'manual',
     merchant_key: merchantKey(label),
     payment_method: payMethod || null
   };
-  const { data, error } = await sb.from('transactions').insert(newTx).select().single();
+  const { data, error } = await sb.from('transactions').insert(_sanitizeTx(newTx)).select().single();
   if (error) { toast('Erreur : ' + error.message, 'error'); return; }
   transactions.unshift(data);
   // Épargne pour un objectif → alimente la jauge de la page Épargne
@@ -1615,6 +1750,7 @@ async function quickAddTx() {
   $('qa-label').value = '';
   $('qa-amount').value = '';
   if ($('qa-subcat')) $('qa-subcat').value = '';
+  if ($('qa-subsub')) $('qa-subsub').value = '';
   toast('✓ Ajouté dans le calendrier et les transactions', 'success');
   renderCalendar();
   selectDay(selectedDay);
@@ -2620,6 +2756,7 @@ function renderTransactionsList() {
         <th>Libellé</th>
         <th style="width:190px">Catégorie</th>
         <th style="width:150px">Sous-catégorie</th>
+        <th style="width:150px">Sous-sous-cat.</th>
         <th style="width:110px">Moyen</th>
         <th style="width:110px;text-align:right">Montant</th>
         <th style="width:74px;text-align:right">Actions</th>
@@ -2639,6 +2776,7 @@ function renderTransactionsList() {
             <div style="font-size:10px;color:var(--muted);margin-top:2px">${famT ? 'famille : ' + FAMILY_LABEL[famT] : ''}</div>
           </td>
           <td><select class="select tx-subcat-select" onchange="onSubcatSelect('${t.id}', this.value)" title="Choisis ou ajoute une sous-catégorie" style="width:100%;padding:5px 8px;font-size:12px">${subcatOptions(t.category, t.sub_category)}</select></td>
+          <td><select class="select tx-subsub-select" onchange="onSubsubSelect('${t.id}', this.value)" title="Choisis ou ajoute une sous-sous-catégorie" style="width:100%;padding:5px 8px;font-size:12px" ${(t.sub_category || '').trim() ? '' : 'disabled'}>${subsubOptions(t.category, t.sub_category, t.sub_sub_category)}</select></td>
           <td style="white-space:nowrap;color:var(--muted);font-size:12px" title="${esc(t.payment_method || 'non précisé')}">${payMethodIcon(t.payment_method) || ''} ${PM_SHORT[t.payment_method] || '—'}</td>
           <td class="${typeCls(t)}" style="text-align:right;font-family:var(--fm);white-space:nowrap">${typeSign(t)}${fmtD(Math.abs(Number(t.amount)))}</td>
           <td style="text-align:right;white-space:nowrap">
@@ -2794,9 +2932,10 @@ function openTxEdit(id) {
     const category = $('txedit-cat').value;
     const pm = $('txedit-pm').value || null;
     const subcat = ($('txedit-subcat') && $('txedit-subcat').value || '').trim() || null;
+    const subsubcat = ($('txedit-subsub') && $('txedit-subsub').value || '').trim() || null;
     if (!date || !label || !amount || amount <= 0) { toast('Date, libellé et montant requis', 'error'); return false; }
-    const patch = { date_op: date, label, amount: type === 'entree' ? amount : -amount, type, category, sub_category: subcat, payment_method: pm };
-    const { error } = await sb.from('transactions').update(patch).eq('id', id);
+    const patch = { date_op: date, label, amount: type === 'entree' ? amount : -amount, type, category, sub_category: subcat, sub_sub_category: subsubcat, payment_method: pm };
+    const { error } = await sb.from('transactions').update(_sanitizeTx(patch)).eq('id', id);
     if (error) { toast('Erreur : ' + error.message, 'error'); return false; }
     Object.assign(t, patch);
     transactions.sort((a, b) => a.date_op < b.date_op ? 1 : a.date_op > b.date_op ? -1 : 0);
@@ -2816,20 +2955,35 @@ function openTxEdit(id) {
         </select></div>
         <div class="auth-field"><label>Montant (€)</label><input class="inp" type="number" step="0.01" id="txedit-amount" value="${Math.abs(Number(t.amount))}"></div>
       </div>
-      <div class="auth-field"><label>Catégorie</label><select class="select" id="txedit-cat" onchange="_updateTxFamHint()">${catOpts}</select>
+      <div class="auth-field"><label>Catégorie</label><select class="select" id="txedit-cat" onchange="_updateTxFamHint(); _txeditRefreshLists()">${catOpts}</select>
         <div id="txedit-fam-hint" style="font-size:11px;color:var(--muted);margin-top:4px">Famille : ${FAMILY_LABEL[catFamily(t.category)] || '—'}</div></div>
-      <div class="auth-field"><label>Sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(choisis une suggestion ou saisis)</span></label><input class="inp" id="txedit-subcat" value="${esc(t.sub_category || '')}" list="txedit-subcat-list" placeholder="Facultatif"><datalist id="txedit-subcat-list">${subcatDatalist(t.category)}</datalist></div>
+      <div class="auth-field"><label>Sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(choisis une suggestion ou saisis)</span></label><input class="inp" id="txedit-subcat" value="${esc(t.sub_category || '')}" list="txedit-subcat-list" placeholder="Facultatif" onchange="_txeditRefreshSubsub('${t.id}')"><datalist id="txedit-subcat-list">${subcatDatalist(t.category)}</datalist></div>
+      <div class="auth-field"><label>Sous-sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(choisis une suggestion ou saisis)</span></label><input class="inp" id="txedit-subsub" value="${esc(t.sub_sub_category || '')}" list="txedit-subsub-list" placeholder="Facultatif"><datalist id="txedit-subsub-list">${subsubDatalist(t.category, t.sub_category)}</datalist></div>
       <div class="auth-field"><label>Moyen de paiement</label><select class="select" id="txedit-pm">${pmOpts}</select></div>
     </div>
   `);
 }
+// Rafraîchit les suggestions (datalists) de la modale d'édition quand catégorie/sous-cat changent
+function _txeditRefreshLists() {
+  const cat = ($('txedit-cat') && $('txedit-cat').value) || '';
+  const sub = ($('txedit-subcat') && $('txedit-subcat').value) || '';
+  const sl = $('txedit-subcat-list'); if (sl) sl.innerHTML = subcatDatalist(cat);
+  const ssl = $('txedit-subsub-list'); if (ssl) ssl.innerHTML = subsubDatalist(cat, sub);
+}
+function _txeditRefreshSubsub() {
+  const cat = ($('txedit-cat') && $('txedit-cat').value) || '';
+  const sub = ($('txedit-subcat') && $('txedit-subcat').value) || '';
+  const ssl = $('txedit-subsub-list'); if (ssl) ssl.innerHTML = subsubDatalist(cat, sub);
+}
 async function recategorizeTx(id, newCat) {
   const tx = transactions.find(t => t.id === id);
   if (!tx) return;
-  const { error } = await sb.from('transactions').update({ category: newCat, sub_category: null }).eq('id', id);
+  // Changer de catégorie remet à zéro la sous-cat ET la sous-sous-cat (elles n'ont plus de sens)
+  const { error } = await sb.from('transactions').update(_sanitizeTx({ category: newCat, sub_category: null, sub_sub_category: null })).eq('id', id);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
   tx.category = newCat;
   tx.sub_category = null;
+  tx.sub_sub_category = null;
   toast('✓ Catégorie mise à jour', 'success');
   renderTransactionsList();
 }
@@ -2839,9 +2993,11 @@ async function updateTxSubcat(id, val) {
   if (!tx) return;
   const v = (val || '').trim() || null;
   if ((tx.sub_category || null) === v) return; // rien changé
-  const { error } = await sb.from('transactions').update({ sub_category: v }).eq('id', id);
+  // Changer de sous-cat remet à zéro la sous-sous-cat rattachée
+  const { error } = await sb.from('transactions').update(_sanitizeTx({ sub_category: v, sub_sub_category: null })).eq('id', id);
   if (error) { toast('Erreur : ' + error.message, 'error'); return; }
   tx.sub_category = v;
+  tx.sub_sub_category = null;
   renderTransactionsList();
 }
 
@@ -2872,9 +3028,9 @@ async function applyTxBulkCategory() {
   if (!newCat) { toast('Choisis une catégorie', 'error'); return; }
   const ids = [...txSelectedIds];
   if (!ids.length) return;
-  const { error } = await sb.from('transactions').update({ category: newCat, sub_category: null }).in('id', ids);
+  const { error } = await sb.from('transactions').update(_sanitizeTx({ category: newCat, sub_category: null, sub_sub_category: null })).in('id', ids);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
-  transactions.forEach(t => { if (ids.includes(t.id)) { t.category = newCat; t.sub_category = null; } });
+  transactions.forEach(t => { if (ids.includes(t.id)) { t.category = newCat; t.sub_category = null; t.sub_sub_category = null; } });
   toast(`✓ ${ids.length} tx catégorisées`, 'success');
   txSelectedIds.clear();
   renderTransactionsList();
@@ -3651,12 +3807,6 @@ function _ticketCatSelect(k) {
   return Object.keys(CAT_META).sort().map(c =>
     `<option value="${esc(c)}" ${c === cur ? 'selected' : ''}>${CAT_META[c].emoji} ${esc(c)}</option>`).join('');
 }
-// Suggestions de sous-sous-catégories (niveau 3) déjà utilisées dans les listes de courses
-function _subSubDatalist() {
-  const used = [...new Set((coursesList || []).map(c => (c.sub_sub_category || '').trim()).filter(Boolean))];
-  return used.map(s => `<option value="${esc(s)}">`).join('');
-}
-
 function renderTicketReview() {
   const review = $('ticket-review');
   const total = _ticketDraft.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 1), 0);
@@ -3673,15 +3823,15 @@ function renderTicketReview() {
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
         <select class="select" onchange="ticketCat(${k},this.value)" style="font-size:12px;padding:6px">${_ticketCatSelect(k)}</select>
-        <input class="inp" list="ticket-sub-${k}" value="${esc(it.sub_category)}" onchange="ticketField(${k},'sub_category',this.value)" placeholder="Sous-catégorie" style="padding:6px 8px;font-size:12px;min-width:0">
+        <input class="inp" list="ticket-sub-${k}" value="${esc(it.sub_category)}" onchange="ticketSub(${k},this.value)" placeholder="Sous-catégorie" style="padding:6px 8px;font-size:12px;min-width:0">
         <datalist id="ticket-sub-${k}">${subcatDatalist(it.category)}</datalist>
-        <input class="inp" list="ticket-subsub" value="${esc(it.sub_sub_category)}" onchange="ticketField(${k},'sub_sub_category',this.value)" placeholder="Sous-sous-cat." style="padding:6px 8px;font-size:12px;min-width:0">
+        <input class="inp" list="ticket-subsub-${k}" value="${esc(it.sub_sub_category)}" onchange="ticketField(${k},'sub_sub_category',this.value)" placeholder="Sous-sous-cat." style="padding:6px 8px;font-size:12px;min-width:0">
+        <datalist id="ticket-subsub-${k}">${subsubDatalist(it.category, it.sub_category)}</datalist>
       </div>
       <input class="inp" value="${esc(it.brand)}" onchange="ticketField(${k},'brand',this.value)" placeholder="Marque (pour comparer les prix — ex: Ariel)" style="padding:6px 8px;font-size:12px;margin-top:6px;width:100%;box-sizing:border-box">
     </div>`).join('');
   review.style.display = 'block';
   review.innerHTML = `
-    <datalist id="ticket-subsub">${_subSubDatalist()}</datalist>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div style="font-weight:800;font-size:15px">🧾 ${_ticketDraft.length} produit(s) lu(s)</div>
       <div style="font-family:var(--fm);font-weight:800;color:var(--rose)">${fmt(Math.round(total))}</div>
@@ -3718,7 +3868,14 @@ function ticketField(k, field, val) {
 function ticketCat(k, val) {
   if (!_ticketDraft[k]) return;
   _ticketDraft[k].category = val;
-  _ticketDraft[k].sub_category = '';   // reset la sous-cat quand la catégorie change
+  _ticketDraft[k].sub_category = '';       // reset sous-cat + sous-sous-cat quand la catégorie change
+  _ticketDraft[k].sub_sub_category = '';
+  renderTicketReview();
+}
+function ticketSub(k, val) {
+  if (!_ticketDraft[k]) return;
+  _ticketDraft[k].sub_category = val;
+  _ticketDraft[k].sub_sub_category = '';   // reset la sous-sous-cat quand la sous-cat change
   renderTicketReview();
 }
 function ticketAddLine() {
@@ -3756,12 +3913,13 @@ async function saveTicket() {
       type: 'sortie',
       category: it.category || 'Vie quotidienne',
       sub_category: (it.sub_category || '').trim() || null,
+      sub_sub_category: (it.sub_sub_category || '').trim() || null,
       source: 'import_photo',
       account: 'Compte courant',
       payment_method: detectPaymentMethod(it.label)
     }));
     if (txs.length) {
-      const { error } = await sb.from('transactions').insert(txs);
+      const { error } = await sb.from('transactions').insert(txs.map(_sanitizeTx));
       if (error) { toast('Erreur transactions : ' + error.message, 'error'); console.error(error); return; }
     }
   }
@@ -5698,7 +5856,7 @@ function doGlobalSearch() {
     const cls = t.type === 'entree' ? 'amt-in' : (t.type === 'epargne' ? 'amt-save' : 'amt-out');
     return `<div class="day-tx-item" style="cursor:pointer" onclick="closeSearch();openTxEdit('${t.id}')" title="Modifier">
       <div class="day-tx-icon" style="background:${catColor(t.category)}18;color:${catColor(t.category)}">${catIcon(t.category)}</div>
-      <div class="day-tx-info"><div class="tx-label">${esc(t.label)}</div><div class="tx-cat">${t.date_op} · ${esc(t.category || '')}${t.sub_category ? ' · ' + esc(t.sub_category) : ''}</div></div>
+      <div class="day-tx-info"><div class="tx-label">${esc(t.label)}</div><div class="tx-cat">${t.date_op} · ${esc(t.category || '')}${t.sub_category ? ' · ' + esc(t.sub_category) : ''}${t.sub_sub_category ? ' · ' + esc(t.sub_sub_category) : ''}</div></div>
       <div class="day-tx-amt ${cls}">${sign}${fmtD(Math.abs(Number(t.amount)))}</div>
     </div>`;
   }).join('');
