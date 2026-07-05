@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v69'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v70'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -62,6 +62,7 @@ const CAT_META = {
   'Voyages': { emoji: '✈️', color: '#4FC3F7' },
   'Divertissement': { emoji: '🎬', color: '#E76F51' },
   'Tech & Électronique': { emoji: '💻', color: '#4A5568' },
+  'Livres': { emoji: '📚', color: '#8B5A2B' },
   'Aide au logement': { emoji: '🏘️', color: '#7FB89E' },
   'Paiement échelonné': { emoji: '💳', color: '#B79CD6' },
   'Imprévus': { emoji: '⚡', color: '#E8A317' },
@@ -75,12 +76,14 @@ const SUBCATS = {
   'Banque': ['Frais bancaires', 'Agios', 'Cotisation carte', 'Assurance', 'Virement'],
   'Abonnements': ['Téléphone', 'Internet', 'Streaming', 'Salle de sport', 'IA', 'Logiciels', 'Presse', 'Cloud'],
   'Santé': ['Médecin', 'Pharmacie', 'Mutuelle', 'Dentiste', 'Optique', 'Kiné', 'Analyses'],
-  'Mode': ['Vêtements', 'Chaussures', 'Accessoires', 'Sous-vêtements', 'Sport'],
+
   'Cosmétique': ['Soins', 'Coiffeur', 'Maquillage', 'Parfum', 'Ongles'],
   'Loyer': ['Loyer', 'Charges', 'Caution', 'Eau', 'Électricité', 'Gaz'],
   'Administratif': ['Papiers', 'Amendes', 'Assurance habitation', 'Timbres / Poste', 'Frais divers'],
   'Vie quotidienne': ['Hygiène corps', 'Hygiène entretien (ménager)', 'Produits ménagers', 'Lessive / linge', 'Papier toilette / essuie-tout', 'Maison / déco', 'Cuisine / ustensiles', 'Animaux', 'Bricolage / réparations', 'Papeterie / fournitures', 'Piles & ampoules', 'Divers'],
   'Tech & Électronique': ['Téléphone', 'Ordinateur / Tablette', 'Audio / Casque', 'Écran / TV', 'Accessoires', 'Électroménager', 'Gaming', 'Objets connectés'],
+  'Livres': ['Romans', 'BD / Mangas', 'Développement perso', 'Études / pro', 'Presse'],
+  'Mode': ['Vêtements', 'Chaussures', 'Accessoires', 'Cheveux / perruques', 'Sous-vêtements', 'Sport'],
   'Divertissement': ['Cinéma', 'Sorties', 'Jeux', 'Concerts', 'Livres', 'Musées'],
   'Dons': ['Association', 'Caritatif', 'Cagnotte'],
   'Dîme': ['Église'],
@@ -1189,6 +1192,9 @@ function categorize(label, amount) {
   if (L.includes('direction generale des finances') || L.includes('dgfip') || L.includes('finances pub')) return { category: 'Impôts', sub_category: null };
   if (L.includes('caf du nord') || L.includes('caf nord')) return { category: 'Aide au logement', sub_category: 'CAF' };
   if (L.includes('shein') || L.includes('zalando') || L.includes('asos') || L.includes('na-kd')) return { category: 'Mode', sub_category: null };
+  if (L.includes('aliexpress') || L.includes('alibaba')) return { category: 'Mode', sub_category: 'Cheveux / perruques' };
+  if (L.includes('apple')) return { category: 'Tech & Électronique', sub_category: null };
+  if (L.includes('fnac')) return { category: 'Livres', sub_category: null };
   if (L.includes('klarna') || L.includes('scalapay')) return { category: 'Paiement échelonné', sub_category: null };
   if (L.includes('sfr') || L.includes('bouygues telecom')) return { category: 'Abonnements', sub_category: 'Téléphone' };
   if (L.includes('claude') || L.includes('anthropic') || L.includes('perplexity') || L.includes('openai') || L.includes('chatgpt') || L.includes('midjourney')) return { category: 'Abonnements', sub_category: 'IA' };
@@ -4351,7 +4357,7 @@ const BUDGET_BLOCK = {
   'Loyer': 'charges', 'Alimentation': 'charges', 'Transport': 'charges', 'Santé': 'charges',
   'Abonnements': 'charges', 'Administratif': 'charges',
   'Impôts': 'charges', 'Banque': 'charges', 'Éducation': 'charges', 'Aide au logement': 'charges',
-  'Vie quotidienne': 'plaisir', 'Mode': 'plaisir', 'Cosmétique': 'plaisir', 'Dons': 'plaisir', 'Tech & Électronique': 'plaisir',
+  'Vie quotidienne': 'plaisir', 'Mode': 'plaisir', 'Cosmétique': 'plaisir', 'Dons': 'plaisir', 'Tech & Électronique': 'plaisir', 'Livres': 'plaisir',
   'Amis & Famille': 'plaisir', 'Divertissement': 'plaisir', 'Voyages': 'plaisir',
   'Dîme': 'charges', 'Investissements': 'epargne', 'Imprévus': 'imprevus'
 };
@@ -4835,11 +4841,12 @@ function renderBudget() {
               <datalist id="subdl-${blocKey}-${i}">${subcatDatalist(it.cat)}</datalist>
               ${subs.map((sc, j) => {
                 const sAmt = Math.round(rev * (sc.pct || 0) / 100);
-                return `<div style="display:grid;grid-template-columns:1fr 52px auto 58px 26px;gap:6px;align-items:center;margin-bottom:6px">
+                return `<div style="display:grid;grid-template-columns:1fr 52px auto 58px 20px 22px;gap:6px;align-items:center;margin-bottom:6px${sc.done ? ';opacity:.5' : ''}">
                   <input class="inp" list="subdl-${blocKey}-${i}" value="${esc(sc.name || '')}" onchange="renameSubcatBudget('${blocKey}',${i},${j},this.value)" placeholder="Ex: Hygiène, Dons…" style="padding:5px 8px;font-size:12px">
                   <input type="number" min="0" step="0.5" value="${sc.pct || 0}" class="bud-sub-inp" onchange="updateSubcatBudget('${blocKey}',${i},${j},this.value)">
                   <span style="font-size:11px;color:var(--muted)">%</span>
                   <span style="font-family:var(--fm);font-size:12px;text-align:right;color:var(--muted)">${fmt(sAmt)}</span>
+                  <input type="checkbox" class="bud-sub-check" ${sc.done ? 'checked' : ''} onchange="toggleSubcatDone('${blocKey}',${i},${j})" title="Cocher quand c'est validé / acheté ✓">
                   <button class="bud-sub-del" onclick="deleteSubcatBudget('${blocKey}',${i},${j})" title="Supprimer">🗑</button>
                 </div>`;
               }).join('')}
@@ -4938,6 +4945,14 @@ function deleteSubcatBudget(blocKey, i, j) {
   it.subs.splice(j, 1);
   _openSubDetails.add(`${blocKey}-${i}`);
   saveBudgetPrep(); renderBudget();
+}
+// Coche/décoche un poste comme « validé / acheté » (par mois)
+function toggleSubcatDone(blocKey, i, j) {
+  const it = _budItem(blocKey, i); if (!it || !it.subs || !it.subs[j]) return;
+  it.subs[j].done = !it.subs[j].done;
+  _openSubDetails.add(`${blocKey}-${i}`);
+  saveBudgetPrep(); renderBudget();
+  if (typeof _navRefresh === 'function') _navRefresh();
 }
 // Supprime une ligne de la répartition détaillée (ex : fusionner « restos » dans Alimentation)
 function deleteSubBudgetLine(blocKey, index) {
