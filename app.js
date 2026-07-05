@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v66'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v67'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5304,7 +5304,7 @@ function doGlobalSearch() {
 }
 document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openSearch(); }
-  else if (e.key === 'Escape') { const m = $('search-modal'); if (m && m.style.display !== 'none') closeSearch(); }
+  else if (e.key === 'Escape') { const m = $('search-modal'); if (m && m.style.display !== 'none') closeSearch(); const g = $('glossary-modal'); if (g && g.style.display !== 'none') closeGlossary(); }
 });
 
 // ═══ 🤝 REMBOURSEMENTS · 📦 ENVELOPPES · 💳 DETTES ═══
@@ -5518,4 +5518,47 @@ function openDashCustomize() {
     applyDashHidden();
     toast('✓ Tableau de bord personnalisé', 'success');
   }, body);
+}
+
+// ═══ 📖 GLOSSAIRE ═══
+const GLOSSARY = [
+  ['Reste à dépenser', 'Ton revenu du mois − ce que tu as déjà dépensé. Ce qu\'il te reste, en théorie, pour le reste du mois.'],
+  ['Reste à vivre par jour', 'Le reste à dépenser, divisé par les jours restants du mois (après tes dépenses prévues). Combien tu peux dépenser par jour sans déraper.'],
+  ['Ton rythme récent', 'La moyenne de tes dépenses des 3 derniers mois, comparée à ton revenu. Une estimation indicative — pas une fatalité.'],
+  ['Famille', 'Les 4 grands blocs de ton budget : 🏠 Charges (nécessités), 🌸 Plaisir (envies), 🌱 Épargne, ⚡ Imprévus. Leurs % font 100 % ensemble.'],
+  ['Cible', 'Le montant que tu prévois pour une famille ou une catégorie. C\'est ton objectif de budget (le plan).'],
+  ['Réparti / suggéré', 'La somme de tes sous-lignes détaillées. Idéalement, elle doit correspondre exactement à ta cible.'],
+  ['Réel dépensé', 'Ce qui est vraiment sorti de ton compte (tes vraies transactions), par opposition au budget prévu.'],
+  ['Catégorie', 'Le classement d\'une opération (Alimentation, Loyer, Mode…). Chaque catégorie appartient à une famille.'],
+  ['Sous-catégorie', 'Une étiquette plus fine sur une transaction (ex : Banque → « Frais bancaires »). Sert à analyser en détail.'],
+  ['Poste de dépense', 'Le 3ᵉ niveau de budget : dans une catégorie, tu répartis en postes (ex : Vie quotidienne → Hygiène corps, Produits ménagers…). La somme doit tenir dans le % de la catégorie.'],
+  ['À prévoir', 'Un pense-bête des dépenses que tu sais devoir faire ce mois. Ce n\'est PAS déduit du reste à dépenser — juste un rappel.'],
+  ['Objectif d\'épargne', 'Une cagnotte que tu remplis (+ Ajouter) et dans laquelle tu pioches dedans (− Utiliser) quand tu dépenses ce que tu as mis de côté.'],
+  ['Contribuer / Ajouter', 'Mettre de l\'argent sur un objectif d\'épargne.'],
+  ['Utiliser (retirer)', 'Reprendre de l\'argent d\'un objectif quand tu dépenses ce que tu avais provisionné.'],
+  ['Terminé / Annulé', 'États d\'un objectif : ✅ Terminé (atteint, réactivable), 🚫 Annulé (mis de côté, grisé, réactivable).'],
+  ['Taux d\'épargne', 'La part de ton revenu que tu mets de côté (épargne ÷ revenus) sur la période.'],
+  ['Épargne (type)', 'Une opération qui n\'est ni une dépense ni un revenu : de l\'argent déplacé pour être mis de côté.'],
+  ['Récurrents', 'Tes dépenses qui reviennent chaque mois (loyer, abonnements…). Monie les détecte automatiquement et te propose de les mettre « à prévoir ».'],
+  ['Remboursements', 'Le suivi de « qui te doit de l\'argent » et « à qui tu dois » (ex : Julien te doit 183 €).'],
+  ['Dettes & échelonné', 'Klarna, prêts, paiements en plusieurs fois : combien il reste, en combien de mensualités.'],
+  ['Patrimoine', 'La somme de tout ce que tu possèdes : comptes courants + épargne + placements. Sa courbe montre si ça monte.'],
+  ['Règles de catégorisation', 'Des règles « quand le libellé contient X → catégorie Y » que Monie applique automatiquement à tes imports et saisies.'],
+  ['Alertes', 'Monie te prévient d\'une dépense inhabituelle ou d\'un dépassement de budget, sans que tu aies à chercher.'],
+  ['Récap du mois', 'Un bilan personnalisé (par l\'IA) de ton mois écoulé, généré quand TU valides que le mois est complet. Archivé dans Analyse.'],
+  ['Séries & badges', 'Ta motivation : nombre de mois d\'épargne d\'affilée, objectifs atteints, mois suivis…'],
+  ['File à catégoriser', 'Les opérations rangées dans « Autres » (non reconnues) que tu peux reclasser rapidement.'],
+  ['Moyen de paiement', 'Carte, espèces, virement, prélèvement, chèque, ticket resto — comment l\'opération a été réglée.']
+];
+function openGlossary() { const m = $('glossary-modal'); if (!m) return; m.style.display = 'flex'; if ($('glossary-search')) $('glossary-search').value = ''; renderGlossary(); }
+function closeGlossary() { const m = $('glossary-modal'); if (m) m.style.display = 'none'; }
+function renderGlossary() {
+  const box = $('glossary-list'); if (!box) return;
+  const q = ($('glossary-search') && $('glossary-search').value || '').trim().toLowerCase();
+  const list = GLOSSARY.filter(([t, d]) => !q || t.toLowerCase().includes(q) || d.toLowerCase().includes(q))
+    .sort((a, b) => a[0].localeCompare(b[0], 'fr'));
+  box.innerHTML = list.length ? list.map(([t, d]) => `<div style="padding:10px 0;border-bottom:1px solid var(--border-soft)">
+    <div style="font-weight:800;font-size:14px;margin-bottom:2px">${esc(t)}</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.5">${esc(d)}</div>
+  </div>`).join('') : '<div class="empty-sub" style="padding:16px;text-align:center">Aucune définition ne correspond.</div>';
 }
