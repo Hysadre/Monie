@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v75'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v76'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -4907,11 +4907,15 @@ function renderBudget() {
               ${subs.map((sc, j) => {
                 const sAmt = Math.round(rev * (sc.pct || 0) / 100);
                 const nItems = Array.isArray(sc.items) ? sc.items.length : 0;
-                return `<div style="display:grid;grid-template-columns:1fr 48px auto 64px 20px 22px;gap:6px;align-items:center;margin-bottom:6px${sc.done ? ';opacity:.5' : ''}">
-                  <input class="inp" list="subdl-${blocKey}-${i}" value="${esc(sc.name || '')}" onchange="renameSubcatBudget('${blocKey}',${i},${j},this.value)" placeholder="Ex: Hygiène & entretien…" style="padding:5px 8px;font-size:12px">
-                  <input type="number" min="0" step="0.5" value="${sc.pct || 0}" class="bud-sub-inp" onchange="updateSubcatBudget('${blocKey}',${i},${j},this.value)">
+                return `<div style="display:grid;grid-template-columns:minmax(0,1fr) 52px auto 62px auto 20px 22px;gap:5px;align-items:center;margin-bottom:6px${sc.done ? ';opacity:.5' : ''}">
+                  <input class="inp" list="subdl-${blocKey}-${i}" value="${esc(sc.name || '')}" onchange="renameSubcatBudget('${blocKey}',${i},${j},this.value)" placeholder="Ex: Hygiène & entretien…" style="padding:5px 8px;font-size:12px;min-width:0">
+                  <input type="number" min="0" step="0.5" value="${sc.pct || 0}" class="bud-sub-inp" onchange="updateSubcatBudget('${blocKey}',${i},${j},this.value)" style="padding:5px 6px">
                   <span style="font-size:11px;color:var(--muted)">%</span>
-                  <button type="button" onclick="openPosteItems('${blocKey}',${i},${j})" title="Ouvrir le détail (sous-postes)" style="background:var(--rose-soft);border:1px solid var(--rose);color:var(--rose);border-radius:6px;padding:4px 6px;font-size:11px;font-family:var(--fm);cursor:pointer;white-space:nowrap">${fmt(sAmt)} ▾${nItems ? ` ·${nItems}` : ''}</button>
+                  <div style="display:flex;align-items:center;gap:2px">
+                    <input type="number" min="0" step="1" value="${sAmt}" title="Montant en € — le % se calcule tout seul" onchange="updateSubcatBudgetAmount('${blocKey}',${i},${j},this.value)" style="width:44px;padding:5px 5px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
+                    <span style="font-size:11px;color:var(--muted)">€</span>
+                  </div>
+                  <button type="button" onclick="openPosteItems('${blocKey}',${i},${j})" title="Ouvrir le détail (sous-postes)" style="background:var(--rose-soft);border:1px solid var(--rose);color:var(--rose);border-radius:6px;padding:4px 5px;font-size:11px;font-family:var(--fm);cursor:pointer;white-space:nowrap">▾${nItems ? nItems : ''}</button>
                   <input type="checkbox" class="bud-sub-check" ${sc.done ? 'checked' : ''} onchange="toggleSubcatDone('${blocKey}',${i},${j})" title="Cocher quand c'est validé / payé ✓">
                   <button class="bud-sub-del" onclick="deleteSubcatBudget('${blocKey}',${i},${j})" title="Supprimer">🗑</button>
                 </div>`;
@@ -5000,6 +5004,14 @@ function updateSubcatBudget(blocKey, i, j, pct) {
   _openSubDetails.add(`${blocKey}-${i}`);
   saveBudgetPrep(); renderBudget();
 }
+// Saisie du MONTANT en € sur un poste → convertit en % automatiquement
+function updateSubcatBudgetAmount(blocKey, i, j, amount) {
+  const rev = budgetData.revenu_mensuel || 0;
+  if (!rev) { toast('Renseigne d\'abord ton revenu mensuel', 'error'); renderBudget(); return; }
+  const amt = Math.max(0, parseFloat(amount) || 0);
+  const pct = Math.round(amt / rev * 1000) / 10;
+  updateSubcatBudget(blocKey, i, j, pct);
+}
 function renameSubcatBudget(blocKey, i, j, name) {
   const it = _budItem(blocKey, i); if (!it || !it.subs || !it.subs[j]) return;
   it.subs[j].name = (name || '').trim();
@@ -5048,11 +5060,14 @@ function renderPosteItems() {
   list.innerHTML = `<datalist id="poste-items-dl">${subcatDatalist(cat)}</datalist>`
     + (sc.items.length ? sc.items.map((x, k) => {
       const a = Math.round(rev * (x.pct || 0) / 100);
-      return `<div style="display:grid;grid-template-columns:1fr 50px auto 60px 20px 22px;gap:6px;align-items:center;margin-bottom:8px${x.done ? ';opacity:.5' : ''}">
-        <input class="inp" list="poste-items-dl" value="${esc(x.name || '')}" onchange="renamePosteItem(${k},this.value)" placeholder="Ex: Produit ménager, Corps…" style="padding:6px 8px;font-size:13px">
+      return `<div style="display:grid;grid-template-columns:minmax(0,1fr) 50px auto 66px 20px 22px;gap:6px;align-items:center;margin-bottom:8px${x.done ? ';opacity:.5' : ''}">
+        <input class="inp" list="poste-items-dl" value="${esc(x.name || '')}" onchange="renamePosteItem(${k},this.value)" placeholder="Ex: Produit ménager, Corps…" style="padding:6px 8px;font-size:13px;min-width:0">
         <input type="number" min="0" step="0.5" value="${x.pct || 0}" class="bud-sub-inp" onchange="updatePosteItemPct(${k},this.value)">
         <span style="font-size:11px;color:var(--muted)">%</span>
-        <span style="font-family:var(--fm);font-size:12px;text-align:right;color:var(--muted)">${fmt(a)}</span>
+        <div style="display:flex;align-items:center;gap:2px;justify-content:flex-end">
+          <input type="number" min="0" step="1" value="${a}" title="Montant en € — le % se calcule tout seul" onchange="updatePosteItemAmount(${k},this.value)" style="width:48px;padding:5px 5px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
+          <span style="font-size:11px;color:var(--muted)">€</span>
+        </div>
         <input type="checkbox" class="bud-sub-check" ${x.done ? 'checked' : ''} onchange="togglePosteItemDone(${k})" title="Cocher quand c'est payé ✓">
         <button class="bud-sub-del" onclick="deletePosteItem(${k})" title="Supprimer">🗑</button>
       </div>`;
@@ -5065,6 +5080,12 @@ function renderPosteItems() {
 function _posteSave() { saveBudgetPrep(); renderPosteItems(); if (typeof renderBudget === 'function') renderBudget(); }
 function addPosteItem() { const sc = _posteObj(); if (!sc) return; sc.items = sc.items || []; sc.items.push({ name: '', pct: 0 }); _posteSave(); }
 function updatePosteItemPct(k, v) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; sc.items[k].pct = Math.round(Math.max(0, parseFloat(v) || 0) * 10) / 10; _posteSave(); }
+function updatePosteItemAmount(k, v) {
+  const rev = budgetData.revenu_mensuel || 0;
+  if (!rev) { toast('Renseigne d\'abord ton revenu mensuel', 'error'); renderPosteItems(); return; }
+  const amt = Math.max(0, parseFloat(v) || 0);
+  updatePosteItemPct(k, Math.round(amt / rev * 1000) / 10);
+}
 function renamePosteItem(k, v) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; sc.items[k].name = (v || '').trim(); _posteSave(); }
 function deletePosteItem(k) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; const nm = sc.items[k].name || 'ce sous-poste'; confirmDelete(`Supprimer « ${esc(nm)} » ?`, () => { sc.items.splice(k, 1); _posteSave(); }); }
 function togglePosteItemDone(k) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; sc.items[k].done = !sc.items[k].done; _posteSave(); }
