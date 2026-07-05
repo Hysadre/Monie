@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v73'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v77'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -80,7 +80,7 @@ const SUBCATS = {
   'Cosmétique': ['Soins', 'Coiffeur', 'Maquillage', 'Parfum', 'Ongles'],
   'Loyer': ['Loyer', 'Charges', 'Caution', 'Eau', 'Électricité', 'Gaz'],
   'Administratif': ['Papiers', 'Amendes', 'Assurance habitation', 'Timbres / Poste', 'Frais divers'],
-  'Vie quotidienne': ['Hygiène corps', 'Hygiène entretien (ménager)', 'Produits ménagers', 'Lessive / linge', 'Papier toilette / essuie-tout', 'Maison / déco', 'Cuisine / ustensiles', 'Animaux', 'Bricolage / réparations', 'Papeterie / fournitures', 'Piles & ampoules', 'Divers'],
+  'Vie quotidienne': ['Hygiène & entretien', 'Maison & déco', 'Cuisine & ustensiles', 'Animaux', 'Bricolage & réparations', 'Papeterie & fournitures', 'Divers'],
   'Tech & Électronique': ['Téléphone', 'Ordinateur / Tablette', 'Audio / Casque', 'Écran / TV', 'Accessoires', 'Électroménager', 'Gaming', 'Objets connectés'],
   'Livres': ['Romans', 'BD / Mangas', 'Développement perso', 'Études / pro', 'Presse'],
   'Mode': ['Vêtements', 'Chaussures', 'Accessoires', 'Cheveux / perruques', 'Sous-vêtements', 'Sport'],
@@ -166,6 +166,7 @@ let contribList = [];
 let remboursementsList = [];
 let enveloppesList = [];
 let dettesList = [];
+let coursesList = [];   // 🛒 liste de courses (table courses, SQL-V320)
 let showAchieved = false;
 let showAbandoned = false;
 let epargneMonth = new Date().getMonth();
@@ -700,6 +701,7 @@ async function loadExtra() {
   try { const r = await sb.from('remboursements').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }); if (!r.error) remboursementsList = r.data || []; } catch (e) {}
   try { const r = await sb.from('enveloppes').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }); if (!r.error) enveloppesList = r.data || []; } catch (e) {}
   try { const r = await sb.from('dettes').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }); if (!r.error) dettesList = r.data || []; } catch (e) {}
+  try { const r = await sb.from('courses').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }); if (!r.error) coursesList = r.data || []; } catch (e) {}
 }
 
 // Affiche la version de l'app (témoin de déploiement) dès que possible
@@ -3578,6 +3580,219 @@ async function confirmImport() {
   else showTab('calendar');
 }
 
+// ═══ 📸 PHOTO → LISTE DE COURSES / TRANSACTIONS ════════════════════
+let _ticketDraft = [];  // lignes en cours de revue
+
+// Compresse une image (canvas) → { data: base64 sans préfixe, media_type }
+function _compressImage(file, maxDim = 1600, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        let { width: w, height: h } = img;
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        w = Math.round(w * scale); h = Math.round(h * scale);
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = cv.toDataURL('image/jpeg', quality);
+        URL.revokeObjectURL(url);
+        resolve({ data: dataUrl.split(',')[1], media_type: 'image/jpeg' });
+      } catch (e) { URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image illisible (format non supporté ?)')); };
+    img.src = url;
+  });
+}
+
+async function handleTicketPhoto(file) {
+  if (!file) return;
+  const status = $('ticket-status');
+  const review = $('ticket-review');
+  review.style.display = 'none'; review.innerHTML = '';
+  status.style.display = 'block';
+  status.innerHTML = `<div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px"><span class="spinner"></span> Monie lit ta photo… (quelques secondes)</div>`;
+  try {
+    const { data, media_type } = await _compressImage(file);
+    const { data: res, error } = await sb.functions.invoke('monie-ai', { body: { mode: 'ticket', image: data, media_type } });
+    if (error) throw new Error(error.message || 'Erreur IA');
+    if (res && res.error) throw new Error(res.error);
+    const items = Array.isArray(res?.items) ? res.items : [];
+    if (!items.length) {
+      status.innerHTML = `<div class="empty-sub" style="padding:10px 0">😕 Aucun produit détecté. Réessaie avec une photo plus nette / mieux cadrée.</div>`;
+      return;
+    }
+    // Pré-catégorisation automatique de chaque ligne
+    _ticketDraft = items.map(it => {
+      const g = categorize(it.label, -Math.abs(it.price || 0));
+      return {
+        label: it.label || '',
+        brand: it.brand || '',
+        price: (it.price != null ? Number(it.price) : ''),
+        qty: it.qty || 1,
+        category: g.category || 'Vie quotidienne',
+        sub_category: g.sub_category || '',
+        sub_sub_category: ''
+      };
+    });
+    status.style.display = 'none';
+    renderTicketReview();
+  } catch (e) {
+    console.error(e);
+    status.innerHTML = `<div class="empty-sub" style="padding:10px 0;color:#E53935">⚠ ${esc(e.message || 'La lecture a échoué.')} <br><span style="color:var(--muted)">Si le problème persiste, vérifie que la fonction IA « monie-ai » est bien déployée.</span></div>`;
+  } finally {
+    $('ticket-file').value = '';
+  }
+}
+
+function _ticketCatSelect(k) {
+  const cur = _ticketDraft[k].category;
+  return Object.keys(CAT_META).sort().map(c =>
+    `<option value="${esc(c)}" ${c === cur ? 'selected' : ''}>${CAT_META[c].emoji} ${esc(c)}</option>`).join('');
+}
+// Suggestions de sous-sous-catégories (niveau 3) déjà utilisées dans les listes de courses
+function _subSubDatalist() {
+  const used = [...new Set((coursesList || []).map(c => (c.sub_sub_category || '').trim()).filter(Boolean))];
+  return used.map(s => `<option value="${esc(s)}">`).join('');
+}
+
+function renderTicketReview() {
+  const review = $('ticket-review');
+  const total = _ticketDraft.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 1), 0);
+  const rows = _ticketDraft.map((it, k) => `
+    <div style="border:1px solid var(--border-soft);border-radius:12px;padding:12px;margin-bottom:10px;background:white">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 70px 44px 30px;gap:8px;align-items:center;margin-bottom:8px">
+        <input class="inp" value="${esc(it.label)}" onchange="ticketField(${k},'label',this.value)" placeholder="Produit" style="padding:7px 9px;font-size:13px;min-width:0">
+        <div style="display:flex;align-items:center;gap:2px">
+          <input class="inp" type="number" step="0.01" min="0" value="${it.price}" onchange="ticketField(${k},'price',this.value)" placeholder="€" style="padding:7px 6px;text-align:right;font-family:var(--fm);min-width:0">
+          <span style="font-size:11px;color:var(--muted)">€</span>
+        </div>
+        <input class="inp" type="number" step="1" min="1" value="${it.qty}" onchange="ticketField(${k},'qty',this.value)" title="Quantité" style="padding:7px 5px;text-align:center;min-width:0">
+        <button class="bud-sub-del" onclick="ticketDeleteLine(${k})" title="Retirer cette ligne">🗑</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        <select class="select" onchange="ticketCat(${k},this.value)" style="font-size:12px;padding:6px">${_ticketCatSelect(k)}</select>
+        <input class="inp" list="ticket-sub-${k}" value="${esc(it.sub_category)}" onchange="ticketField(${k},'sub_category',this.value)" placeholder="Sous-catégorie" style="padding:6px 8px;font-size:12px;min-width:0">
+        <datalist id="ticket-sub-${k}">${subcatDatalist(it.category)}</datalist>
+        <input class="inp" list="ticket-subsub" value="${esc(it.sub_sub_category)}" onchange="ticketField(${k},'sub_sub_category',this.value)" placeholder="Sous-sous-cat." style="padding:6px 8px;font-size:12px;min-width:0">
+      </div>
+      <input class="inp" value="${esc(it.brand)}" onchange="ticketField(${k},'brand',this.value)" placeholder="Marque (pour comparer les prix — ex: Ariel)" style="padding:6px 8px;font-size:12px;margin-top:6px;width:100%;box-sizing:border-box">
+    </div>`).join('');
+  review.style.display = 'block';
+  review.innerHTML = `
+    <datalist id="ticket-subsub">${_subSubDatalist()}</datalist>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-weight:800;font-size:15px">🧾 ${_ticketDraft.length} produit(s) lu(s)</div>
+      <div style="font-family:var(--fm);font-weight:800;color:var(--rose)">${fmt(Math.round(total))}</div>
+    </div>
+    ${rows}
+    <button class="btn-ghost" style="padding:6px 12px;font-size:13px;margin-bottom:16px" onclick="ticketAddLine()">+ Ajouter une ligne</button>
+
+    <div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px">Où veux-tu ajouter ces produits ?</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:13px"><input type="radio" name="ticket-dest" value="both" checked> 💸 Transactions <b>+</b> 🛒 liste de courses</label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:13px"><input type="radio" name="ticket-dest" value="tx"> 💸 Transactions seules</label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="radio" name="ticket-dest" value="list"> 🛒 Liste de courses seule</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+        <div>
+          <label class="qa-label" style="font-size:11px">Date (pour les transactions)</label>
+          <input class="inp" type="date" id="ticket-date" value="${_todayISO()}" style="width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <label class="qa-label" style="font-size:11px">Nom de la liste</label>
+          <input class="inp" id="ticket-listkey" value="${_curKey || ''}" placeholder="Ex: 2026-07, Ménage…" style="width:100%;box-sizing:border-box">
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn-primary" onclick="saveTicket()" style="flex:1">✓ Enregistrer</button>
+      <button class="btn-ghost" onclick="ticketClear()">Annuler</button>
+    </div>`;
+}
+
+function ticketField(k, field, val) {
+  if (!_ticketDraft[k]) return;
+  _ticketDraft[k][field] = (field === 'price' || field === 'qty') ? (val === '' ? '' : Number(val)) : val;
+}
+function ticketCat(k, val) {
+  if (!_ticketDraft[k]) return;
+  _ticketDraft[k].category = val;
+  _ticketDraft[k].sub_category = '';   // reset la sous-cat quand la catégorie change
+  renderTicketReview();
+}
+function ticketAddLine() {
+  _ticketDraft.push({ label: '', brand: '', price: '', qty: 1, category: 'Vie quotidienne', sub_category: '', sub_sub_category: '' });
+  renderTicketReview();
+}
+function ticketDeleteLine(k) {
+  _ticketDraft.splice(k, 1);
+  if (_ticketDraft.length) renderTicketReview(); else ticketClear();
+}
+function ticketClear() {
+  _ticketDraft = [];
+  $('ticket-review').style.display = 'none';
+  $('ticket-review').innerHTML = '';
+  $('ticket-status').style.display = 'none';
+}
+function _todayISO() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+
+async function saveTicket() {
+  const valid = _ticketDraft.filter(it => (it.label || '').trim());
+  if (!valid.length) { toast('Aucun produit à enregistrer', 'error'); return; }
+  const dest = (document.querySelector('input[name="ticket-dest"]:checked') || {}).value || 'both';
+  const listKey = ($('ticket-listkey').value || _curKey || '').trim();
+  const dateOp = $('ticket-date').value || _todayISO();
+
+  // → Transactions
+  if (dest === 'both' || dest === 'tx') {
+    const withPrice = valid.filter(it => Number(it.price) > 0);
+    if (!withPrice.length && dest === 'tx') { toast('Aucun prix renseigné : impossible de créer des transactions', 'error'); return; }
+    const txs = withPrice.map(it => ({
+      user_id: currentUser.id,
+      date_op: dateOp,
+      label: it.label.trim(),
+      amount: -Math.abs(Number(it.price) * (Number(it.qty) || 1)),
+      type: 'sortie',
+      category: it.category || 'Vie quotidienne',
+      sub_category: (it.sub_category || '').trim() || null,
+      source: 'import_photo',
+      account: 'Compte courant',
+      payment_method: detectPaymentMethod(it.label)
+    }));
+    if (txs.length) {
+      const { error } = await sb.from('transactions').insert(txs);
+      if (error) { toast('Erreur transactions : ' + error.message, 'error'); console.error(error); return; }
+    }
+  }
+
+  // → Liste de courses
+  if (dest === 'both' || dest === 'list') {
+    const rows = valid.map(it => ({
+      user_id: currentUser.id,
+      label: it.label.trim(),
+      brand: (it.brand || '').trim() || null,
+      category: it.category || null,
+      sub_category: (it.sub_category || '').trim() || null,
+      sub_sub_category: (it.sub_sub_category || '').trim() || null,
+      price: (it.price === '' || it.price == null) ? null : Number(it.price),
+      qty: Number(it.qty) || 1,
+      checked: false,
+      list_key: listKey || null,
+      source: 'photo'
+    }));
+    const { error } = await dbGuard(sb.from('courses').insert(rows), 'Ajout à la liste impossible (as-tu lancé le SQL-V320 ?)');
+    if (error) return;
+  }
+
+  ticketClear();
+  await loadAllData();
+  const msg = dest === 'tx' ? '✓ Transactions ajoutées' : dest === 'list' ? `✓ ${valid.length} produit(s) dans ta liste de courses` : '✓ Transactions + liste enregistrées';
+  toast(msg, 'success');
+  // La page « Courses » arrive en Phase 2 ; pour l'instant on reste ou on va aux transactions.
+  if (dest !== 'list' && $('tab-transactions')) showTab('transactions');
+}
+
 // ═══ SUIVI MENSUEL ═════════════════════════════════════════════
 function populateYearSelect() {
   const now = new Date().getFullYear();
@@ -4553,12 +4768,12 @@ function renderBudgetStatus(containerId, compact, monthKey) {
     const dayEl = _now.getDate();
     const daysIn = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate();
     const daysLeft = Math.max(1, daysIn - dayEl + 1);
-    const freeLeft = Math.max(0, reste - aPrevoir);
-    const perDay = Math.round(freeLeft / daysLeft);
+    // Basé UNIQUEMENT sur le reste à dépenser (revenu − déjà dépensé). Le « à prévoir » n'entre PAS dans le calcul.
+    const perDay = Math.round(Math.max(0, reste) / daysLeft);
     dailyHtml = `<div style="text-align:center;padding:12px;border-radius:12px;background:rgba(127,184,158,0.10);margin-bottom:14px">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">💧 Reste à vivre par jour</div>
       <div style="font-size:24px;font-weight:900;color:var(--sage);font-family:var(--fm)">${fmt(perDay)}<span style="font-size:13px;color:var(--muted)"> /jour</span></div>
-      <div style="font-size:11px;color:var(--muted)">≈ ${fmt(perDay * 7)}/semaine · ${daysLeft} jour(s) restant(s)${aPrevoir > 0 ? ` · après tes ${fmt(aPrevoir)} à prévoir` : ''}</div>
+      <div style="font-size:11px;color:var(--muted)">≈ ${fmt(perDay * 7)}/semaine · sur les ${daysLeft} jour(s) restant(s)</div>
     </div>`;
   }
   el.innerHTML = `
@@ -4907,11 +5122,15 @@ function renderBudget() {
               ${subs.map((sc, j) => {
                 const sAmt = Math.round(rev * (sc.pct || 0) / 100);
                 const nItems = Array.isArray(sc.items) ? sc.items.length : 0;
-                return `<div style="display:grid;grid-template-columns:1fr 48px auto 64px 20px 22px;gap:6px;align-items:center;margin-bottom:6px${sc.done ? ';opacity:.5' : ''}">
-                  <input class="inp" list="subdl-${blocKey}-${i}" value="${esc(sc.name || '')}" onchange="renameSubcatBudget('${blocKey}',${i},${j},this.value)" placeholder="Ex: Hygiène & entretien…" style="padding:5px 8px;font-size:12px">
-                  <input type="number" min="0" step="0.5" value="${sc.pct || 0}" class="bud-sub-inp" onchange="updateSubcatBudget('${blocKey}',${i},${j},this.value)">
+                return `<div style="display:grid;grid-template-columns:minmax(0,1fr) 52px auto 62px auto 20px 22px;gap:5px;align-items:center;margin-bottom:6px${sc.done ? ';opacity:.5' : ''}">
+                  <input class="inp" list="subdl-${blocKey}-${i}" value="${esc(sc.name || '')}" onchange="renameSubcatBudget('${blocKey}',${i},${j},this.value)" placeholder="Ex: Hygiène & entretien…" style="padding:5px 8px;font-size:12px;min-width:0">
+                  <input type="number" min="0" step="0.5" value="${sc.pct || 0}" class="bud-sub-inp" onchange="updateSubcatBudget('${blocKey}',${i},${j},this.value)" style="padding:5px 6px">
                   <span style="font-size:11px;color:var(--muted)">%</span>
-                  <button type="button" onclick="openPosteItems('${blocKey}',${i},${j})" title="Ouvrir le détail (sous-postes)" style="background:var(--rose-soft);border:1px solid var(--rose);color:var(--rose);border-radius:6px;padding:4px 6px;font-size:11px;font-family:var(--fm);cursor:pointer;white-space:nowrap">${fmt(sAmt)} ▾${nItems ? ` ·${nItems}` : ''}</button>
+                  <div style="display:flex;align-items:center;gap:2px">
+                    <input type="number" min="0" step="1" value="${sAmt}" title="Montant en € — le % se calcule tout seul" onchange="updateSubcatBudgetAmount('${blocKey}',${i},${j},this.value)" style="width:44px;padding:5px 5px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
+                    <span style="font-size:11px;color:var(--muted)">€</span>
+                  </div>
+                  <button type="button" onclick="openPosteItems('${blocKey}',${i},${j})" title="Ouvrir le détail (sous-postes)" style="background:var(--rose-soft);border:1px solid var(--rose);color:var(--rose);border-radius:6px;padding:4px 5px;font-size:11px;font-family:var(--fm);cursor:pointer;white-space:nowrap">▾${nItems ? nItems : ''}</button>
                   <input type="checkbox" class="bud-sub-check" ${sc.done ? 'checked' : ''} onchange="toggleSubcatDone('${blocKey}',${i},${j})" title="Cocher quand c'est validé / payé ✓">
                   <button class="bud-sub-del" onclick="deleteSubcatBudget('${blocKey}',${i},${j})" title="Supprimer">🗑</button>
                 </div>`;
@@ -5000,6 +5219,14 @@ function updateSubcatBudget(blocKey, i, j, pct) {
   _openSubDetails.add(`${blocKey}-${i}`);
   saveBudgetPrep(); renderBudget();
 }
+// Saisie du MONTANT en € sur un poste → convertit en % automatiquement
+function updateSubcatBudgetAmount(blocKey, i, j, amount) {
+  const rev = budgetData.revenu_mensuel || 0;
+  if (!rev) { toast('Renseigne d\'abord ton revenu mensuel', 'error'); renderBudget(); return; }
+  const amt = Math.max(0, parseFloat(amount) || 0);
+  const pct = Math.round(amt / rev * 1000) / 10;
+  updateSubcatBudget(blocKey, i, j, pct);
+}
 function renameSubcatBudget(blocKey, i, j, name) {
   const it = _budItem(blocKey, i); if (!it || !it.subs || !it.subs[j]) return;
   it.subs[j].name = (name || '').trim();
@@ -5048,11 +5275,14 @@ function renderPosteItems() {
   list.innerHTML = `<datalist id="poste-items-dl">${subcatDatalist(cat)}</datalist>`
     + (sc.items.length ? sc.items.map((x, k) => {
       const a = Math.round(rev * (x.pct || 0) / 100);
-      return `<div style="display:grid;grid-template-columns:1fr 50px auto 60px 20px 22px;gap:6px;align-items:center;margin-bottom:8px${x.done ? ';opacity:.5' : ''}">
-        <input class="inp" list="poste-items-dl" value="${esc(x.name || '')}" onchange="renamePosteItem(${k},this.value)" placeholder="Ex: Produit ménager, Corps…" style="padding:6px 8px;font-size:13px">
+      return `<div style="display:grid;grid-template-columns:minmax(0,1fr) 50px auto 66px 20px 22px;gap:6px;align-items:center;margin-bottom:8px${x.done ? ';opacity:.5' : ''}">
+        <input class="inp" list="poste-items-dl" value="${esc(x.name || '')}" onchange="renamePosteItem(${k},this.value)" placeholder="Ex: Produit ménager, Corps…" style="padding:6px 8px;font-size:13px;min-width:0">
         <input type="number" min="0" step="0.5" value="${x.pct || 0}" class="bud-sub-inp" onchange="updatePosteItemPct(${k},this.value)">
         <span style="font-size:11px;color:var(--muted)">%</span>
-        <span style="font-family:var(--fm);font-size:12px;text-align:right;color:var(--muted)">${fmt(a)}</span>
+        <div style="display:flex;align-items:center;gap:2px;justify-content:flex-end">
+          <input type="number" min="0" step="1" value="${a}" title="Montant en € — le % se calcule tout seul" onchange="updatePosteItemAmount(${k},this.value)" style="width:48px;padding:5px 5px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
+          <span style="font-size:11px;color:var(--muted)">€</span>
+        </div>
         <input type="checkbox" class="bud-sub-check" ${x.done ? 'checked' : ''} onchange="togglePosteItemDone(${k})" title="Cocher quand c'est payé ✓">
         <button class="bud-sub-del" onclick="deletePosteItem(${k})" title="Supprimer">🗑</button>
       </div>`;
@@ -5065,6 +5295,12 @@ function renderPosteItems() {
 function _posteSave() { saveBudgetPrep(); renderPosteItems(); if (typeof renderBudget === 'function') renderBudget(); }
 function addPosteItem() { const sc = _posteObj(); if (!sc) return; sc.items = sc.items || []; sc.items.push({ name: '', pct: 0 }); _posteSave(); }
 function updatePosteItemPct(k, v) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; sc.items[k].pct = Math.round(Math.max(0, parseFloat(v) || 0) * 10) / 10; _posteSave(); }
+function updatePosteItemAmount(k, v) {
+  const rev = budgetData.revenu_mensuel || 0;
+  if (!rev) { toast('Renseigne d\'abord ton revenu mensuel', 'error'); renderPosteItems(); return; }
+  const amt = Math.max(0, parseFloat(v) || 0);
+  updatePosteItemPct(k, Math.round(amt / rev * 1000) / 10);
+}
 function renamePosteItem(k, v) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; sc.items[k].name = (v || '').trim(); _posteSave(); }
 function deletePosteItem(k) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; const nm = sc.items[k].name || 'ce sous-poste'; confirmDelete(`Supprimer « ${esc(nm)} » ?`, () => { sc.items.splice(k, 1); _posteSave(); }); }
 function togglePosteItemDone(k) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; sc.items[k].done = !sc.items[k].done; _posteSave(); }
@@ -5692,7 +5928,7 @@ function openDashCustomize() {
 // ═══ 📖 GLOSSAIRE ═══
 const GLOSSARY = [
   ['Reste à dépenser', 'Ton revenu du mois − ce que tu as déjà dépensé. Ce qu\'il te reste, en théorie, pour le reste du mois.'],
-  ['Reste à vivre par jour', 'Le reste à dépenser, divisé par les jours restants du mois (après tes dépenses prévues). Combien tu peux dépenser par jour sans déraper.'],
+  ['Reste à vivre par jour', 'Le reste à dépenser (revenu − déjà dépensé) divisé par les jours restants du mois. Combien tu peux dépenser par jour. Le « à prévoir » n\'entre PAS dans ce calcul (ce sont juste tes notes).'],
   ['Ton rythme récent', 'La moyenne de tes dépenses des 3 derniers mois, comparée à ton revenu. Une estimation indicative — pas une fatalité.'],
   ['Famille', 'Les 4 grands blocs de ton budget : 🏠 Charges (nécessités), 🌸 Plaisir (envies), 🌱 Épargne, ⚡ Imprévus. Leurs % font 100 % ensemble.'],
   ['Cible', 'Le montant que tu prévois pour une famille ou une catégorie. C\'est ton objectif de budget (le plan).'],

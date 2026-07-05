@@ -517,6 +517,27 @@
         </div>
         <input type="file" id="import-file" accept=".csv,.pdf,.json" style="display:none" onchange="handleImportFile(this.files[0])">
         <div id="import-preview" style="margin-top:20px;display:none"></div>
+
+        <!-- 📸 Photographier une liste de courses / un ticket -->
+        <div class="card" style="margin-top:26px">
+          <div class="card-hd">
+            <div class="card-title">📸 Photographier une liste ou un ticket</div>
+          </div>
+          <p class="page-sub" style="margin:0 0 14px">
+            Prends en photo une <b>liste de courses</b> (même manuscrite) ou un <b>ticket de caisse</b>.
+            Monie lit les produits, tu les catégorises (catégorie → sous-catégorie → sous-sous-catégorie),
+            puis tu choisis de les ajouter en <b>transactions</b>, en <b>liste de courses</b>, ou les deux.
+          </p>
+          <div class="drop-zone" id="ticket-drop" onclick="document.getElementById('ticket-file').click()" style="border-color:var(--rose)">
+            <div class="drop-zone-icon">📷</div>
+            <div class="drop-zone-title">Prends une photo ou choisis une image</div>
+            <div class="drop-zone-sub">Liste de courses, ticket de caisse, capture d'écran…</div>
+            <div class="drop-zone-formats">JPG, PNG, HEIC</div>
+          </div>
+          <input type="file" id="ticket-file" accept="image/*" capture="environment" style="display:none" onchange="handleTicketPhoto(this.files[0])">
+          <div id="ticket-status" style="display:none;margin-top:16px"></div>
+          <div id="ticket-review" style="display:none;margin-top:18px"></div>
+        </div>
       </div>
 
       <!-- 📈 SUIVI MENSUEL -->
