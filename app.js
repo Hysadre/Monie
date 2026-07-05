@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v85'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v86'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3838,12 +3838,10 @@ async function _prepareTicketImage(file) {
 }
 
 async function handleTicketPhoto(file) {
-  // 🩺 DIAGNOSTIC TEMPORAIRE — à retirer après debug
-  alert('🔎 Test Monie\nLecture lancée : OUI\nFichier : ' + (file ? ((file.name || 'photo') + '\nTaille : ' + Math.round((file.size || 0) / 1024) + ' Ko\nType : ' + (file.type || 'inconnu')) : 'AUCUN FICHIER REÇU'));
   if (!file) return;
   const status = $('ticket-status');
   const review = $('ticket-review');
-  if (!status || !review) { alert('🔎 Test : la zone d\'affichage (ticket-status/review) est INTROUVABLE sur cette page.'); return; }
+  if (!status || !review) { toast('Ouvre la page Courses pour scanner une photo', 'error'); return; }
   review.style.display = 'none'; review.innerHTML = '';
   status.style.display = 'block';
   // Chrono visible + étape en cours, pour qu'on VOIE que ça travaille (et où ça s'arrête)
@@ -3854,7 +3852,6 @@ async function handleTicketPhoto(file) {
   const showError = (msg) => { status.innerHTML = `<div style="padding:12px 14px;border-radius:10px;background:rgba(229,57,53,0.10);border:1px solid #E53935;color:#C62828;font-size:13px;line-height:1.5">⚠ <b>Échec de la lecture</b><br>${esc(msg)}</div>`; };
   try {
     const { data, media_type } = await _prepareTicketImage(file);
-    alert('🔎 Étape 2 — image préparée OK\nFormat : ' + media_type + '\nPoids : ' + Math.round((data || '').length / 1024) + ' Ko');
     console.log('[ticket] image prête', media_type, Math.round((data || '').length / 1024) + ' Ko (base64)');
     if (!data) throw new Error('Image vide après préparation. Réessaie avec une autre photo.');
     _step = 'Monie lit ta photo…';
@@ -3863,7 +3860,6 @@ async function handleTicketPhoto(file) {
     const invokePromise = sb.functions.invoke('monie-ai', { body: { mode: 'ticket', image: data, media_type } });
     const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Temps dépassé (60s). La photo est peut-être trop lourde, ou l\'IA a mis trop de temps. Réessaie.')), 60000));
     const { data: res, error } = await Promise.race([invokePromise, timeout]);
-    alert('🔎 Étape 3 — réponse IA reçue\nErreur : ' + (error ? (error.message || 'oui') : 'non') + '\nProduits trouvés : ' + (res && res.items ? res.items.length : (res && res.error ? 'ERREUR: ' + res.error : '0')));
     console.log('[ticket] réponse IA', { error, res });
     if (error) throw new Error((error.message || 'Erreur de la fonction IA') + ' — vérifie ta connexion et réessaie.');
     if (res && res.error) throw new Error(res.error);
@@ -3891,7 +3887,6 @@ async function handleTicketPhoto(file) {
     renderTicketReview();
   } catch (e) {
     clearInterval(ticker);
-    alert('🔎 ERREUR attrapée :\n' + (e && e.message ? e.message : String(e)));
     console.error('[ticket] échec', e);
     showError(e && e.message ? e.message : 'La lecture a échoué. Réessaie.');
   } finally {
@@ -3947,7 +3942,7 @@ function renderTicketReview() {
         </div>
         <div>
           <label class="qa-label" style="font-size:11px">Nom de la liste</label>
-          <input class="inp" id="ticket-listkey" value="${_curKey || ''}" placeholder="Ex: 2026-07, Ménage…" style="width:100%;box-sizing:border-box">
+          <input class="inp" id="ticket-listkey" value="${_todayISO().slice(0, 7)}" placeholder="Ex: 2026-07, Ménage…" style="width:100%;box-sizing:border-box">
         </div>
       </div>
     </div>
@@ -4017,7 +4012,7 @@ async function saveTicket() {
   const valid = _ticketDraft.filter(it => (it.label || '').trim());
   if (!valid.length) { toast('Aucun produit à enregistrer', 'error'); return; }
   const dest = (document.querySelector('input[name="ticket-dest"]:checked') || {}).value || 'both';
-  const listKey = ($('ticket-listkey').value || _curKey || '').trim();
+  const listKey = ($('ticket-listkey').value || _todayISO().slice(0, 7) || '').trim();
   const dateOp = $('ticket-date').value || _todayISO();
 
   // → Transactions
@@ -4214,7 +4209,7 @@ function deleteCourseList(listKey) {
 async function reuseCourseList(listKey) {
   const items = coursesList.filter(c => (c.list_key || '(sans nom)') === listKey);
   if (!items.length) return;
-  const nk = prompt('Nom de la nouvelle liste (recopie décochée pour la réutiliser) :', _curKey || '');
+  const nk = prompt('Nom de la nouvelle liste (recopie décochée pour la réutiliser) :', _todayISO().slice(0, 7) || '');
   if (nk === null) return;
   const rows = items.map(c => ({
     user_id: currentUser.id, label: c.label, brand: c.brand, category: c.category,
