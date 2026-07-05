@@ -10,6 +10,16 @@ monie-sauvegarde-*.json
 Améliorer/
 *.zip
 
+# Fichiers de DEV non destinés au site public (SQL, specs, notes, code source Edge Function)
+# → ils restent sur ton Mac mais ne partent PAS sur GitHub Pages.
+SQL-*.sql
+*_SPEC.md
+GIT-DEPLOY.md
+DEPLOY.md
+monie-boost.css
+monie-boost.js
+supabase/
+
 # Secrets éventuels
 .env
 .env.*
