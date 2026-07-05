@@ -114,6 +114,7 @@
       <button onclick="openSearch()" style="padding:8px 12px;font-size:11px;background:transparent;border:1px solid var(--border);border-radius:100px;color:var(--muted);cursor:pointer;flex-shrink:0" title="Rechercher" aria-label="Rechercher">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
       </button>
+      <button onclick="openGlossary()" style="padding:8px 12px;font-size:13px;background:transparent;border:1px solid var(--border);border-radius:100px;color:var(--muted);cursor:pointer;flex-shrink:0;font-weight:800" title="Définitions" aria-label="Définitions">?</button>
       <button onclick="logout()" style="padding:8px 12px;font-size:11px;background:transparent;border:1px solid var(--border);border-radius:100px;color:var(--muted);cursor:pointer;flex-shrink:0" title="Déconnexion">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </button>
@@ -1191,6 +1192,17 @@
     <input class="inp" id="search-input" placeholder="🔍 Rechercher une opération, un marchand, un montant…" oninput="doGlobalSearch()" style="width:100%;font-size:15px;padding:12px 14px" autocomplete="off">
     <div id="search-results" style="overflow-y:auto;flex:1;margin:12px -4px 0"></div>
     <div class="modal-btns"><button class="btn-ghost" onclick="closeSearch()">Fermer (Échap)</button></div>
+  </div>
+</div>
+
+<!-- 📖 Glossaire / définitions -->
+<div id="glossary-modal" class="modal-overlay" style="display:none;align-items:flex-start" onclick="if(event.target===this)closeGlossary()">
+  <div class="modal-box" style="max-width:620px;width:94vw;max-height:82vh;margin-top:6vh;display:flex;flex-direction:column">
+    <div class="modal-title" style="margin-bottom:4px">📖 Définitions</div>
+    <div class="modal-msg" style="margin-bottom:10px">Tous les mots de Monie, expliqués simplement.</div>
+    <input class="inp" id="glossary-search" placeholder="🔍 Chercher un mot…" oninput="renderGlossary()" style="width:100%;margin-bottom:12px">
+    <div id="glossary-list" style="overflow-y:auto;flex:1"></div>
+    <div class="modal-btns"><button class="btn-ghost" onclick="closeGlossary()">Fermer</button></div>
   </div>
 </div>
 
