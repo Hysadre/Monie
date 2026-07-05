@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v74'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v75'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -4553,12 +4553,12 @@ function renderBudgetStatus(containerId, compact, monthKey) {
     const dayEl = _now.getDate();
     const daysIn = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate();
     const daysLeft = Math.max(1, daysIn - dayEl + 1);
-    const freeLeft = Math.max(0, reste - aPrevoir);
-    const perDay = Math.round(freeLeft / daysLeft);
+    // Basé UNIQUEMENT sur le reste à dépenser (revenu − déjà dépensé). Le « à prévoir » n'entre PAS dans le calcul.
+    const perDay = Math.round(Math.max(0, reste) / daysLeft);
     dailyHtml = `<div style="text-align:center;padding:12px;border-radius:12px;background:rgba(127,184,158,0.10);margin-bottom:14px">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">💧 Reste à vivre par jour</div>
       <div style="font-size:24px;font-weight:900;color:var(--sage);font-family:var(--fm)">${fmt(perDay)}<span style="font-size:13px;color:var(--muted)"> /jour</span></div>
-      <div style="font-size:11px;color:var(--muted)">≈ ${fmt(perDay * 7)}/semaine · ${daysLeft} jour(s) restant(s)${aPrevoir > 0 ? ` · après tes ${fmt(aPrevoir)} à prévoir` : ''}</div>
+      <div style="font-size:11px;color:var(--muted)">≈ ${fmt(perDay * 7)}/semaine · sur les ${daysLeft} jour(s) restant(s)</div>
     </div>`;
   }
   el.innerHTML = `
@@ -5692,7 +5692,7 @@ function openDashCustomize() {
 // ═══ 📖 GLOSSAIRE ═══
 const GLOSSARY = [
   ['Reste à dépenser', 'Ton revenu du mois − ce que tu as déjà dépensé. Ce qu\'il te reste, en théorie, pour le reste du mois.'],
-  ['Reste à vivre par jour', 'Le reste à dépenser, divisé par les jours restants du mois (après tes dépenses prévues). Combien tu peux dépenser par jour sans déraper.'],
+  ['Reste à vivre par jour', 'Le reste à dépenser (revenu − déjà dépensé) divisé par les jours restants du mois. Combien tu peux dépenser par jour. Le « à prévoir » n\'entre PAS dans ce calcul (ce sont juste tes notes).'],
   ['Ton rythme récent', 'La moyenne de tes dépenses des 3 derniers mois, comparée à ton revenu. Une estimation indicative — pas une fatalité.'],
   ['Famille', 'Les 4 grands blocs de ton budget : 🏠 Charges (nécessités), 🌸 Plaisir (envies), 🌱 Épargne, ⚡ Imprévus. Leurs % font 100 % ensemble.'],
   ['Cible', 'Le montant que tu prévois pour une famille ou une catégorie. C\'est ton objectif de budget (le plan).'],
