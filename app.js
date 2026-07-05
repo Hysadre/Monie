@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v67'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v68'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1922,10 +1922,33 @@ function openCatMonthList(cat, monthKey, nav) {
   const sub = (bsrc && bsrc.sub_budget) ? bsrc.sub_budget : DEFAULT_SUB_PCT;
   const brev = (bsrc && bsrc.revenu_mensuel) ? bsrc.revenu_mensuel : 0;
   const budLines = [];
-  ['charges', 'plaisir', 'epargne'].forEach(blk => (sub[blk] || []).forEach(it => { if (it.cat === cat) budLines.push(it); }));
-  const budTotal = budLines.reduce((s, it) => s + brev * (it.pct || 0) / 100, 0);
+  let postes = [];
+  ['charges', 'plaisir', 'epargne', 'imprevus'].forEach(blk => (sub[blk] || []).forEach(it => {
+    if (it.cat === cat) { budLines.push(it); if (Array.isArray(it.subs)) postes = postes.concat(it.subs); }
+  }));
+  // Réel par sous-catégorie (ce que tu as vraiment dépensé, ventilé)
+  const norm = s => (s || '').trim().toLowerCase();
+  const realBySub = {}; let realNoSub = 0;
+  scope.forEach(t => { const s = (t.sub_category || '').trim(); const a = Math.abs(Number(t.amount)); if (s) realBySub[norm(s)] = (realBySub[norm(s)] || 0) + a; else realNoSub += a; });
   let budHtml = '';
-  if (budLines.length > 1 && brev > 0) {
+  if (postes.length && brev > 0) {
+    // 🎯 Postes budgétés → réel (matché par sous-catégorie) vs budget
+    const budNames = new Set(postes.map(p => norm(p.name)));
+    const rows = postes.map(p => {
+      const bud = Math.round(brev * (p.pct || 0) / 100);
+      const real = Math.round(realBySub[norm(p.name)] || 0);
+      const over = bud > 0 && real > bud;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:12px"><span>${esc(p.name || '(poste)')}</span><span style="font-family:var(--fm);font-weight:700;color:${over ? '#E53935' : 'var(--sage)'}">${fmt(real)} / ${fmt(bud)}${over ? ' ⚠' : ''}</span></div>`;
+    }).join('');
+    const orphans = Object.entries(realBySub).filter(([k]) => k && !budNames.has(k))
+      .map(([k, v]) => `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:var(--muted)"><span>${esc(k)} <span style="font-size:10px">· pas de budget</span></span><span style="font-family:var(--fm)">${fmt(Math.round(v))}</span></div>`).join('');
+    const noSub = realNoSub > 0 ? `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#B7791F"><span>⚠ sans sous-catégorie</span><span style="font-family:var(--fm)">${fmt(Math.round(realNoSub))}</span></div>` : '';
+    budHtml = `<div style="background:var(--peach-soft);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px">
+      <div style="font-weight:800;margin-bottom:5px">🎯 Postes de ${esc(cat)} — réel / budget</div>
+      ${rows}${orphans}${noSub}
+    </div>`;
+  } else if (budLines.length > 1 && brev > 0) {
+    const budTotal = budLines.reduce((s, it) => s + brev * (it.pct || 0) / 100, 0);
     budHtml = `<div style="background:var(--peach-soft);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.6">
       <div style="font-weight:800;margin-bottom:3px">💡 Ton budget ${esc(cat)} = ${budLines.length} lignes additionnées :</div>
       ${budLines.map(it => `<div style="display:flex;justify-content:space-between"><span>• ${it.note ? esc(it.note) : 'ligne principale'} (${it.pct}%)</span><b style="font-family:var(--fm)">${fmt(brev * it.pct / 100)}</b></div>`).join('')}
