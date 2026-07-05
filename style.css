@@ -2809,3 +2809,15 @@ body::after {
   .modal-overlay, .modal-overlay .modal-box { animation: none !important; }
   .kpi, .btn-primary, .btn-ghost { transition: none !important; }
 }
+
+/* 📸 Spinner (lecture de photo / attente IA) */
+.spinner {
+  display: inline-block;
+  width: 16px; height: 16px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--rose);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

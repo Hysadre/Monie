@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v76'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v77'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -166,6 +166,7 @@ let contribList = [];
 let remboursementsList = [];
 let enveloppesList = [];
 let dettesList = [];
+let coursesList = [];   // 🛒 liste de courses (table courses, SQL-V320)
 let showAchieved = false;
 let showAbandoned = false;
 let epargneMonth = new Date().getMonth();
@@ -700,6 +701,7 @@ async function loadExtra() {
   try { const r = await sb.from('remboursements').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }); if (!r.error) remboursementsList = r.data || []; } catch (e) {}
   try { const r = await sb.from('enveloppes').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }); if (!r.error) enveloppesList = r.data || []; } catch (e) {}
   try { const r = await sb.from('dettes').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }); if (!r.error) dettesList = r.data || []; } catch (e) {}
+  try { const r = await sb.from('courses').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }); if (!r.error) coursesList = r.data || []; } catch (e) {}
 }
 
 // Affiche la version de l'app (témoin de déploiement) dès que possible
@@ -3576,6 +3578,219 @@ async function confirmImport() {
   toast(`✓ ${toAdd.length} transactions ajoutées`, 'success');
   if (fromTx) { showTab('transactions'); if (typeof renderTransactionsList === 'function') renderTransactionsList(); }
   else showTab('calendar');
+}
+
+// ═══ 📸 PHOTO → LISTE DE COURSES / TRANSACTIONS ════════════════════
+let _ticketDraft = [];  // lignes en cours de revue
+
+// Compresse une image (canvas) → { data: base64 sans préfixe, media_type }
+function _compressImage(file, maxDim = 1600, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        let { width: w, height: h } = img;
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        w = Math.round(w * scale); h = Math.round(h * scale);
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = cv.toDataURL('image/jpeg', quality);
+        URL.revokeObjectURL(url);
+        resolve({ data: dataUrl.split(',')[1], media_type: 'image/jpeg' });
+      } catch (e) { URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image illisible (format non supporté ?)')); };
+    img.src = url;
+  });
+}
+
+async function handleTicketPhoto(file) {
+  if (!file) return;
+  const status = $('ticket-status');
+  const review = $('ticket-review');
+  review.style.display = 'none'; review.innerHTML = '';
+  status.style.display = 'block';
+  status.innerHTML = `<div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px"><span class="spinner"></span> Monie lit ta photo… (quelques secondes)</div>`;
+  try {
+    const { data, media_type } = await _compressImage(file);
+    const { data: res, error } = await sb.functions.invoke('monie-ai', { body: { mode: 'ticket', image: data, media_type } });
+    if (error) throw new Error(error.message || 'Erreur IA');
+    if (res && res.error) throw new Error(res.error);
+    const items = Array.isArray(res?.items) ? res.items : [];
+    if (!items.length) {
+      status.innerHTML = `<div class="empty-sub" style="padding:10px 0">😕 Aucun produit détecté. Réessaie avec une photo plus nette / mieux cadrée.</div>`;
+      return;
+    }
+    // Pré-catégorisation automatique de chaque ligne
+    _ticketDraft = items.map(it => {
+      const g = categorize(it.label, -Math.abs(it.price || 0));
+      return {
+        label: it.label || '',
+        brand: it.brand || '',
+        price: (it.price != null ? Number(it.price) : ''),
+        qty: it.qty || 1,
+        category: g.category || 'Vie quotidienne',
+        sub_category: g.sub_category || '',
+        sub_sub_category: ''
+      };
+    });
+    status.style.display = 'none';
+    renderTicketReview();
+  } catch (e) {
+    console.error(e);
+    status.innerHTML = `<div class="empty-sub" style="padding:10px 0;color:#E53935">⚠ ${esc(e.message || 'La lecture a échoué.')} <br><span style="color:var(--muted)">Si le problème persiste, vérifie que la fonction IA « monie-ai » est bien déployée.</span></div>`;
+  } finally {
+    $('ticket-file').value = '';
+  }
+}
+
+function _ticketCatSelect(k) {
+  const cur = _ticketDraft[k].category;
+  return Object.keys(CAT_META).sort().map(c =>
+    `<option value="${esc(c)}" ${c === cur ? 'selected' : ''}>${CAT_META[c].emoji} ${esc(c)}</option>`).join('');
+}
+// Suggestions de sous-sous-catégories (niveau 3) déjà utilisées dans les listes de courses
+function _subSubDatalist() {
+  const used = [...new Set((coursesList || []).map(c => (c.sub_sub_category || '').trim()).filter(Boolean))];
+  return used.map(s => `<option value="${esc(s)}">`).join('');
+}
+
+function renderTicketReview() {
+  const review = $('ticket-review');
+  const total = _ticketDraft.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 1), 0);
+  const rows = _ticketDraft.map((it, k) => `
+    <div style="border:1px solid var(--border-soft);border-radius:12px;padding:12px;margin-bottom:10px;background:white">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 70px 44px 30px;gap:8px;align-items:center;margin-bottom:8px">
+        <input class="inp" value="${esc(it.label)}" onchange="ticketField(${k},'label',this.value)" placeholder="Produit" style="padding:7px 9px;font-size:13px;min-width:0">
+        <div style="display:flex;align-items:center;gap:2px">
+          <input class="inp" type="number" step="0.01" min="0" value="${it.price}" onchange="ticketField(${k},'price',this.value)" placeholder="€" style="padding:7px 6px;text-align:right;font-family:var(--fm);min-width:0">
+          <span style="font-size:11px;color:var(--muted)">€</span>
+        </div>
+        <input class="inp" type="number" step="1" min="1" value="${it.qty}" onchange="ticketField(${k},'qty',this.value)" title="Quantité" style="padding:7px 5px;text-align:center;min-width:0">
+        <button class="bud-sub-del" onclick="ticketDeleteLine(${k})" title="Retirer cette ligne">🗑</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        <select class="select" onchange="ticketCat(${k},this.value)" style="font-size:12px;padding:6px">${_ticketCatSelect(k)}</select>
+        <input class="inp" list="ticket-sub-${k}" value="${esc(it.sub_category)}" onchange="ticketField(${k},'sub_category',this.value)" placeholder="Sous-catégorie" style="padding:6px 8px;font-size:12px;min-width:0">
+        <datalist id="ticket-sub-${k}">${subcatDatalist(it.category)}</datalist>
+        <input class="inp" list="ticket-subsub" value="${esc(it.sub_sub_category)}" onchange="ticketField(${k},'sub_sub_category',this.value)" placeholder="Sous-sous-cat." style="padding:6px 8px;font-size:12px;min-width:0">
+      </div>
+      <input class="inp" value="${esc(it.brand)}" onchange="ticketField(${k},'brand',this.value)" placeholder="Marque (pour comparer les prix — ex: Ariel)" style="padding:6px 8px;font-size:12px;margin-top:6px;width:100%;box-sizing:border-box">
+    </div>`).join('');
+  review.style.display = 'block';
+  review.innerHTML = `
+    <datalist id="ticket-subsub">${_subSubDatalist()}</datalist>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-weight:800;font-size:15px">🧾 ${_ticketDraft.length} produit(s) lu(s)</div>
+      <div style="font-family:var(--fm);font-weight:800;color:var(--rose)">${fmt(Math.round(total))}</div>
+    </div>
+    ${rows}
+    <button class="btn-ghost" style="padding:6px 12px;font-size:13px;margin-bottom:16px" onclick="ticketAddLine()">+ Ajouter une ligne</button>
+
+    <div style="background:var(--bg);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px">Où veux-tu ajouter ces produits ?</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:13px"><input type="radio" name="ticket-dest" value="both" checked> 💸 Transactions <b>+</b> 🛒 liste de courses</label>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:13px"><input type="radio" name="ticket-dest" value="tx"> 💸 Transactions seules</label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="radio" name="ticket-dest" value="list"> 🛒 Liste de courses seule</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+        <div>
+          <label class="qa-label" style="font-size:11px">Date (pour les transactions)</label>
+          <input class="inp" type="date" id="ticket-date" value="${_todayISO()}" style="width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <label class="qa-label" style="font-size:11px">Nom de la liste</label>
+          <input class="inp" id="ticket-listkey" value="${_curKey || ''}" placeholder="Ex: 2026-07, Ménage…" style="width:100%;box-sizing:border-box">
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn-primary" onclick="saveTicket()" style="flex:1">✓ Enregistrer</button>
+      <button class="btn-ghost" onclick="ticketClear()">Annuler</button>
+    </div>`;
+}
+
+function ticketField(k, field, val) {
+  if (!_ticketDraft[k]) return;
+  _ticketDraft[k][field] = (field === 'price' || field === 'qty') ? (val === '' ? '' : Number(val)) : val;
+}
+function ticketCat(k, val) {
+  if (!_ticketDraft[k]) return;
+  _ticketDraft[k].category = val;
+  _ticketDraft[k].sub_category = '';   // reset la sous-cat quand la catégorie change
+  renderTicketReview();
+}
+function ticketAddLine() {
+  _ticketDraft.push({ label: '', brand: '', price: '', qty: 1, category: 'Vie quotidienne', sub_category: '', sub_sub_category: '' });
+  renderTicketReview();
+}
+function ticketDeleteLine(k) {
+  _ticketDraft.splice(k, 1);
+  if (_ticketDraft.length) renderTicketReview(); else ticketClear();
+}
+function ticketClear() {
+  _ticketDraft = [];
+  $('ticket-review').style.display = 'none';
+  $('ticket-review').innerHTML = '';
+  $('ticket-status').style.display = 'none';
+}
+function _todayISO() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+
+async function saveTicket() {
+  const valid = _ticketDraft.filter(it => (it.label || '').trim());
+  if (!valid.length) { toast('Aucun produit à enregistrer', 'error'); return; }
+  const dest = (document.querySelector('input[name="ticket-dest"]:checked') || {}).value || 'both';
+  const listKey = ($('ticket-listkey').value || _curKey || '').trim();
+  const dateOp = $('ticket-date').value || _todayISO();
+
+  // → Transactions
+  if (dest === 'both' || dest === 'tx') {
+    const withPrice = valid.filter(it => Number(it.price) > 0);
+    if (!withPrice.length && dest === 'tx') { toast('Aucun prix renseigné : impossible de créer des transactions', 'error'); return; }
+    const txs = withPrice.map(it => ({
+      user_id: currentUser.id,
+      date_op: dateOp,
+      label: it.label.trim(),
+      amount: -Math.abs(Number(it.price) * (Number(it.qty) || 1)),
+      type: 'sortie',
+      category: it.category || 'Vie quotidienne',
+      sub_category: (it.sub_category || '').trim() || null,
+      source: 'import_photo',
+      account: 'Compte courant',
+      payment_method: detectPaymentMethod(it.label)
+    }));
+    if (txs.length) {
+      const { error } = await sb.from('transactions').insert(txs);
+      if (error) { toast('Erreur transactions : ' + error.message, 'error'); console.error(error); return; }
+    }
+  }
+
+  // → Liste de courses
+  if (dest === 'both' || dest === 'list') {
+    const rows = valid.map(it => ({
+      user_id: currentUser.id,
+      label: it.label.trim(),
+      brand: (it.brand || '').trim() || null,
+      category: it.category || null,
+      sub_category: (it.sub_category || '').trim() || null,
+      sub_sub_category: (it.sub_sub_category || '').trim() || null,
+      price: (it.price === '' || it.price == null) ? null : Number(it.price),
+      qty: Number(it.qty) || 1,
+      checked: false,
+      list_key: listKey || null,
+      source: 'photo'
+    }));
+    const { error } = await dbGuard(sb.from('courses').insert(rows), 'Ajout à la liste impossible (as-tu lancé le SQL-V320 ?)');
+    if (error) return;
+  }
+
+  ticketClear();
+  await loadAllData();
+  const msg = dest === 'tx' ? '✓ Transactions ajoutées' : dest === 'list' ? `✓ ${valid.length} produit(s) dans ta liste de courses` : '✓ Transactions + liste enregistrées';
+  toast(msg, 'success');
+  // La page « Courses » arrive en Phase 2 ; pour l'instant on reste ou on va aux transactions.
+  if (dest !== 'list' && $('tab-transactions')) showTab('transactions');
 }
 
 // ═══ SUIVI MENSUEL ═════════════════════════════════════════════

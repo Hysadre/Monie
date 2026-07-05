@@ -52,6 +52,72 @@ Deno.serve(async (req) => {
   let payload: any;
   try { payload = await req.json(); } catch { return json({ error: "Corps invalide" }, 400); }
 
+  // ─── MODE « ticket » : lecture d'une photo (liste de courses / ticket de caisse) ───
+  // Le front envoie une image (base64) → on demande à Claude d'extraire les lignes en JSON.
+  if (payload?.mode === "ticket") {
+    const b64 = typeof payload?.image === "string" ? payload.image : "";
+    if (!b64) return json({ error: "Aucune image reçue." }, 400);
+    const mediaType = typeof payload?.media_type === "string" ? payload.media_type : "image/jpeg";
+    const TICKET_SYS = `Tu extrais les produits d'une photo (liste de courses manuscrite OU ticket de caisse OU capture d'écran).
+Réponds UNIQUEMENT avec un tableau JSON valide, sans texte autour, sans balises Markdown.
+Chaque élément : {"label": string, "brand": string|null, "price": number|null, "qty": number}.
+- "label" : le nom du produit, propre et lisible (corrige les abréviations évidentes du ticket).
+- "brand" : la marque si elle est visible dans le libellé (ex: "Ariel", "Nivea"), sinon null.
+- "price" : le prix en euros (nombre, point décimal), sinon null si absent (liste manuscrite).
+- "qty" : quantité si indiquée, sinon 1.
+Ignore les lignes qui ne sont pas des produits (totaux, TVA, dates, remerciements, moyens de paiement, points de fidélité).
+Si l'image est illisible ou ne contient aucun produit, réponds [].`;
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 2000,
+          system: TICKET_SYS,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: mediaType, data: b64 } },
+              { type: "text", text: "Extrais tous les produits de cette image au format JSON demandé." },
+            ],
+          }],
+        }),
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        console.error("Anthropic ticket error", r.status, t);
+        return json({ error: "La lecture de la photo a échoué." }, 502);
+      }
+      const data = await r.json();
+      const raw = Array.isArray(data?.content)
+        ? data.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim()
+        : "";
+      // Robustesse : on récupère le tableau JSON même si le modèle a ajouté du texte
+      let items: any[] = [];
+      try {
+        const m = raw.match(/\[[\s\S]*\]/);
+        items = JSON.parse(m ? m[0] : raw);
+      } catch { items = []; }
+      if (!Array.isArray(items)) items = [];
+      // Nettoyage/normalisation
+      const clean = items.slice(0, 100).map((x: any) => ({
+        label: typeof x?.label === "string" ? x.label.slice(0, 120).trim() : "",
+        brand: typeof x?.brand === "string" && x.brand.trim() ? x.brand.slice(0, 60).trim() : null,
+        price: (typeof x?.price === "number" && isFinite(x.price)) ? Math.round(x.price * 100) / 100 : null,
+        qty: (typeof x?.qty === "number" && x.qty > 0) ? x.qty : 1,
+      })).filter((x: any) => x.label);
+      return json({ items: clean });
+    } catch (e) {
+      console.error(e);
+      return json({ error: "Erreur réseau vers l'IA (lecture photo)." }, 502);
+    }
+  }
+
   const context: string = typeof payload?.context === "string" ? payload.context.slice(0, 12000) : "";
   const mode: string = payload?.mode === "conseils" ? "conseils" : "chat";
   // messages = [{role:'user'|'assistant', content:'...'}]
