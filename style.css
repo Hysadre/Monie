@@ -2821,3 +2821,21 @@ body::after {
   flex-shrink: 0;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* 📸 Revue photo — les 3 menus catégorie/sous-cat/sous-sous-cat */
+.ticket-cat3 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+}
+.ticket-cat3 select {
+  min-width: 0;
+  width: 100%;
+  font-size: 12px;
+  padding: 7px 6px;
+}
+/* Sur mobile : on empile pour que chaque menu soit lisible et ne déborde jamais */
+@media (max-width: 600px) {
+  .ticket-cat3 { grid-template-columns: 1fr; gap: 5px; }
+  .ticket-cat3 select { font-size: 13px; padding: 9px 8px; }
+}

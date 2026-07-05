@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v86'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v87'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3914,10 +3914,10 @@ function renderTicketReview() {
         <input class="inp" type="number" step="1" min="1" value="${it.qty}" onchange="ticketField(${k},'qty',this.value)" title="Quantité" style="padding:7px 5px;text-align:center;min-width:0">
         <button class="bud-sub-del" onclick="ticketDeleteLine(${k})" title="Retirer cette ligne">🗑</button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
-        <select class="select" title="Catégorie" onchange="ticketCat(${k},this.value)" style="font-size:12px;padding:6px">${_ticketCatSelect(k)}</select>
-        <select class="select" title="Sous-catégorie" onchange="ticketSubSelect(${k},this.value)" style="font-size:12px;padding:6px">${subcatOptions(it.category, it.sub_category)}</select>
-        <select class="select" title="Sous-sous-catégorie" onchange="ticketSubsubSelect(${k},this.value)" style="font-size:12px;padding:6px">${subsubOptions(it.category, it.sub_category, it.sub_sub_category)}</select>
+      <div class="ticket-cat3">
+        <select class="select" title="Catégorie" onchange="ticketCat(${k},this.value)">${_ticketCatSelect(k)}</select>
+        <select class="select" title="Sous-catégorie" onchange="ticketSubSelect(${k},this.value)">${subcatOptions(it.category, it.sub_category)}</select>
+        <select class="select" title="Sous-sous-catégorie" onchange="ticketSubsubSelect(${k},this.value)">${subsubOptions(it.category, it.sub_category, it.sub_sub_category)}</select>
       </div>
       <input class="inp" value="${esc(it.brand)}" onchange="ticketField(${k},'brand',this.value)" placeholder="Marque (pour comparer les prix — ex: Ariel)" style="padding:6px 8px;font-size:12px;margin-top:6px;width:100%;box-sizing:border-box">
     </div>`).join('');
