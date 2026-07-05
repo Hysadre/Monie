@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v82'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v83'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -829,6 +829,14 @@ async function loadExtra() {
   try { const r = await sb.from('courses').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }); if (!r.error) coursesList = r.data || []; } catch (e) {}
 }
 
+// 🔄 Force la mise à jour : vide tous les caches + désinscrit le service worker + recharge
+async function forceUpdate() {
+  try { toast('🔄 Mise à jour…'); } catch (e) {}
+  try { if ('caches' in window) { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } } catch (e) {}
+  try { if ('serviceWorker' in navigator) { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); } } catch (e) {}
+  // Recharge en cassant le cache
+  location.href = location.pathname + '?v=' + Date.now();
+}
 // Affiche la version de l'app (témoin de déploiement) dès que possible
 (function showAppVersion() {
   const apply = () => { const el = document.getElementById('app-version'); if (el) el.textContent = 'Monie ' + APP_VERSION; };
