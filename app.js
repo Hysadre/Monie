@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v68'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v69'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -61,6 +61,7 @@ const CAT_META = {
   'Éducation': { emoji: '🎓', color: '#7C3F58' },
   'Voyages': { emoji: '✈️', color: '#4FC3F7' },
   'Divertissement': { emoji: '🎬', color: '#E76F51' },
+  'Tech & Électronique': { emoji: '💻', color: '#4A5568' },
   'Aide au logement': { emoji: '🏘️', color: '#7FB89E' },
   'Paiement échelonné': { emoji: '💳', color: '#B79CD6' },
   'Imprévus': { emoji: '⚡', color: '#E8A317' },
@@ -78,7 +79,8 @@ const SUBCATS = {
   'Cosmétique': ['Soins', 'Coiffeur', 'Maquillage', 'Parfum', 'Ongles'],
   'Loyer': ['Loyer', 'Charges', 'Caution', 'Eau', 'Électricité', 'Gaz'],
   'Administratif': ['Papiers', 'Amendes', 'Assurance habitation', 'Timbres / Poste', 'Frais divers'],
-  'Vie quotidienne': ['Hygiène corps', 'Produits ménagers', 'Ménage / entretien', 'Lessive / linge', 'Papier toilette / essuie-tout', 'Maison / déco', 'Cuisine / ustensiles', 'Animaux', 'Bricolage / réparations', 'Papeterie / fournitures', 'Piles & ampoules', 'Divers'],
+  'Vie quotidienne': ['Hygiène corps', 'Hygiène entretien (ménager)', 'Produits ménagers', 'Lessive / linge', 'Papier toilette / essuie-tout', 'Maison / déco', 'Cuisine / ustensiles', 'Animaux', 'Bricolage / réparations', 'Papeterie / fournitures', 'Piles & ampoules', 'Divers'],
+  'Tech & Électronique': ['Téléphone', 'Ordinateur / Tablette', 'Audio / Casque', 'Écran / TV', 'Accessoires', 'Électroménager', 'Gaming', 'Objets connectés'],
   'Divertissement': ['Cinéma', 'Sorties', 'Jeux', 'Concerts', 'Livres', 'Musées'],
   'Dons': ['Association', 'Caritatif', 'Cagnotte'],
   'Dîme': ['Église'],
@@ -4349,7 +4351,7 @@ const BUDGET_BLOCK = {
   'Loyer': 'charges', 'Alimentation': 'charges', 'Transport': 'charges', 'Santé': 'charges',
   'Abonnements': 'charges', 'Administratif': 'charges',
   'Impôts': 'charges', 'Banque': 'charges', 'Éducation': 'charges', 'Aide au logement': 'charges',
-  'Vie quotidienne': 'plaisir', 'Mode': 'plaisir', 'Cosmétique': 'plaisir', 'Dons': 'plaisir',
+  'Vie quotidienne': 'plaisir', 'Mode': 'plaisir', 'Cosmétique': 'plaisir', 'Dons': 'plaisir', 'Tech & Électronique': 'plaisir',
   'Amis & Famille': 'plaisir', 'Divertissement': 'plaisir', 'Voyages': 'plaisir',
   'Dîme': 'charges', 'Investissements': 'epargne', 'Imprévus': 'imprevus'
 };
