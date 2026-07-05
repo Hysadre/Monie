@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v83'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v84'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3838,10 +3838,12 @@ async function _prepareTicketImage(file) {
 }
 
 async function handleTicketPhoto(file) {
+  // 🩺 DIAGNOSTIC TEMPORAIRE — à retirer après debug
+  alert('🔎 Test Monie\nLecture lancée : OUI\nFichier : ' + (file ? ((file.name || 'photo') + '\nTaille : ' + Math.round((file.size || 0) / 1024) + ' Ko\nType : ' + (file.type || 'inconnu')) : 'AUCUN FICHIER REÇU'));
   if (!file) return;
   const status = $('ticket-status');
   const review = $('ticket-review');
-  if (!status || !review) { alert('Ouvre la page Courses pour scanner une photo.'); return; }
+  if (!status || !review) { alert('🔎 Test : la zone d\'affichage (ticket-status/review) est INTROUVABLE sur cette page.'); return; }
   review.style.display = 'none'; review.innerHTML = '';
   status.style.display = 'block';
   // Chrono visible + étape en cours, pour qu'on VOIE que ça travaille (et où ça s'arrête)
