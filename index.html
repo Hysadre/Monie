@@ -454,6 +454,7 @@
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn-ghost" onclick="showTab('calendar')" title="Saisir une opération">➕ Ajouter</button>
+            <button class="btn-ghost" id="tx-toggle-list-btn" onclick="toggleTxList()" title="Masquer / afficher la liste complète">🙈 Masquer la liste</button>
             <button class="btn-primary" onclick="document.getElementById('tx-import-file').click()" title="Importer un relevé CSV / PDF / JSON">📤 Importer un relevé</button>
             <input type="file" id="tx-import-file" accept=".csv,.pdf,.json" style="display:none" onchange="handleImportFromTx(this.files[0])">
           </div>
@@ -475,7 +476,7 @@
             </ul>
           </div>
         </div>
-        <div class="card">
+        <div class="card" id="tx-main-card">
           <div class="card-hd tx-header-mobile">
             <div class="card-title">Toutes tes opérations <span id="tx-filter-count" style="font-size:11px;font-weight:500;color:var(--muted);margin-left:6px"></span></div>
             <div class="tx-filter-row">
@@ -996,7 +997,7 @@
 
         <!-- 💳 Dettes / paiements échelonnés -->
         <div class="card">
-          <div class="card-hd"><div class="card-title">💳 Dettes & échelonné <span style="font-size:11px;font-weight:500;color:var(--muted)">— Klarna, prêts… où tu en es</span></div>
+          <div class="card-hd"><div class="card-title">💳 Paiement en plusieurs fois <span style="font-size:11px;font-weight:500;color:var(--muted)">— total · payé · reste à payer</span></div>
             <button class="btn-primary" onclick="openDetteForm()" style="padding:6px 12px;font-size:13px">+ Nouvelle</button></div>
           <div id="dette-list"></div>
         </div>

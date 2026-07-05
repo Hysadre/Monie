@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v81'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v82'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3299,6 +3299,11 @@ function showImportPreview() {
   preservedScroll = window.scrollY;
   const wrap = $(importPreviewTarget) || $('import-preview');
   wrap.style.display = 'block';
+  // Pendant l'import depuis la page Transactions : on masque la liste complète pour ne voir QUE les nouvelles à valider
+  if (importPreviewTarget === 'tx-import-preview') {
+    _setTxMainCardVisible(false);
+    if (wrap.scrollIntoView) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
   const nDup = importMatches.length;
   const nNew = importPreviewData.length - nDup;
   const cats = Object.keys(CAT_META);
@@ -3725,6 +3730,20 @@ function cancelImport() {
   importPreviewData = [];
   importMatches = [];
   ['import-preview', 'tx-import-preview'].forEach(id => { const el = $(id); if (el) { el.style.display = 'none'; el.innerHTML = ''; } });
+  _setTxMainCardVisible(true);   // on ré-affiche la liste complète après l'import
+}
+// Masque/affiche la grosse liste des transactions (pour se concentrer, ou pendant un import)
+let _txListHidden = false;
+function _setTxMainCardVisible(show) {
+  const card = $('tx-main-card');
+  const help = $('help-transactions');
+  if (card) card.style.display = show ? '' : 'none';
+  if (help && !show) help.style.display = 'none';
+  const btn = $('tx-toggle-list-btn');
+  if (btn) { _txListHidden = !show; btn.textContent = show ? '🙈 Masquer la liste' : '👁 Afficher la liste'; }
+}
+function toggleTxList() {
+  _setTxMainCardVisible(_txListHidden);   // inverse l'état courant
 }
 async function confirmImport() {
   const toAdd = importPreviewData.filter(t => !t._duplicate).map(t => ({
@@ -6192,14 +6211,42 @@ function deleteRemboursement(id) {
     toast('✓ Supprimé', 'success');
   });
 }
+// Repère les prêts dans les transactions (sous-catégorie « Prêt ») → qui te doit, sans re-saisie
+function _autoPrets() {
+  const norm = s => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const isPret = t => { const s = (t.sub_category || '').toLowerCase(); return s.includes('prêt') || s.includes('pret'); };
+  const byPerson = {};
+  transactions.filter(t => t.type === 'sortie' && isPret(t)).forEach(t => {
+    const k = norm(t.label) || '?';
+    if (!byPerson[k]) byPerson[k] = { name: t.label || 'Prêt', total: 0, n: 0, last: t.date_op };
+    byPerson[k].total += Math.abs(Number(t.amount));
+    byPerson[k].n++;
+    if (t.date_op > byPerson[k].last) byPerson[k].last = t.date_op;
+  });
+  return Object.values(byPerson).sort((a, b) => b.total - a.total);
+}
 function renderRemboursements() {
   const el = $('remb-list'); if (!el) return;
   const pend = remboursementsList.filter(r => r.statut !== 'regle');
   const meDoit = pend.filter(r => r.sens === 'on_me_doit').reduce((s, r) => s + Number(r.montant), 0);
   const jeDois = pend.filter(r => r.sens === 'je_dois').reduce((s, r) => s + Number(r.montant), 0);
-  if (!remboursementsList.length) { el.innerHTML = '<div class="empty-sub">Rien pour l\'instant. Ajoute ce qu\'on te doit (ou ce que tu dois).</div>'; return; }
-  el.innerHTML = `<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <div style="flex:1;min-width:130px;background:var(--sage-soft);border-radius:10px;padding:10px 12px"><div style="font-size:11px;color:var(--muted)">On te doit</div><div style="font-family:var(--fm);font-weight:800;color:var(--sage)">${fmt(meDoit)}</div></div>
+  const prets = _autoPrets();
+  const pretTotal = prets.reduce((s, p) => s + p.total, 0);
+  // Bloc auto : prêts repérés dans tes transactions (sous-catégorie « Prêt »)
+  const autoHtml = prets.length ? `<div style="background:var(--sage-soft);border-radius:12px;padding:12px 14px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:700;font-size:13px">🔎 Prêts repérés — on te doit <b style="color:var(--sage)">${fmt(Math.round(pretTotal))}</b></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Détectés automatiquement dans tes transactions (sous-catégorie « Prêt »). Aucune saisie à refaire.</div>
+      ${prets.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:4px 0">
+        <span>💸 ${esc(p.name)}${p.n > 1 ? ` <span style="color:var(--muted);font-size:11px">×${p.n}</span>` : ''} <span style="color:var(--muted);font-size:11px">· ${p.last}</span></span>
+        <b style="font-family:var(--fm);color:var(--sage)">${fmt(Math.round(p.total))}</b>
+      </div>`).join('')}
+    </div>` : '';
+  if (!remboursementsList.length && !prets.length) { el.innerHTML = '<div class="empty-sub">Rien pour l\'instant. Ajoute ce qu\'on te doit (ou ce que tu dois), ou tague une transaction en sous-catégorie « Prêt ».</div>'; return; }
+  if (!remboursementsList.length) { el.innerHTML = autoHtml; return; }
+  el.innerHTML = autoHtml + `<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:130px;background:var(--sage-soft);border-radius:10px;padding:10px 12px"><div style="font-size:11px;color:var(--muted)">On te doit (saisi)</div><div style="font-family:var(--fm);font-weight:800;color:var(--sage)">${fmt(meDoit)}</div></div>
       <div style="flex:1;min-width:130px;background:var(--tender-rose-soft);border-radius:10px;padding:10px 12px"><div style="font-size:11px;color:var(--muted)">Tu dois</div><div style="font-family:var(--fm);font-weight:800;color:var(--tender-rose)">${fmt(jeDois)}</div></div>
     </div>` + remboursementsList.map(r => {
     const reg = r.statut === 'regle';
@@ -6305,24 +6352,61 @@ async function deleteDette(id) {
     dettesList = dettesList.filter(x => x.id !== id); renderDettes(); toast('✓ Supprimée', 'success');
   });
 }
+// Petit graphique en cercle (donut) : part payée vs restante
+function _donutSVG(done, total, size = 60, color = 'var(--gold)') {
+  const r = size / 2 - 5, c = 2 * Math.PI * r;
+  const pct = total > 0 ? Math.min(1, done / total) : 0;
+  const off = c * (1 - pct);
+  const cx = size / 2;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink:0">
+    <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="var(--border-soft)" stroke-width="6"/>
+    <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"
+      stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 ${cx} ${cx})"/>
+    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" font-size="${Math.round(size * 0.26)}" font-weight="800" fill="var(--ink)" font-family="var(--fm)">${Math.round(pct * 100)}%</text>
+  </svg>`;
+}
 function renderDettes() {
   const el = $('dette-list'); if (!el) return;
-  if (!dettesList.length) { el.innerHTML = '<div class="empty-sub">Ajoute un paiement échelonné ou un prêt pour suivre ce qu\'il te reste.</div>'; return; }
-  el.innerHTML = dettesList.map(d => {
-    const reste = Math.max(0, Number(d.montant_total) - Number(d.deja_paye || 0));
-    const pct = d.montant_total > 0 ? Math.min(100, Math.round(d.deja_paye / d.montant_total * 100)) : 0;
-    const nbRest = d.mensualite > 0 ? Math.ceil(reste / d.mensualite) : null;
-    return `<div style="padding:12px 0;border-bottom:1px solid var(--border-soft)">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-        <div style="flex:1"><b>${esc(d.nom)}</b> <span style="font-size:11px;color:var(--muted)">${nbRest != null && reste > 0 ? `· ${nbRest} paiement(s) de ${fmt(d.mensualite)}` : (reste === 0 ? '· soldé 🎉' : '')}</span></div>
-        <div style="font-family:var(--fm);font-weight:800">${fmt(d.deja_paye || 0)} <span style="color:var(--muted);font-weight:600">/ ${fmt(d.montant_total)}</span></div>
+  // 🔎 Auto : paiements échelonnés repérés dans tes transactions (Klarna, Scalapay, catégorie « Paiement échelonné »)
+  const echTx = transactions.filter(t => t.type === 'sortie' && t.category === 'Paiement échelonné');
+  const echPaid = echTx.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  let autoBanner = '';
+  if (echTx.length) {
+    autoBanner = `<div style="background:rgba(183,156,214,0.12);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.5">
+      🔎 J'ai repéré <b>${echTx.length} paiement(s)</b> en catégorie « Paiement échelonné » dans tes transactions (<b>${fmt(Math.round(echPaid))}</b> déjà débités).
+      Crée un plan ci-dessous avec le <b>montant total</b> pour voir ce qu'il te reste à payer.</div>`;
+  }
+  if (!dettesList.length) {
+    el.innerHTML = autoBanner + '<div class="empty-sub">Ajoute un paiement en plusieurs fois (ou un prêt) avec « + Nouvelle » pour suivre total / payé / reste.</div>';
+    return;
+  }
+  // Résumé global (tous les plans)
+  const gTotal = dettesList.reduce((s, d) => s + Number(d.montant_total || 0), 0);
+  const gPaid = dettesList.reduce((s, d) => s + Number(d.deja_paye || 0), 0);
+  const gReste = Math.max(0, gTotal - gPaid);
+  const summary = `<div style="display:flex;align-items:center;gap:14px;background:var(--bg);border-radius:12px;padding:12px 14px;margin-bottom:14px">
+      ${_donutSVG(gPaid, gTotal, 64, 'var(--plum)')}
+      <div style="display:flex;gap:16px;flex-wrap:wrap;flex:1">
+        <div><div style="font-size:11px;color:var(--muted)">Déjà payé</div><div style="font-family:var(--fm);font-weight:800;color:var(--sage)">${fmt(Math.round(gPaid))}</div></div>
+        <div><div style="font-size:11px;color:var(--muted)">Reste à payer</div><div style="font-family:var(--fm);font-weight:800;color:var(--tender-rose)">${fmt(Math.round(gReste))}</div></div>
+        <div><div style="font-size:11px;color:var(--muted)">Montant total</div><div style="font-family:var(--fm);font-weight:800">${fmt(Math.round(gTotal))}</div></div>
       </div>
-      <div style="height:6px;background:var(--border-soft);border-radius:100px;overflow:hidden;margin-bottom:6px"><div style="height:100%;width:${pct}%;background:var(--gold);border-radius:100px"></div></div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Reste ${fmt(reste)}</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${reste > 0 && d.mensualite > 0 ? `<button class="goal-btn" onclick="payDette('${d.id}')">+ payer ${fmt(d.mensualite)}</button>` : ''}
-        <button class="goal-btn" onclick="openDetteForm(dettesList.find(x=>x.id==='${d.id}'))">✏️</button>
-        <button class="goal-btn danger" onclick="deleteDette('${d.id}')">🗑</button>
+    </div>`;
+  el.innerHTML = autoBanner + summary + dettesList.map(d => {
+    const total = Number(d.montant_total) || 0;
+    const paid = Number(d.deja_paye || 0);
+    const reste = Math.max(0, total - paid);
+    const nbRest = d.mensualite > 0 ? Math.ceil(reste / d.mensualite) : null;
+    return `<div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border-soft)">
+      ${_donutSVG(paid, total, 58, reste === 0 ? 'var(--sage)' : 'var(--gold)')}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;margin-bottom:2px">${esc(d.nom)} ${reste === 0 ? '<span style="font-size:11px;color:var(--sage)">soldé 🎉</span>' : (nbRest != null ? `<span style="font-size:11px;color:var(--muted)">· ${nbRest} × ${fmt(d.mensualite)}</span>` : '')}</div>
+        <div style="font-size:12px;color:var(--muted)">Payé <b style="color:var(--sage)">${fmt(Math.round(paid))}</b> · Reste <b style="color:var(--tender-rose)">${fmt(Math.round(reste))}</b> · Total ${fmt(Math.round(total))}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+          ${reste > 0 && d.mensualite > 0 ? `<button class="goal-btn" onclick="payDette('${d.id}')">+ payer ${fmt(d.mensualite)}</button>` : ''}
+          <button class="goal-btn" onclick="openDetteForm(dettesList.find(x=>x.id==='${d.id}'))">✏️</button>
+          <button class="goal-btn danger" onclick="deleteDette('${d.id}')">🗑</button>
+        </div>
       </div>
     </div>`;
   }).join('');
