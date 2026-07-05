@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v84'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v85'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3854,6 +3854,7 @@ async function handleTicketPhoto(file) {
   const showError = (msg) => { status.innerHTML = `<div style="padding:12px 14px;border-radius:10px;background:rgba(229,57,53,0.10);border:1px solid #E53935;color:#C62828;font-size:13px;line-height:1.5">⚠ <b>Échec de la lecture</b><br>${esc(msg)}</div>`; };
   try {
     const { data, media_type } = await _prepareTicketImage(file);
+    alert('🔎 Étape 2 — image préparée OK\nFormat : ' + media_type + '\nPoids : ' + Math.round((data || '').length / 1024) + ' Ko');
     console.log('[ticket] image prête', media_type, Math.round((data || '').length / 1024) + ' Ko (base64)');
     if (!data) throw new Error('Image vide après préparation. Réessaie avec une autre photo.');
     _step = 'Monie lit ta photo…';
@@ -3862,6 +3863,7 @@ async function handleTicketPhoto(file) {
     const invokePromise = sb.functions.invoke('monie-ai', { body: { mode: 'ticket', image: data, media_type } });
     const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Temps dépassé (60s). La photo est peut-être trop lourde, ou l\'IA a mis trop de temps. Réessaie.')), 60000));
     const { data: res, error } = await Promise.race([invokePromise, timeout]);
+    alert('🔎 Étape 3 — réponse IA reçue\nErreur : ' + (error ? (error.message || 'oui') : 'non') + '\nProduits trouvés : ' + (res && res.items ? res.items.length : (res && res.error ? 'ERREUR: ' + res.error : '0')));
     console.log('[ticket] réponse IA', { error, res });
     if (error) throw new Error((error.message || 'Erreur de la fonction IA') + ' — vérifie ta connexion et réessaie.');
     if (res && res.error) throw new Error(res.error);
@@ -3889,6 +3891,7 @@ async function handleTicketPhoto(file) {
     renderTicketReview();
   } catch (e) {
     clearInterval(ticker);
+    alert('🔎 ERREUR attrapée :\n' + (e && e.message ? e.message : String(e)));
     console.error('[ticket] échec', e);
     showError(e && e.message ? e.message : 'La lecture a échoué. Réessaie.');
   } finally {
