@@ -755,17 +755,8 @@
           <div id="budget-alert-page"></div>
         </div>
         <div class="card">
-          <div class="card-hd"><div class="card-title">📌 À prévoir ce mois-ci <span style="font-size:11px;font-weight:500;color:var(--muted)">— les dépenses que tu sais devoir faire</span></div></div>
-          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-            <input class="inp" id="bud-event-label" placeholder="Ex: Uber aéroport, cadeau anniv, Ilévia…" style="flex:1;min-width:170px" onkeydown="if(event.key==='Enter')addBudgetEvent()">
-            <input class="inp" id="bud-event-amount" type="number" step="0.01" placeholder="€" style="width:100px" onkeydown="if(event.key==='Enter')addBudgetEvent()">
-            <button class="btn-primary" onclick="addBudgetEvent()" style="padding:8px 18px">+ Ajouter</button>
-          </div>
-          <div id="bud-events-list"></div>
-        </div>
-        <div class="card" id="recurring-card" style="display:none">
-          <div class="card-hd"><div class="card-title">🔁 Récurrents détectés <span style="font-size:11px;font-weight:500;color:var(--muted)">— tes dépenses qui reviennent chaque mois (abonnements, loyer…)</span></div></div>
-          <div id="recurring-list"></div>
+          <div class="card-hd"><div class="card-title">💸 Réel dépensé par postes <span style="font-size:11px;font-weight:500;color:var(--muted)">— clique un poste pour voir ses catégories, puis une catégorie pour ses opérations</span></div></div>
+          <div id="bud-real-blocks"></div>
         </div>
         <div class="grid-2">
           <div class="card">
@@ -812,13 +803,22 @@
           </div>
         </div>
         <div class="card">
-          <div class="card-hd"><div class="card-title">💸 Réel dépensé par postes <span style="font-size:11px;font-weight:500;color:var(--muted)">— clique un poste pour voir ses catégories, puis une catégorie pour ses opérations</span></div></div>
-          <div id="bud-real-blocks"></div>
-        </div>
-        <div class="card">
           <div class="card-hd"><div class="card-title">Suggestions par sous-catégorie</div></div>
           <div id="bud-suggestions"></div>
+        </div>        <div class="card">
+          <div class="card-hd"><div class="card-title">📌 À prévoir ce mois-ci <span style="font-size:11px;font-weight:500;color:var(--muted)">— les dépenses que tu sais devoir faire</span></div></div>
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+            <input class="inp" id="bud-event-label" placeholder="Ex: Uber aéroport, cadeau anniv, Ilévia…" style="flex:1;min-width:170px" onkeydown="if(event.key==='Enter')addBudgetEvent()">
+            <input class="inp" id="bud-event-amount" type="number" step="0.01" placeholder="€" style="width:100px" onkeydown="if(event.key==='Enter')addBudgetEvent()">
+            <button class="btn-primary" onclick="addBudgetEvent()" style="padding:8px 18px">+ Ajouter</button>
+          </div>
+          <div id="bud-events-list"></div>
         </div>
+        <div class="card" id="recurring-card" style="display:none">
+          <div class="card-hd"><div class="card-title">🔁 Récurrents détectés <span style="font-size:11px;font-weight:500;color:var(--muted)">— tes dépenses qui reviennent chaque mois (abonnements, loyer…)</span></div></div>
+          <div id="recurring-list"></div>
+        </div>
+
       </div>
 
       <!-- 📈 INVESTISSEMENTS -->

@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v72'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v73'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5290,6 +5290,16 @@ function buildAIContext(opts = {}) {
     const parMois = [];
     for (let m = 0; m < 12; m++) { const k = `${opts.year}-${String(m + 1).padStart(2, '0')}`; const mt = scope.filter(t => t.date_op.startsWith(k)); if (mt.length) parMois.push(`${MONTHS_SHORT[m]} ${Math.round(sOut(mt))}€`); }
     if (parMois.length) L.push('Dépenses par mois : ' + parMois.join(', ') + '.');
+  }
+
+  // Détail MOIS PAR MOIS sur TOUT l'historique (permet de comparer 2 mois de 2 années différentes)
+  const allMonths = period === 'all' ? [...new Set(transactions.map(t => t.date_op.slice(0, 7)))].sort().slice(-48) : [];
+  if (allMonths.length) {
+    const perMonth = allMonths.map(mk => {
+      const mt = transactions.filter(t => t.date_op.startsWith(mk));
+      return `${mk} (rev ${Math.round(sIn(mt))} / dép ${Math.round(sOut(mt))} / ép ${Math.round(sEp(mt))})`;
+    });
+    L.push("Historique mois par mois (revenus / dépenses / épargne, en €) — utilise-le pour toute comparaison entre mois/années : " + perMonth.join(' · ') + '.');
   }
 
   // Objectifs d'épargne (toujours utile)
