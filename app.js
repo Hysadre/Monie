@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v65'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v66'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -78,7 +78,7 @@ const SUBCATS = {
   'Cosmétique': ['Soins', 'Coiffeur', 'Maquillage', 'Parfum', 'Ongles'],
   'Loyer': ['Loyer', 'Charges', 'Caution', 'Eau', 'Électricité', 'Gaz'],
   'Administratif': ['Papiers', 'Amendes', 'Assurance habitation', 'Timbres / Poste', 'Frais divers'],
-  'Vie quotidienne': ['Maison', 'Ménage', 'Animaux', 'Bricolage', 'Divers'],
+  'Vie quotidienne': ['Hygiène corps', 'Produits ménagers', 'Ménage / entretien', 'Lessive / linge', 'Papier toilette / essuie-tout', 'Maison / déco', 'Cuisine / ustensiles', 'Animaux', 'Bricolage / réparations', 'Papeterie / fournitures', 'Piles & ampoules', 'Divers'],
   'Divertissement': ['Cinéma', 'Sorties', 'Jeux', 'Concerts', 'Livres', 'Musées'],
   'Dons': ['Association', 'Caritatif', 'Cagnotte'],
   'Dîme': ['Église'],
