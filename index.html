@@ -1195,6 +1195,16 @@
   </div>
 </div>
 
+<!-- 📂 Détail d'un poste (4e niveau : sous-postes) -->
+<div id="poste-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closePosteItems()">
+  <div class="modal-box" style="max-width:480px;width:94vw;max-height:82vh;display:flex;flex-direction:column">
+    <div class="modal-title" id="poste-modal-title" style="margin-bottom:4px">Détail du poste</div>
+    <div class="modal-msg" id="poste-modal-sub" style="margin-bottom:12px">—</div>
+    <div id="poste-modal-list" style="overflow-y:auto;flex:1"></div>
+    <div class="modal-btns"><button class="btn-ghost" onclick="closePosteItems()">Fermer</button></div>
+  </div>
+</div>
+
 <!-- 📖 Glossaire / définitions -->
 <div id="glossary-modal" class="modal-overlay" style="display:none;align-items:flex-start" onclick="if(event.target===this)closeGlossary()">
   <div class="modal-box" style="max-width:620px;width:94vw;max-height:82vh;margin-top:6vh;display:flex;flex-direction:column">
