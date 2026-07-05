@@ -85,6 +85,10 @@
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           Épargne
         </button>
+        <button class="nav-btn" data-tab="courses" onclick="showTab('courses')">
+          <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          Courses
+        </button>
       </nav>
       <div class="sidebar-bottom">
         <div class="user-pill" onclick="showTab('profile')" style="cursor:pointer" title="Voir mon profil">
@@ -547,6 +551,39 @@
         </div>
       </div>
 
+      <!-- 🛒 COURSES -->
+      <div id="tab-courses" class="tab">
+        <div class="page-hd">
+          <div>
+            <h1 class="page-title">🛒 Listes de courses</h1>
+            <p class="page-sub">Tes produits scannés — coche au fur et à mesure, réutilise une liste, compare les prix</p>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button class="btn-ghost" onclick="showTab('import')" title="Ajouter par photo">📸 Scanner</button>
+          </div>
+        </div>
+        <div class="help-banner" id="help-courses">
+          <div class="help-banner-hd">
+            <div class="help-banner-icon">🛒</div>
+            <div class="help-banner-title">Comment ça marche — Courses</div>
+            <button class="help-banner-close" onclick="closeHelp('help-courses')">J'ai compris ✓</button>
+          </div>
+          <div class="help-banner-body">
+            Tes produits arrivent ici quand tu <b>scannes une liste ou un ticket</b> (page Import) et que tu choisis « liste de courses ».
+            <ul>
+              <li><b>Coche</b> un produit quand il est dans ton panier</li>
+              <li><b>Réutilise</b> une ancienne liste : elle est recopiée (décochée) pour ton prochain mois</li>
+              <li><b>Compare les prix</b> : renomme bien tes libellés / marques pour voir la moins chère</li>
+            </ul>
+          </div>
+        </div>
+        <div class="dash-view-tabs" style="margin-bottom:16px">
+          <button class="dash-view-btn active" id="courses-tab-listes" onclick="setCoursesView('listes')">📋 Mes listes</button>
+          <button class="dash-view-btn" id="courses-tab-prix" onclick="setCoursesView('prix')">🏷️ Comparateur de prix</button>
+        </div>
+        <div id="courses-body"></div>
+      </div>
+
       <!-- 📈 SUIVI MENSUEL -->
       <div id="tab-suivi" class="tab">
         <!-- 🎯 Navigation entre les 3 vues -->
@@ -720,6 +757,15 @@
             <div style="height:230px;display:flex;align-items:center;justify-content:center"><canvas id="analyse-donut"></canvas></div>
             <div id="analyse-sublist"></div>
           </div>
+        </div>
+
+        <!-- 🏷️ Focus marque -->
+        <div class="card">
+          <div class="card-hd"><div class="card-title">🏷️ Focus marque <span style="font-size:11px;font-weight:500;color:var(--muted)">— combien te coûte une marque, et est-elle plus/moins chère</span></div></div>
+          <p class="page-sub" style="margin:0 0 10px">Tape une marque ou un mot du libellé (ex : <i>Ariel</i>, <i>Carrefour</i>, <i>Nivea</i>). Astuce : renomme bien tes libellés pour que la marque apparaisse.</p>
+          <input class="inp" id="analyse-brand" list="analyse-brand-list" placeholder="Ex : Ariel, Lidl, L'Oréal…" oninput="renderBrandFocus()" style="width:100%;box-sizing:border-box;margin-bottom:12px">
+          <datalist id="analyse-brand-list"></datalist>
+          <div id="analyse-brand-out"></div>
         </div>
 
         <div class="card">

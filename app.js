@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v77'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v79'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -232,6 +232,7 @@ function onSubsubSelect(id, val) {
 async function updateTxSubsub(id, val) {
   const tx = transactions.find(t => t.id === id);
   if (!tx) return;
+  if (!_hasSubsubCol) { toast('Lance d\'abord le SQL-V321 pour activer la sous-sous-catégorie', 'error'); return; }
   const v = (val || '').trim() || null;
   if ((tx.sub_sub_category || null) === v) return;
   const { error } = await sb.from('transactions').update({ sub_sub_category: v }).eq('id', id);
@@ -283,6 +284,12 @@ let remboursementsList = [];
 let enveloppesList = [];
 let dettesList = [];
 let coursesList = [];   // 🛒 liste de courses (table courses, SQL-V320)
+let _hasSubsubCol = true; // colonne transactions.sub_sub_category présente ? (détecté au chargement, SQL-V321)
+// Retire sub_sub_category d'un payload si la colonne n'existe pas encore (évite de casser avant le SQL-V321)
+function _sanitizeTx(obj) {
+  if (_hasSubsubCol || !obj || !('sub_sub_category' in obj)) return obj;
+  const o = { ...obj }; delete o.sub_sub_category; return o;
+}
 let showAchieved = false;
 let showAbandoned = false;
 let epargneMonth = new Date().getMonth();
@@ -807,6 +814,8 @@ async function loadAllData() {
     from += BATCH;
   }
   transactions = allTx;
+  // La colonne sub_sub_category existe-t-elle ? (SQL-V321). Si non, le front s'adapte au lieu de casser.
+  try { const c = await sb.from('transactions').select('sub_sub_category').limit(1); _hasSubsubCol = !c.error; } catch (e) { _hasSubsubCol = false; }
   const rulesRes = await sb.from('merchant_rules').select('*').or(`user_id.eq.${currentUser.id},user_id.is.null`).order('priority', { ascending: false });
   rules = rulesRes.data || [];
   await loadProfile();
@@ -853,6 +862,7 @@ function showTab(name) {
   if (name === 'epargne') renderEpargne();
   if (name === 'annuelle') renderVueAnnuelle();
   if (name === 'budget') renderBudget();
+  if (name === 'courses') renderCourses();
   if (name === 'invest') renderInvestissements();
   if (name === 'import') { $('import-preview').style.display = 'none'; }
   if (name === 'profile') renderProfile();
@@ -1730,7 +1740,7 @@ async function quickAddTx() {
     merchant_key: merchantKey(label),
     payment_method: payMethod || null
   };
-  const { data, error } = await sb.from('transactions').insert(newTx).select().single();
+  const { data, error } = await sb.from('transactions').insert(_sanitizeTx(newTx)).select().single();
   if (error) { toast('Erreur : ' + error.message, 'error'); return; }
   transactions.unshift(data);
   // Épargne pour un objectif → alimente la jauge de la page Épargne
@@ -2543,6 +2553,8 @@ function renderAnalyse() {
   // Les conseils sont désormais générés par l'IA (bouton « 🤖 Analyse IA »).
   renderRulesList();
   if (typeof renderAnalyseRecaps === 'function') renderAnalyseRecaps();
+  if (typeof _populateBrandDatalist === 'function') _populateBrandDatalist();
+  if (typeof renderBrandFocus === 'function') renderBrandFocus();
 }
 
 // ─── Éditeur de règles de catégorisation (marchand → catégorie) ───
@@ -2926,7 +2938,7 @@ function openTxEdit(id) {
     const subsubcat = ($('txedit-subsub') && $('txedit-subsub').value || '').trim() || null;
     if (!date || !label || !amount || amount <= 0) { toast('Date, libellé et montant requis', 'error'); return false; }
     const patch = { date_op: date, label, amount: type === 'entree' ? amount : -amount, type, category, sub_category: subcat, sub_sub_category: subsubcat, payment_method: pm };
-    const { error } = await sb.from('transactions').update(patch).eq('id', id);
+    const { error } = await sb.from('transactions').update(_sanitizeTx(patch)).eq('id', id);
     if (error) { toast('Erreur : ' + error.message, 'error'); return false; }
     Object.assign(t, patch);
     transactions.sort((a, b) => a.date_op < b.date_op ? 1 : a.date_op > b.date_op ? -1 : 0);
@@ -2970,7 +2982,7 @@ async function recategorizeTx(id, newCat) {
   const tx = transactions.find(t => t.id === id);
   if (!tx) return;
   // Changer de catégorie remet à zéro la sous-cat ET la sous-sous-cat (elles n'ont plus de sens)
-  const { error } = await sb.from('transactions').update({ category: newCat, sub_category: null, sub_sub_category: null }).eq('id', id);
+  const { error } = await sb.from('transactions').update(_sanitizeTx({ category: newCat, sub_category: null, sub_sub_category: null })).eq('id', id);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
   tx.category = newCat;
   tx.sub_category = null;
@@ -2985,7 +2997,7 @@ async function updateTxSubcat(id, val) {
   const v = (val || '').trim() || null;
   if ((tx.sub_category || null) === v) return; // rien changé
   // Changer de sous-cat remet à zéro la sous-sous-cat rattachée
-  const { error } = await sb.from('transactions').update({ sub_category: v, sub_sub_category: null }).eq('id', id);
+  const { error } = await sb.from('transactions').update(_sanitizeTx({ sub_category: v, sub_sub_category: null })).eq('id', id);
   if (error) { toast('Erreur : ' + error.message, 'error'); return; }
   tx.sub_category = v;
   tx.sub_sub_category = null;
@@ -3019,9 +3031,9 @@ async function applyTxBulkCategory() {
   if (!newCat) { toast('Choisis une catégorie', 'error'); return; }
   const ids = [...txSelectedIds];
   if (!ids.length) return;
-  const { error } = await sb.from('transactions').update({ category: newCat, sub_category: null }).in('id', ids);
+  const { error } = await sb.from('transactions').update(_sanitizeTx({ category: newCat, sub_category: null, sub_sub_category: null })).in('id', ids);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
-  transactions.forEach(t => { if (ids.includes(t.id)) { t.category = newCat; t.sub_category = null; } });
+  transactions.forEach(t => { if (ids.includes(t.id)) { t.category = newCat; t.sub_category = null; t.sub_sub_category = null; } });
   toast(`✓ ${ids.length} tx catégorisées`, 'success');
   txSelectedIds.clear();
   renderTransactionsList();
@@ -3910,7 +3922,7 @@ async function saveTicket() {
       payment_method: detectPaymentMethod(it.label)
     }));
     if (txs.length) {
-      const { error } = await sb.from('transactions').insert(txs);
+      const { error } = await sb.from('transactions').insert(txs.map(_sanitizeTx));
       if (error) { toast('Erreur transactions : ' + error.message, 'error'); console.error(error); return; }
     }
   }
@@ -3940,6 +3952,214 @@ async function saveTicket() {
   toast(msg, 'success');
   // La page « Courses » arrive en Phase 2 ; pour l'instant on reste ou on va aux transactions.
   if (dest !== 'list' && $('tab-transactions')) showTab('transactions');
+}
+
+// ═══ 🛒 PAGE COURSES (Phase 2) ═════════════════════════════════
+let _coursesView = 'listes';
+function setCoursesView(v) {
+  _coursesView = v;
+  const a = $('courses-tab-listes'), b = $('courses-tab-prix');
+  if (a) a.classList.toggle('active', v === 'listes');
+  if (b) b.classList.toggle('active', v === 'prix');
+  renderCourses();
+}
+function renderCourses() {
+  const body = $('courses-body');
+  if (!body) return;
+  if (!coursesList.length) {
+    body.innerHTML = `<div class="empty" style="padding:40px 0;text-align:center">
+      <div class="empty-title">Aucune liste pour l'instant</div>
+      <div class="empty-sub" style="margin:8px 0 16px">Scanne une liste de courses ou un ticket depuis la page Import.</div>
+      <button class="btn-primary" onclick="showTab('import')">📸 Scanner une liste</button>
+    </div>`;
+    return;
+  }
+  body.innerHTML = _coursesView === 'prix' ? _renderCoursesPrix() : _renderCoursesListes();
+}
+
+function _coursePath(c) {
+  return [c.category, c.sub_category, c.sub_sub_category].filter(Boolean).map(esc).join(' · ');
+}
+function _renderCoursesListes() {
+  // Regroupe par list_key (ordre : liste la plus récente en premier)
+  const groups = {};
+  coursesList.forEach(c => { const k = c.list_key || '(sans nom)'; (groups[k] = groups[k] || []).push(c); });
+  const order = Object.keys(groups).sort((a, b) => {
+    const la = Math.max(...groups[a].map(x => +new Date(x.created_at)));
+    const lb = Math.max(...groups[b].map(x => +new Date(x.created_at)));
+    return lb - la;
+  });
+  return order.map(k => {
+    const items = groups[k];
+    const done = items.filter(i => i.checked).length;
+    const total = items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 1), 0);
+    const doneAmt = items.filter(i => i.checked).reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 1), 0);
+    const pct = items.length ? Math.round(done / items.length * 100) : 0;
+    const rows = items.map(c => `
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border-soft)${c.checked ? ';opacity:.5' : ''}">
+        <input type="checkbox" class="bud-sub-check" ${c.checked ? 'checked' : ''} onchange="toggleCourseChecked('${c.id}')" title="Coche quand c'est dans le panier">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px;${c.checked ? 'text-decoration:line-through' : ''}">${esc(c.label)}${c.qty > 1 ? ` <span style="color:var(--muted);font-size:12px">×${c.qty}</span>` : ''}${c.brand ? ` <span style="font-size:11px;color:var(--rose)">${esc(c.brand)}</span>` : ''}</div>
+          <div style="font-size:11px;color:var(--muted)">${_coursePath(c) || '—'}</div>
+        </div>
+        <div style="font-family:var(--fm);font-weight:700;white-space:nowrap">${c.price != null ? fmt(Math.round(Number(c.price) * (Number(c.qty) || 1))) : '—'}</div>
+        <button class="bud-sub-del" onclick="deleteCourseItem('${c.id}')" title="Retirer">🗑</button>
+      </div>`).join('');
+    return `
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd" style="align-items:flex-start">
+          <div>
+            <div class="card-title">🛒 ${esc(k)}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">${done}/${items.length} coché(s) · ${fmt(Math.round(doneAmt))} / ${fmt(Math.round(total))}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn-ghost" style="padding:5px 10px;font-size:12px" onclick="reuseCourseList('${esc(k)}')" title="Recopier cette liste (décochée) pour la réutiliser">♻️ Réutiliser</button>
+            <button class="btn-ghost" style="padding:5px 10px;font-size:12px" onclick="deleteCourseList('${esc(k)}')" title="Supprimer toute la liste">🗑 Liste</button>
+          </div>
+        </div>
+        <div style="height:6px;background:var(--border-soft);border-radius:99px;overflow:hidden;margin:4px 0 10px">
+          <div style="height:100%;width:${pct}%;background:var(--sage);border-radius:99px"></div>
+        </div>
+        ${rows}
+      </div>`;
+  }).join('');
+}
+
+// Comparateur de prix : regroupe par produit (marque si dispo, sinon libellé normalisé)
+function _renderCoursesPrix() {
+  const norm = s => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const priced = coursesList.filter(c => c.price != null && Number(c.price) > 0);
+  if (!priced.length) return `<div class="empty-sub" style="padding:20px 0">Aucun prix renseigné. Ajoute des produits avec un prix (et une marque) pour comparer.</div>`;
+  const groups = {};
+  priced.forEach(c => {
+    const key = norm(c.brand) || norm(c.label);
+    (groups[key] = groups[key] || { name: c.brand || c.label, rows: [] }).rows.push(c);
+  });
+  const cards = Object.values(groups).sort((a, b) => a.name.localeCompare(b.name)).map(g => {
+    const prices = g.rows.map(r => Number(r.price));
+    const min = Math.min(...prices), max = Math.max(...prices);
+    const avg = prices.reduce((s, p) => s + p, 0) / prices.length;
+    const occ = g.rows.slice().sort((a, b) => Number(a.price) - Number(b.price)).map(r => {
+      const isMin = Number(r.price) === min, isMax = Number(r.price) === max && max !== min;
+      const d = (r.created_at || '').slice(0, 10);
+      return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:${isMin ? 'var(--sage)' : (isMax ? '#E53935' : 'var(--muted)')}">
+        <span>${esc(r.label)}${r.list_key ? ` <span style="color:var(--muted)">· ${esc(r.list_key)}</span>` : ''} ${d ? `<span style="color:var(--muted)">(${d})</span>` : ''}</span>
+        <span style="font-family:var(--fm);font-weight:700;white-space:nowrap">${fmt2(r.price)}${isMin ? ' ✓' : ''}</span>
+      </div>`;
+    }).join('');
+    return `
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-hd"><div class="card-title">${esc(g.name)}</div>
+          <div style="font-size:12px;color:var(--muted)">${g.rows.length} achat(s)</div></div>
+        <div style="display:flex;gap:14px;font-size:13px;margin-bottom:8px">
+          <div>🟢 Min <b style="font-family:var(--fm)">${fmt2(min)}</b></div>
+          <div>⚪ Moy <b style="font-family:var(--fm)">${fmt2(avg)}</b></div>
+          <div>🔴 Max <b style="font-family:var(--fm)">${fmt2(max)}</b></div>
+          ${max !== min ? `<div style="margin-left:auto;color:var(--sage)">économie possible : <b>${fmt2(max - min)}</b></div>` : ''}
+        </div>
+        ${occ}
+      </div>`;
+  }).join('');
+  return `<div style="font-size:12px;color:var(--muted);margin-bottom:12px">💡 Astuce : renomme bien tes libellés et remplis la <b>marque</b> pour comparer au plus juste. La ligne verte ✓ = la moins chère.</div>${cards}`;
+}
+function fmt2(n) { return (Math.round(Number(n) * 100) / 100).toFixed(2).replace('.', ',') + ' €'; }
+
+async function toggleCourseChecked(id) {
+  const c = coursesList.find(x => x.id === id); if (!c) return;
+  const nv = !c.checked;
+  const { error } = await sb.from('courses').update({ checked: nv }).eq('id', id);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  c.checked = nv; renderCourses();
+}
+function deleteCourseItem(id) {
+  const c = coursesList.find(x => x.id === id); if (!c) return;
+  confirmDelete(`Retirer « ${esc(c.label)} » de la liste ?`, async () => {
+    const { error } = await sb.from('courses').delete().eq('id', id);
+    if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+    coursesList = coursesList.filter(x => x.id !== id);
+    renderCourses();
+  });
+}
+function deleteCourseList(listKey) {
+  const items = coursesList.filter(c => (c.list_key || '(sans nom)') === listKey);
+  if (!items.length) return;
+  confirmDelete(`Supprimer toute la liste « ${esc(listKey)} » (${items.length} produit(s)) ?`, async () => {
+    const q = listKey === '(sans nom)'
+      ? sb.from('courses').delete().eq('user_id', currentUser.id).is('list_key', null)
+      : sb.from('courses').delete().eq('user_id', currentUser.id).eq('list_key', listKey);
+    const { error } = await q;
+    if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+    coursesList = coursesList.filter(c => (c.list_key || '(sans nom)') !== listKey);
+    toast('✓ Liste supprimée', 'success');
+    renderCourses();
+  });
+}
+async function reuseCourseList(listKey) {
+  const items = coursesList.filter(c => (c.list_key || '(sans nom)') === listKey);
+  if (!items.length) return;
+  const nk = prompt('Nom de la nouvelle liste (recopie décochée pour la réutiliser) :', _curKey || '');
+  if (nk === null) return;
+  const rows = items.map(c => ({
+    user_id: currentUser.id, label: c.label, brand: c.brand, category: c.category,
+    sub_category: c.sub_category, sub_sub_category: c.sub_sub_category, price: c.price,
+    qty: c.qty, checked: false, list_key: (nk || '').trim() || null, source: 'reuse'
+  }));
+  const { ok, data } = await dbGuard(sb.from('courses').insert(rows).select(), 'Réutilisation impossible');
+  if (!ok) return;
+  if (data) coursesList = [...data, ...coursesList];
+  toast(`✓ Liste réutilisée (${rows.length} produit(s), tout décoché)`, 'success');
+  renderCourses();
+}
+
+// ═══ 🏷️ FOCUS MARQUE (Analyse, Phase 3) ═══════════════════════
+function _populateBrandDatalist() {
+  const dl = $('analyse-brand-list'); if (!dl) return;
+  const brands = new Set();
+  coursesList.forEach(c => { if (c.brand) brands.add(c.brand.trim()); });
+  const list = [...brands].sort((a, b) => a.localeCompare(b));
+  dl.innerHTML = list.map(b => `<option value="${esc(b)}">`).join('');
+}
+function renderBrandFocus() {
+  const out = $('analyse-brand-out'); if (!out) return;
+  const q = (($('analyse-brand') && $('analyse-brand').value) || '').trim().toLowerCase();
+  if (q.length < 2) { out.innerHTML = `<div class="empty-sub" style="padding:6px 0">Tape au moins 2 lettres pour lancer la recherche.</div>`; return; }
+  const tx = transactions.filter(t => t.type === 'sortie' && (t.label || '').toLowerCase().includes(q));
+  const cs = coursesList.filter(c => (`${c.brand || ''} ${c.label || ''}`).toLowerCase().includes(q) && c.price != null && Number(c.price) > 0);
+  if (!tx.length && !cs.length) { out.innerHTML = `<div class="empty-sub" style="padding:6px 0">Aucune dépense ni produit ne contient « ${esc(q)} ».</div>`; return; }
+
+  const total = tx.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+  const n = tx.length;
+  const avg = n ? total / n : 0;
+  const kpis = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    <div style="flex:1;min-width:100px;background:var(--bg);border-radius:10px;padding:10px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">Total dépensé</div><div style="font-family:var(--fm);font-weight:800;font-size:18px">${fmt(Math.round(total))}</div></div>
+    <div style="flex:1;min-width:100px;background:var(--bg);border-radius:10px;padding:10px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">Achats</div><div style="font-family:var(--fm);font-weight:800;font-size:18px">${n}</div></div>
+    <div style="flex:1;min-width:100px;background:var(--bg);border-radius:10px;padding:10px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">Panier moyen</div><div style="font-family:var(--fm);font-weight:800;font-size:18px">${fmt(Math.round(avg))}</div></div>
+  </div>`;
+
+  // Comparaison de prix unitaire (depuis tes listes de courses)
+  let priceBlock = '';
+  if (cs.length) {
+    const prices = cs.map(c => Number(c.price));
+    const min = Math.min(...prices), max = Math.max(...prices);
+    const rows = cs.slice().sort((a, b) => Number(a.price) - Number(b.price)).slice(0, 8).map(c => {
+      const isMin = Number(c.price) === min, isMax = Number(c.price) === max && max !== min;
+      return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:${isMin ? 'var(--sage)' : (isMax ? '#E53935' : 'var(--muted)')}">
+        <span>${esc(c.label)}${c.list_key ? ` <span style="color:var(--muted)">· ${esc(c.list_key)}</span>` : ''}</span>
+        <span style="font-family:var(--fm);font-weight:700">${fmt2(c.price)}${isMin ? ' ✓ moins cher' : (isMax ? ' plus cher' : '')}</span></div>`;
+    }).join('');
+    priceBlock = `<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:12px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">🏷️ Prix unitaire (depuis tes courses) ${max !== min ? `— écart <b style="color:var(--sage)">${fmt2(max - min)}</b>` : ''}</div>${rows}</div>`;
+  }
+
+  // Dernières transactions correspondantes
+  const last = tx.slice(0, 12).map(t => `
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border-soft)">
+      <span style="color:var(--muted)">${t.date_op} · ${esc(t.label)}</span>
+      <span style="font-family:var(--fm);font-weight:700;white-space:nowrap">${fmt(Math.round(Math.abs(Number(t.amount))))}</span></div>`).join('');
+  out.innerHTML = kpis + priceBlock + (last ? `<div style="font-weight:700;font-size:13px;margin-bottom:4px">Dernières opérations</div>${last}` : '');
 }
 
 // ═══ SUIVI MENSUEL ═════════════════════════════════════════════
