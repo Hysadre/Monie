@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v70'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v71'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -4841,12 +4841,13 @@ function renderBudget() {
               <datalist id="subdl-${blocKey}-${i}">${subcatDatalist(it.cat)}</datalist>
               ${subs.map((sc, j) => {
                 const sAmt = Math.round(rev * (sc.pct || 0) / 100);
-                return `<div style="display:grid;grid-template-columns:1fr 52px auto 58px 20px 22px;gap:6px;align-items:center;margin-bottom:6px${sc.done ? ';opacity:.5' : ''}">
-                  <input class="inp" list="subdl-${blocKey}-${i}" value="${esc(sc.name || '')}" onchange="renameSubcatBudget('${blocKey}',${i},${j},this.value)" placeholder="Ex: Hygiène, Dons…" style="padding:5px 8px;font-size:12px">
+                const nItems = Array.isArray(sc.items) ? sc.items.length : 0;
+                return `<div style="display:grid;grid-template-columns:1fr 48px auto 64px 20px 22px;gap:6px;align-items:center;margin-bottom:6px${sc.done ? ';opacity:.5' : ''}">
+                  <input class="inp" list="subdl-${blocKey}-${i}" value="${esc(sc.name || '')}" onchange="renameSubcatBudget('${blocKey}',${i},${j},this.value)" placeholder="Ex: Hygiène & entretien…" style="padding:5px 8px;font-size:12px">
                   <input type="number" min="0" step="0.5" value="${sc.pct || 0}" class="bud-sub-inp" onchange="updateSubcatBudget('${blocKey}',${i},${j},this.value)">
                   <span style="font-size:11px;color:var(--muted)">%</span>
-                  <span style="font-family:var(--fm);font-size:12px;text-align:right;color:var(--muted)">${fmt(sAmt)}</span>
-                  <input type="checkbox" class="bud-sub-check" ${sc.done ? 'checked' : ''} onchange="toggleSubcatDone('${blocKey}',${i},${j})" title="Cocher quand c'est validé / acheté ✓">
+                  <span onclick="openPosteItems('${blocKey}',${i},${j})" style="cursor:pointer;font-family:var(--fm);font-size:12px;text-align:right;color:var(--rose);white-space:nowrap" title="Répartir en détail (produits ménagers, corps…)">${fmt(sAmt)} ›${nItems ? `<span style="font-size:9px"> (${nItems})</span>` : ''}</span>
+                  <input type="checkbox" class="bud-sub-check" ${sc.done ? 'checked' : ''} onchange="toggleSubcatDone('${blocKey}',${i},${j})" title="Cocher quand c'est validé / payé ✓">
                   <button class="bud-sub-del" onclick="deleteSubcatBudget('${blocKey}',${i},${j})" title="Supprimer">🗑</button>
                 </div>`;
               }).join('')}
@@ -4954,6 +4955,51 @@ function toggleSubcatDone(blocKey, i, j) {
   saveBudgetPrep(); renderBudget();
   if (typeof _navRefresh === 'function') _navRefresh();
 }
+
+// ─── 4e niveau : détail d'un poste (sous-postes) dans un pop-up ───
+let _posteCtx = null;
+function openPosteItems(bk, i, j) { _posteCtx = { bk, i, j }; renderPosteItems(); $('poste-modal').style.display = 'flex'; }
+function closePosteItems() { const m = $('poste-modal'); if (m) m.style.display = 'none'; _posteCtx = null; }
+function _posteObj() {
+  if (!_posteCtx) return null;
+  const it = _budItem(_posteCtx.bk, _posteCtx.i);
+  return (it && it.subs && it.subs[_posteCtx.j]) ? it.subs[_posteCtx.j] : null;
+}
+function renderPosteItems() {
+  const sc = _posteObj(); if (!sc) { closePosteItems(); return; }
+  const rev = budgetData.revenu_mensuel || 0;
+  const cat = (_budItem(_posteCtx.bk, _posteCtx.i) || {}).cat || '';
+  sc.items = sc.items || [];
+  const posteAmt = Math.round(rev * (sc.pct || 0) / 100);
+  const itemsTotal = Math.round(sc.items.reduce((s, x) => s + Number(x.pct || 0), 0) * 10) / 10;
+  const over = itemsTotal > Number(sc.pct) + 0.001;
+  const okColor = over ? '#E53935' : (sc.items.length && Math.abs(itemsTotal - Number(sc.pct)) < 0.01 ? 'var(--sage)' : 'var(--muted)');
+  set('poste-modal-title', `📂 ${sc.name || 'Poste'}`);
+  set('poste-modal-sub', `Répartis en détail — doit tenir dans ${sc.pct || 0}% (${fmt(posteAmt)})`);
+  const list = $('poste-modal-list');
+  list.innerHTML = `<datalist id="poste-items-dl">${subcatDatalist(cat)}</datalist>`
+    + (sc.items.length ? sc.items.map((x, k) => {
+      const a = Math.round(rev * (x.pct || 0) / 100);
+      return `<div style="display:grid;grid-template-columns:1fr 50px auto 60px 20px 22px;gap:6px;align-items:center;margin-bottom:8px${x.done ? ';opacity:.5' : ''}">
+        <input class="inp" list="poste-items-dl" value="${esc(x.name || '')}" onchange="renamePosteItem(${k},this.value)" placeholder="Ex: Produit ménager, Corps…" style="padding:6px 8px;font-size:13px">
+        <input type="number" min="0" step="0.5" value="${x.pct || 0}" class="bud-sub-inp" onchange="updatePosteItemPct(${k},this.value)">
+        <span style="font-size:11px;color:var(--muted)">%</span>
+        <span style="font-family:var(--fm);font-size:12px;text-align:right;color:var(--muted)">${fmt(a)}</span>
+        <input type="checkbox" class="bud-sub-check" ${x.done ? 'checked' : ''} onchange="togglePosteItemDone(${k})" title="Cocher quand c'est payé ✓">
+        <button class="bud-sub-del" onclick="deletePosteItem(${k})" title="Supprimer">🗑</button>
+      </div>`;
+    }).join('') : '<div class="empty-sub" style="padding:8px 0">Aucun sous-poste. Ajoute-en un.</div>')
+    + `<button class="btn-ghost" style="padding:5px 12px;font-size:13px;margin-top:4px" onclick="addPosteItem()">+ Ajouter un sous-poste</button>
+       <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px;font-weight:700;border-top:1px solid var(--border-soft);padding-top:8px">
+         <span>Total réparti</span><span style="color:${okColor}">${itemsTotal}% / ${sc.pct || 0}%${over ? ' ⚠ dépasse !' : (sc.items.length && Math.abs(itemsTotal - Number(sc.pct)) < 0.01 ? ' ✓' : '')}</span>
+       </div>`;
+}
+function _posteSave() { saveBudgetPrep(); renderPosteItems(); if (typeof renderBudget === 'function') renderBudget(); }
+function addPosteItem() { const sc = _posteObj(); if (!sc) return; sc.items = sc.items || []; sc.items.push({ name: '', pct: 0 }); _posteSave(); }
+function updatePosteItemPct(k, v) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; sc.items[k].pct = Math.round(Math.max(0, parseFloat(v) || 0) * 10) / 10; _posteSave(); }
+function renamePosteItem(k, v) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; sc.items[k].name = (v || '').trim(); _posteSave(); }
+function deletePosteItem(k) { const sc = _posteObj(); if (!sc || !sc.items) return; sc.items.splice(k, 1); _posteSave(); }
+function togglePosteItemDone(k) { const sc = _posteObj(); if (!sc || !sc.items || !sc.items[k]) return; sc.items[k].done = !sc.items[k].done; _posteSave(); }
 // Supprime une ligne de la répartition détaillée (ex : fusionner « restos » dans Alimentation)
 function deleteSubBudgetLine(blocKey, index) {
   try {
@@ -5344,7 +5390,7 @@ function doGlobalSearch() {
 }
 document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openSearch(); }
-  else if (e.key === 'Escape') { const m = $('search-modal'); if (m && m.style.display !== 'none') closeSearch(); const g = $('glossary-modal'); if (g && g.style.display !== 'none') closeGlossary(); }
+  else if (e.key === 'Escape') { const m = $('search-modal'); if (m && m.style.display !== 'none') closeSearch(); const g = $('glossary-modal'); if (g && g.style.display !== 'none') closeGlossary(); const pm = $('poste-modal'); if (pm && pm.style.display !== 'none') closePosteItems(); }
 });
 
 // ═══ 🤝 REMBOURSEMENTS · 📦 ENVELOPPES · 💳 DETTES ═══
