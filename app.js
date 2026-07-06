@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v93'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v94'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3252,44 +3252,82 @@ async function parsePDF(file) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const arr = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arr }).promise;
-  const lines = [];
+  const out = [];
+  const Y_TOL = 3;                                   // tolérance verticale pour regrouper une ligne
+  const amtRe = /-?\d{1,3}(?:[\s ]\d{3})*,\d{2}/; // montant FR : 10,90 / 2 200,01
+  const anyDateRe = /(\d{2})[.\/](\d{2})(?:[.\/](\d{2,4}))?/g;
+  const startDateRe = /^\d{2}[.\/]\d{2}/;            // la ligne d'une opération commence par jj.mm
+  const currentYear = String(new Date().getFullYear());
+
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
-    const items = content.items;
-    // Grouper par ligne (y similaire)
-    const rowsMap = {};
-    items.forEach(it => {
-      const y = Math.round(it.transform[5]);
-      if (!rowsMap[y]) rowsMap[y] = [];
-      rowsMap[y].push({ x: it.transform[4], text: it.str });
-    });
-    Object.keys(rowsMap).sort((a, b) => b - a).forEach(y => {
-      const line = rowsMap[y].sort((a, b) => a.x - b.x).map(t => t.text).join(' ').trim();
-      if (line) lines.push(line);
-    });
-  }
-  // Détecte transactions : ligne avec date + montant
-  const out = [];
-  const amountRe = /(-?\d{1,3}(?:\s?\d{3})*(?:,\d{2}))\s*€?$/;
-  const dateRe = /(\d{2})[.\/](\d{2})(?:[.\/](\d{2,4}))?/;
-  const currentYear = new Date().getFullYear();
-  for (const line of lines) {
-    const dm = line.match(dateRe);
-    const am = line.match(amountRe);
-    if (dm && am) {
-      let year = dm[3] || currentYear;
-      if (year.length === 2) year = '20' + year;
-      const date = `${year}-${dm[2]}-${dm[1]}`;
-      const amtStr = am[1].replace(/\s/g, '').replace(',', '.');
-      const amt = parseFloat(amtStr);
-      if (isNaN(amt) || amt === 0) continue;
-      let label = line.replace(am[0], '').replace(dm[0], '').trim();
-      // Si le montant n'a pas de signe, on suppose négatif (dépense)
-      const signedAmt = /(-|\bDEBIT\b)/i.test(line.substring(0, line.length - am[0].length)) || !line.includes('+') ? -Math.abs(amt) : amt;
-      if (label.length > 3) {
-        out.push({ date_op: date, label: label.substring(0, 100), amount: signedAmt, type: signedAmt > 0 ? 'entree' : 'sortie' });
+    const items = content.items
+      .filter(it => (it.str || '').trim() !== '')
+      .map(it => ({ x: it.transform[4], y: it.transform[5], str: it.str.trim() }));
+    if (!items.length) continue;
+
+    // Position X des colonnes DÉBIT / CRÉDIT (pour distinguer dépense / entrée)
+    let debitX = null, creditX = null;
+    const deb = items.find(it => /^DEBIT$/i.test(it.str));
+    if (deb) {
+      debitX = deb.x;
+      const creds = items.filter(it => /^CREDIT$/i.test(it.str));
+      if (creds.length) creditX = creds.sort((a, b) => Math.abs(a.y - deb.y) - Math.abs(b.y - deb.y))[0].x;
+    }
+
+    // Regroupe les items en lignes visuelles (par y, avec tolérance)
+    items.sort((a, b) => b.y - a.y || a.x - b.x);
+    const rows = [];
+    let cur = null;
+    for (const it of items) {
+      if (!cur || Math.abs(it.y - cur.y) > Y_TOL) { cur = { y: it.y, items: [it] }; rows.push(cur); }
+      else cur.items.push(it);
+    }
+
+    for (const row of rows) {
+      const its = row.items.slice().sort((a, b) => a.x - b.x);
+      if (!its[0] || !startDateRe.test(its[0].str)) continue;      // pas une ligne d'opération
+      const text = its.map(t => t.str).join(' ');
+      if (/ANCIEN SOLDE|NOUVEAU SOLDE|\bSOLDE\b|TOTAL DES|TOTAUX|A NOUVEAU/i.test(text)) continue;
+
+      const dates = [...text.matchAll(anyDateRe)];
+      if (!dates.length) continue;
+      const start = dates[0];                                       // jj.mm (date d'opération)
+      const withYear = dates.filter(d => d[3]);                     // dates complètes jj.mm.aa
+      const valeur = withYear.length ? withYear[withYear.length - 1] : null;
+
+      // Montant = ce qui suit la date valeur (gère "2 200,01" en plusieurs morceaux)
+      let after = text;
+      if (valeur) { const i = text.lastIndexOf(valeur[0]); if (i >= 0) after = text.slice(i + valeur[0].length); }
+      const am = after.match(amtRe) || text.match(new RegExp(amtRe.source + '\\s*€?\\s*$'));
+      if (!am) continue;
+      const amt = parseFloat(am[0].replace(/[\s ]/g, '').replace(',', '.'));
+      if (!isFinite(amt) || amt === 0) continue;
+
+      // Signe : le montant est-il dans la colonne CRÉDIT (entrée) ou DÉBIT (dépense) ?
+      let isCredit = false;
+      if (debitX != null && creditX != null) {
+        const nums = its.filter(t => /\d,\d{2}|\d{3,}/.test(t.str) && t.x > debitX - 60);
+        const amtX = nums.length ? nums[nums.length - 1].x : null;   // le plus à droite
+        if (amtX != null) isCredit = Math.abs(amtX - creditX) < Math.abs(amtX - debitX);
+      } else {
+        // Pas de colonnes détectées : heuristique (signe explicite sinon dépense)
+        isCredit = /\+/.test(after) && !/-/.test(after);
       }
+      const signed = isCredit ? Math.abs(amt) : -Math.abs(amt);
+
+      let yr = (valeur && valeur[3]) || start[3] || currentYear;
+      if (yr.length === 2) yr = '20' + yr;
+      const date = `${yr}-${start[2]}-${start[1]}`;
+
+      // Libellé : entre la date de début et la date valeur
+      let label = text.replace(/^\s*\d{2}[.\/]\d{2}\s*/, '');
+      if (valeur) { const i = label.lastIndexOf(valeur[0]); if (i > 0) label = label.slice(0, i); }
+      label = label.replace(/\s+/g, ' ').trim();
+      if (label.length < 2) continue;
+
+      out.push({ date_op: date, label: label.slice(0, 100), amount: signed, type: signed > 0 ? 'entree' : 'sortie' });
     }
   }
   return out;
