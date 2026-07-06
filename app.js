@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v106'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v107'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -4000,6 +4000,11 @@ function renderImportBatches() {
       <div style="flex:1;min-width:0"><b>🧹 Nettoyer l'historique</b><div style="font-size:12px;color:var(--muted)">Applique les dernières règles à TOUTES tes transactions : Livres → Vie quotidienne · Restaurant/Sorties → Restos · chouchane→Fast food · gelato/philomène→Restos. Rien n'est supprimé.</div></div>
       <button class="btn-primary" style="padding:8px 14px;font-size:13px" onclick="cleanupHistory()">🧹 Nettoyer</button>
     </div>
+    <div style="display:flex;align-items:center;gap:12px;background:rgba(127,184,158,0.16);border-radius:10px;padding:12px 14px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:0"><b>🎬 Démo complète (3 ans)</b><div style="font-size:12px;color:var(--muted)">Remplit TOUTES les pages (transactions, patrimoine, épargne, remboursements, dettes) sur 2023-2025. Taguée « démo », supprimable.</div></div>
+      <button class="btn-ghost" style="padding:8px 12px;font-size:13px" onclick="generateFullDemo()">🎬 Générer</button>
+      <button class="btn-ghost" style="padding:8px 12px;font-size:13px;color:#E53935;border-color:#E53935" onclick="deleteFullDemo()">🗑 Retirer la démo</button>
+    </div>
     <p class="page-sub" style="margin:0 0 10px">Ci-dessous, chaque ligne = un <b>lot ajouté</b> (par date d'ajout + source). Supprime un lot entier pour le ré-importer proprement.</p>
     ${rows || '<div class="empty-sub">Aucune opération enregistrée.</div>'}`;
 }
@@ -4046,6 +4051,114 @@ async function cleanupHistory() {
   toast(`✓ ${done} transaction(s) nettoyée(s) et reclassée(s)`, 'success', 5000);
   renderImportBatches();
   renderTransactionsList();
+}
+
+// 🎬 DÉMO COMPLÈTE : remplit TOUTES les pages (transactions, patrimoine, épargne, remboursements, dettes) sur 2023-2025
+const DEMO_TAG = '[démo]';
+async function generateFullDemo() {
+  const ok = await confirmDialog('🎬 Générer une démo complète ?', `<div style="font-size:14px;line-height:1.6">Je vais remplir <b>toutes les pages</b> avec du fictif sur <b>2023, 2024, 2025</b> :<ul style="margin:8px 0;padding-left:18px"><li>~1 100 transactions (dashboard, analyse, calendrier)</li><li>patrimoine mensuel (suivi mensuel)</li><li>objectifs d'épargne, remboursements, paiements en plusieurs fois</li></ul>Tout est tagué « démo » et supprimable en un clic (bouton juste en dessous). Continuer ?</div>`);
+  if (!ok) return;
+  const R = (a, b) => Math.round((a + Math.random() * (b - a)) * 100) / 100;
+  const P = a => a[Math.floor(Math.random() * a.length)];
+  const D = () => String(1 + Math.floor(Math.random() * 28)).padStart(2, '0');
+  const N = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
+  const uid = currentUser.id;
+  toast('🎬 Génération de la démo…');
+
+  // ── 1) TRANSACTIONS ──
+  const tx = [];
+  const add = (date, label, amount, type, cat, sub = null, ss = null, bank = 'LCL', pm = 'carte') =>
+    tx.push({ user_id: uid, date_op: date, label, amount: type === 'entree' ? Math.abs(amount) : -Math.abs(amount), type, category: cat, sub_category: sub, sub_sub_category: ss, source: 'import_csv', comment: DEMO_TAG, account: 'Compte courant', bank_source: bank, payment_method: pm });
+  const SUP = ['CARREFOUR', 'LIDL', 'AUCHAN', 'FRANPRIX', 'MONOPRIX', 'E.LECLERC', 'INTERMARCHE', 'CASINO'];
+  const RESTO = ['LE BISTROT', 'SUSHI SHOP', 'PIZZA ROMA', 'LA TRATTORIA', 'WOK 88', 'CHEZ LEON'];
+  const FAST = ['MCDONALDS', 'BURGER KING', 'KFC', 'O TACOS', 'SUBWAY', 'SNACK CHOUCHANE'];
+  const BOUL = ['BOULANGERIE PAUL', 'MARIE BLACHERE', 'LA MIE CALINE'];
+  const MODE = ['ZARA', 'H&M', 'UNIQLO', 'SHEIN', 'KIABI'];
+  const VQ = [['ACTION', 'Hygiène & entretien', 'Produits ménagers'], ['IKEA', 'Maison & déco', 'Décoration'], ['GIFI', 'Maison & déco', null], ['NORMAL', 'Hygiène & entretien', 'Lessive']];
+  const TRANSP = [['SNCF', 'Train'], ['RATP NAVIGO', 'Bus / Métro'], ['TOTAL ENERGIES', 'Essence'], ['UBER', 'Uber / VTC']];
+  const ABO = [['NETFLIX', 'Streaming', 13.49], ['SPOTIFY', 'Streaming', 10.99], ['FREE MOBILE', 'Téléphone', 19.99], ['ORANGE FIBRE', 'Internet', 39.99], ['BASIC FIT', 'Salle de sport', 29.99]];
+  const SANTE = [['PHARMACIE CENTRALE', 'Pharmacie'], ['DR MARTIN', 'Médecin'], ['DENTISTE DUPONT', 'Dentiste']];
+  const DIV = [['UGC CINE', 'Cinéma'], ['FNAC SPECTACLES', 'Concerts'], ['STEAM', 'Jeux']];
+  const NAMES = ['JULIE', 'MARC', 'SOPHIE', 'KEVIN', 'AMINA'];
+  for (const y of [2023, 2024, 2025]) for (let m = 1; m <= 12; m++) {
+    const mk = `${y}-${String(m).padStart(2, '0')}`;
+    add(`${mk}-02`, 'VIREMENT SALAIRE ' + mk, R(1950, 2450), 'entree', 'Salaire', null, null, 'LCL', 'virement');
+    add(`${mk}-05`, 'LOYER APPARTEMENT', 490, 'sortie', 'Loyer', null, null, 'LCL', 'prelevement');
+    for (let i = 0; i < N(5, 8); i++) add(`${mk}-${D()}`, P(SUP), R(12, 90), 'sortie', 'Alimentation', 'Courses', P(['Fruits & légumes', 'Viande', 'Épicerie salée', 'Boissons']));
+    for (let i = 0; i < N(1, 4); i++) add(`${mk}-${D()}`, P(RESTO), R(15, 55), 'sortie', 'Alimentation', 'Restos');
+    for (let i = 0; i < N(1, 3); i++) add(`${mk}-${D()}`, P(FAST), R(8, 22), 'sortie', 'Alimentation', 'Fast food');
+    for (let i = 0; i < N(1, 4); i++) add(`${mk}-${D()}`, P(BOUL), R(2, 11), 'sortie', 'Alimentation', 'Boulangerie');
+    for (let i = 0; i < N(2, 3); i++) { const [l, s] = P(TRANSP); add(`${mk}-${D()}`, l, R(10, 70), 'sortie', 'Transport', s); }
+    ABO.slice().sort(() => Math.random() - .5).slice(0, N(2, 4)).forEach(([l, s, a]) => add(`${mk}-${D()}`, l, a, 'sortie', 'Abonnements', s, null, 'BoursoBank', 'prelevement'));
+    for (let i = 0; i < N(1, 2); i++) { const [l, s, ss] = P(VQ); add(`${mk}-${D()}`, l, R(8, 60), 'sortie', 'Vie quotidienne', s, ss); }
+    if (Math.random() < .4) add(`${mk}-${D()}`, P(MODE), R(20, 120), 'sortie', 'Mode', 'Vêtements');
+    if (Math.random() < .4) { const [l, s] = P(SANTE); add(`${mk}-${D()}`, l, R(8, 55), 'sortie', 'Santé', s); }
+    if (Math.random() < .5) { const [l, s] = P(DIV); add(`${mk}-${D()}`, l, R(8, 45), 'sortie', 'Divertissement', s); }
+    if (Math.random() < .3) add(`${mk}-${D()}`, 'CADEAU ' + P(NAMES), R(15, 80), 'sortie', 'Amis & Famille', 'Cadeaux', null, 'LCL', 'virement');
+    if (Math.random() < .7) add(`${mk}-${D()}`, 'DIME EGLISE', R(50, 200), 'sortie', 'Dîme', null, null, 'LCL', 'virement');
+    if (Math.random() < .12) add(`${mk}-${D()}`, P(['AIRBNB', 'BOOKING', 'AIR FRANCE']), R(80, 400), 'sortie', 'Voyages', 'Hébergement');
+    add(`${mk}-${D()}`, 'VIREMENT EPARGNE', R(120, 350), 'epargne', 'Épargne', null, null, 'BoursoBank', 'virement');
+  }
+  for (let i = 0; i < tx.length; i += 200) {
+    const { error } = await sb.from('transactions').insert(tx.slice(i, i + 200).map(_sanitizeTx));
+    if (error) { toast('Erreur transactions : ' + error.message, 'error'); console.error(error); return; }
+  }
+
+  // ── 2) PATRIMOINE (tracker_mensuel) : soldes qui grossissent ──
+  const trk = [];
+  let lcl = 800, bourso = 1500, livret = 3000, invest = 500;
+  for (const y of [2023, 2024, 2025]) for (let m = 1; m <= 12; m++) {
+    lcl = Math.max(200, lcl + R(-200, 400)); bourso += R(-100, 500); livret += R(50, 400); invest += R(0, 300);
+    trk.push({ user_id: uid, month: `${y}-${String(m).padStart(2, '0')}-01`, lcl: Math.round(lcl), bourso: Math.round(bourso), especes: R(20, 120), livret_a: Math.round(livret), investissements: Math.round(invest) });
+  }
+  for (let i = 0; i < trk.length; i += 200) { try { await sb.from('tracker_mensuel').upsert(trk.slice(i, i + 200), { onConflict: 'user_id,month' }); } catch (e) { console.error('tracker', e); } }
+
+  // ── 3) OBJECTIFS D'ÉPARGNE + contributions ──
+  try {
+    const goals = [
+      { user_id: uid, nom: 'Vacances Bali ' + DEMO_TAG, emoji: '🏝️', cible: 3000, deja_epargne: 1850, date_cible: '2025-08-01', note: DEMO_TAG },
+      { user_id: uid, nom: 'Fonds d\'urgence ' + DEMO_TAG, emoji: '🛟', cible: 5000, deja_epargne: 4200, note: DEMO_TAG },
+      { user_id: uid, nom: 'Nouveau PC ' + DEMO_TAG, emoji: '💻', cible: 1500, deja_epargne: 1500, statut: 'atteint', note: DEMO_TAG }
+    ];
+    const { data: gd } = await sb.from('epargne_objectifs').insert(goals).select();
+    if (gd) { const contribs = gd.flatMap(g => [{ objectif_id: g.id, user_id: uid, montant: Math.round(g.deja_epargne * 0.6), note: DEMO_TAG }, { objectif_id: g.id, user_id: uid, montant: Math.round(g.deja_epargne * 0.4), note: DEMO_TAG }]); await sb.from('epargne_contributions').insert(contribs); }
+  } catch (e) { console.error('goals', e); }
+
+  // ── 4) REMBOURSEMENTS / ENVELOPPES / DETTES ──
+  try {
+    await sb.from('remboursements').insert([
+      { user_id: uid, tiers: 'Julie', montant: 120, sens: 'on_me_doit', motif: 'Resto ' + DEMO_TAG },
+      { user_id: uid, tiers: 'Marc', montant: 45, sens: 'je_dois', motif: 'Ciné ' + DEMO_TAG }
+    ]);
+  } catch (e) { console.error('remb', e); }
+  try { await sb.from('enveloppes').insert([{ user_id: uid, nom: 'Noël ' + DEMO_TAG, emoji: '🎁', objectif: 400, mensuel: 40, actuel: 240 }]); } catch (e) { console.error('env', e); }
+  try {
+    await sb.from('dettes').insert([
+      { user_id: uid, nom: 'Klarna canapé ' + DEMO_TAG, montant_total: 600, mensualite: 100, deja_paye: 400 },
+      { user_id: uid, nom: 'iPhone 3x ' + DEMO_TAG, montant_total: 900, mensualite: 300, deja_paye: 300 }
+    ]);
+  } catch (e) { console.error('dettes', e); }
+
+  await loadAllData(); await loadExtra();
+  if (typeof loadInvestissements === 'function') { try { await loadInvestissements(); } catch (e) {} }
+  toast(`✓ Démo complète générée : ${tx.length} transactions + patrimoine + épargne 🎬`, 'success', 6000);
+  renderImportBatches(); renderTransactionsList();
+}
+// 🧹 Supprime toute la démo complète (tous les tags [démo])
+async function deleteFullDemo() {
+  const ok = await confirmDialog('Supprimer toute la démo ?', `<div style="font-size:14px;line-height:1.6">Je supprime tout ce qui est tagué <b>« démo »</b> : transactions, patrimoine 2023-2025, objectifs d'épargne, remboursements, enveloppes, dettes de démo.<br><br>Tes vraies données ne sont pas touchées. Continuer ?</div>`);
+  if (!ok) return;
+  toast('Suppression de la démo…');
+  try { await sb.from('transactions').delete().eq('user_id', currentUser.id).eq('comment', DEMO_TAG); } catch (e) { console.error(e); }
+  try { await sb.from('tracker_mensuel').delete().eq('user_id', currentUser.id).gte('month', '2023-01-01').lte('month', '2025-12-01'); } catch (e) { console.error(e); }
+  try { await sb.from('epargne_contributions').delete().eq('user_id', currentUser.id).eq('note', DEMO_TAG); } catch (e) { console.error(e); }
+  try { await sb.from('epargne_objectifs').delete().eq('user_id', currentUser.id).eq('note', DEMO_TAG); } catch (e) { console.error(e); }
+  try { await sb.from('remboursements').delete().eq('user_id', currentUser.id).ilike('motif', '%' + DEMO_TAG + '%'); } catch (e) { console.error(e); }
+  try { await sb.from('enveloppes').delete().eq('user_id', currentUser.id).ilike('nom', '%' + DEMO_TAG + '%'); } catch (e) { console.error(e); }
+  try { await sb.from('dettes').delete().eq('user_id', currentUser.id).ilike('nom', '%' + DEMO_TAG + '%'); } catch (e) { console.error(e); }
+  await loadAllData(); await loadExtra();
+  toast('✓ Démo supprimée', 'success');
+  renderImportBatches(); renderTransactionsList();
 }
 
 // Supprime TOUT ce qui a été ajouté aujourd'hui (toutes sources)
