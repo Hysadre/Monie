@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v101'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v102'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -761,7 +761,14 @@ function loadBudgetForMonth() {
   const saved = budgetByMonth[budgetKey()];
   if (saved) {
     budgetData = { ...saved, events: saved.events || [] };
-    budgetData.pct_imprevus = (budgetData.sub_budget && budgetData.sub_budget._pctImprevus) || 0;
+    const sb2 = budgetData.sub_budget;
+    budgetData.pct_imprevus = (sb2 && sb2._pctImprevus) || 0;
+    // % décimaux exacts stockés dans le jsonb (les colonnes SQL sont arrondies)
+    if (sb2) {
+      if (sb2._pctCharges != null) budgetData.pct_charges = Number(sb2._pctCharges);
+      if (sb2._pctPlaisir != null) budgetData.pct_plaisir = Number(sb2._pctPlaisir);
+      if (sb2._pctEpargne != null) budgetData.pct_epargne = Number(sb2._pctEpargne);
+    }
   } else {
     budgetData = {
       revenu_mensuel: budgetTemplate.revenu_mensuel || 0,
@@ -5504,10 +5511,15 @@ function computeBudgetStatus(monthKey) {
     if (it.cat) budgetByCat[it.cat] = (budgetByCat[it.cat] || 0) + rev * (it.pct || 0) / 100;
   }));
   if (pctImp > 0) budgetByCat['Imprévus'] = (budgetByCat['Imprévus'] || 0) + rev * pctImp / 100; // Imprévus = 1 catégorie = toute sa famille
+  // % exacts (décimaux) depuis le jsonb si présents, sinon colonnes entières
+  const _bsub = b.sub_budget;
+  const _pc = (_bsub && _bsub._pctCharges != null) ? Number(_bsub._pctCharges) : (b.pct_charges || 0);
+  const _pp = (_bsub && _bsub._pctPlaisir != null) ? Number(_bsub._pctPlaisir) : (b.pct_plaisir || 0);
+  const _pe = (_bsub && _bsub._pctEpargne != null) ? Number(_bsub._pctEpargne) : (b.pct_epargne || 0);
   const budget = {
-    charges: Math.round(rev * (b.pct_charges || 0) / 100),
-    plaisir: Math.round(rev * (b.pct_plaisir || 0) / 100),
-    epargne: Math.round(rev * (b.pct_epargne || 0) / 100),
+    charges: Math.round(rev * _pc / 100),
+    plaisir: Math.round(rev * _pp / 100),
+    epargne: Math.round(rev * _pe / 100),
     imprevus: Math.round(rev * pctImp / 100)
   };
   // Dépenses "à prévoir" du mois (loyer, factures que tu sais devoir payer) → à retirer du disponible
@@ -5768,16 +5780,20 @@ function _doBudgetSave() {
   budgetData.pct_plaisir = _pctVal($('bud-pct-plaisir').value);
   budgetData.pct_epargne = _pctVal($('bud-pct-epargne').value);
   if ($('bud-pct-imprevus')) budgetData.pct_imprevus = _pctVal($('bud-pct-imprevus').value);
-  // L'Imprévus est stocké dans le jsonb sub_budget (pas de colonne SQL dédiée)
-  _ensureSubBudget()._pctImprevus = budgetData.pct_imprevus || 0;
+  // Les colonnes pct_* sont ENTIÈRES en base → on y met des entiers, et on garde les décimales dans le jsonb
+  const subB = _ensureSubBudget();
+  subB._pctImprevus = budgetData.pct_imprevus || 0;
+  subB._pctCharges = budgetData.pct_charges;
+  subB._pctPlaisir = budgetData.pct_plaisir;
+  subB._pctEpargne = budgetData.pct_epargne;
   const key = budgetKey();
   const payload = {
     user_id: currentUser.id, month: key + '-01',
     revenu_mensuel: budgetData.revenu_mensuel,
-    pct_charges: budgetData.pct_charges,
-    pct_plaisir: budgetData.pct_plaisir,
-    pct_epargne: budgetData.pct_epargne,
-    sub_budget: budgetData.sub_budget || null,
+    pct_charges: Math.round(budgetData.pct_charges || 0),   // colonne int
+    pct_plaisir: Math.round(budgetData.pct_plaisir || 0),
+    pct_epargne: Math.round(budgetData.pct_epargne || 0),
+    sub_budget: budgetData.sub_budget || null,              // contient les % décimaux exacts
     events: budgetData.events || []
   };
   budgetByMonth[key] = { ...(budgetByMonth[key] || {}), ...payload };
