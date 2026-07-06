@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v104'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v105'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3053,8 +3053,9 @@ function openTxEdit(id) {
     const pm = $('txedit-pm').value || null;
     const subcat = ($('txedit-subcat') && $('txedit-subcat').value || '').trim() || null;
     const subsubcat = ($('txedit-subsub') && $('txedit-subsub').value || '').trim() || null;
+    const bank = ($('txedit-bank') && $('txedit-bank').value || '').trim() || null;
     if (!date || !label || !amount || amount <= 0) { toast('Date, libellé et montant requis', 'error'); return false; }
-    const patch = { date_op: date, label, amount: type === 'entree' ? amount : -amount, type, category, sub_category: subcat, sub_sub_category: subsubcat, payment_method: pm };
+    const patch = { date_op: date, label, amount: type === 'entree' ? amount : -amount, type, category, sub_category: subcat, sub_sub_category: subsubcat, payment_method: pm, bank_source: bank };
     const { error } = await sb.from('transactions').update(_sanitizeTx(patch)).eq('id', id);
     if (error) { toast('Erreur : ' + error.message, 'error'); return false; }
     Object.assign(t, patch);
@@ -3080,8 +3081,15 @@ function openTxEdit(id) {
       <div class="auth-field"><label>Sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(choisis une suggestion ou saisis)</span></label><input class="inp" id="txedit-subcat" value="${esc(t.sub_category || '')}" list="txedit-subcat-list" placeholder="Facultatif" onchange="_txeditRefreshSubsub('${t.id}')"><datalist id="txedit-subcat-list">${subcatDatalist(t.category)}</datalist></div>
       <div class="auth-field"><label>Sous-sous-catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(choisis une suggestion ou saisis)</span></label><input class="inp" id="txedit-subsub" value="${esc(t.sub_sub_category || '')}" list="txedit-subsub-list" placeholder="Facultatif"><datalist id="txedit-subsub-list">${subsubDatalist(t.category, t.sub_category)}</datalist></div>
       <div class="auth-field"><label>Moyen de paiement</label><select class="select" id="txedit-pm">${pmOpts}</select></div>
+      <div class="auth-field"><label>Banque / compte <span style="font-weight:400;color:var(--muted);font-size:11px">(facultatif)</span></label><input class="inp" id="txedit-bank" value="${esc(t.bank_source || '')}" list="txedit-bank-list" placeholder="Ex: LCL, BoursoBank, Espèces…"><datalist id="txedit-bank-list">${_bankDatalist()}</datalist></div>
     </div>
   `);
+}
+// Suggestions de banques : prédéfinies + celles déjà utilisées dans les transactions
+function _bankDatalist() {
+  const base = ['LCL', 'BoursoBank', 'Banque Postale', 'Revolut', 'N26', 'Espèces'];
+  const used = [...new Set(transactions.map(t => (t.bank_source || '').trim()).filter(Boolean))];
+  return [...new Set([...base, ...used])].map(b => `<option value="${esc(b)}">`).join('');
 }
 // Rafraîchit les suggestions (datalists) de la modale d'édition quand catégorie/sous-cat changent
 function _txeditRefreshLists() {
