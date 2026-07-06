@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v107'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v108'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -4139,10 +4139,26 @@ async function generateFullDemo() {
     ]);
   } catch (e) { console.error('dettes', e); }
 
+  // ── 5) BUDGETS mensuels (2023-2025) : pour remplir la page Gestion du budget ──
+  try {
+    const bud = [];
+    for (const y of [2023, 2024, 2025]) for (let m = 1; m <= 12; m++) {
+      const sbud = JSON.parse(JSON.stringify(DEFAULT_SUB_PCT));
+      sbud._pctCharges = 50; sbud._pctPlaisir = 30; sbud._pctEpargne = 20; sbud._pctImprevus = 0;
+      bud.push({ user_id: uid, month: `${y}-${String(m).padStart(2, '0')}-01`, revenu_mensuel: 2200, pct_charges: 50, pct_plaisir: 30, pct_epargne: 20, sub_budget: sbud, events: [] });
+    }
+    for (let i = 0; i < bud.length; i += 200) await sb.from('budget_mensuel').upsert(bud.slice(i, i + 200), { onConflict: 'user_id,month' });
+  } catch (e) { console.error('budget demo', e); }
+
   await loadAllData(); await loadExtra();
+  if (typeof loadBudgetPrep === 'function') { try { await loadBudgetPrep(); } catch (e) {} }
   if (typeof loadInvestissements === 'function') { try { await loadInvestissements(); } catch (e) {} }
-  toast(`✓ Démo complète générée : ${tx.length} transactions + patrimoine + épargne 🎬`, 'success', 6000);
+  // Bascule les vues sur 2025 pour que la démo soit visible tout de suite
+  dashYear = 2025; if (typeof dashMonth !== 'undefined') dashMonth = -1;
+  budgetYear = 2025; budgetMonth = 11; if (typeof loadBudgetForMonth === 'function') loadBudgetForMonth();
+  toast(`✓ Démo complète générée : ${tx.length} transactions + patrimoine + épargne + budgets 🎬 — vues placées sur 2025`, 'success', 7000);
   renderImportBatches(); renderTransactionsList();
+  if (typeof renderDashboard === 'function') renderDashboard();
 }
 // 🧹 Supprime toute la démo complète (tous les tags [démo])
 async function deleteFullDemo() {
@@ -4151,12 +4167,14 @@ async function deleteFullDemo() {
   toast('Suppression de la démo…');
   try { await sb.from('transactions').delete().eq('user_id', currentUser.id).eq('comment', DEMO_TAG); } catch (e) { console.error(e); }
   try { await sb.from('tracker_mensuel').delete().eq('user_id', currentUser.id).gte('month', '2023-01-01').lte('month', '2025-12-01'); } catch (e) { console.error(e); }
+  try { await sb.from('budget_mensuel').delete().eq('user_id', currentUser.id).gte('month', '2023-01-01').lte('month', '2025-12-01'); } catch (e) { console.error(e); }
   try { await sb.from('epargne_contributions').delete().eq('user_id', currentUser.id).eq('note', DEMO_TAG); } catch (e) { console.error(e); }
   try { await sb.from('epargne_objectifs').delete().eq('user_id', currentUser.id).eq('note', DEMO_TAG); } catch (e) { console.error(e); }
   try { await sb.from('remboursements').delete().eq('user_id', currentUser.id).ilike('motif', '%' + DEMO_TAG + '%'); } catch (e) { console.error(e); }
   try { await sb.from('enveloppes').delete().eq('user_id', currentUser.id).ilike('nom', '%' + DEMO_TAG + '%'); } catch (e) { console.error(e); }
   try { await sb.from('dettes').delete().eq('user_id', currentUser.id).ilike('nom', '%' + DEMO_TAG + '%'); } catch (e) { console.error(e); }
   await loadAllData(); await loadExtra();
+  if (typeof loadBudgetPrep === 'function') { try { await loadBudgetPrep(); } catch (e) {} }
   toast('✓ Démo supprimée', 'success');
   renderImportBatches(); renderTransactionsList();
 }
