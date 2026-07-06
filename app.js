@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v109'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v110'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -2840,6 +2840,7 @@ function renderTransactionsList() {
           <button class="bulk-btn" onclick="applyTxBulkCategory()">✓ Appliquer</button>
           <input type="date" class="bulk-select" id="tx-bulk-date" title="Nouvelle date pour la sélection" style="min-width:auto">
           <button class="bulk-btn" onclick="applyTxBulkDate()">📅 Dater</button>
+          <button class="bulk-btn" onclick="mergeTxSelection()" title="Fusionner en une seule transaction (ex: Courses Leclerc)">🔀 Fusionner</button>
           <button class="bulk-btn danger" onclick="deleteTxBulkSelection()">🗑 Supprimer</button>
           <button class="bulk-btn" onclick="clearTxSelection()">Annuler</button>
         </div>
@@ -3180,6 +3181,31 @@ async function applyTxBulkDate() {
   if (typeof renderDashboard === 'function') renderDashboard();
 }
 
+// 🔀 Fusionne les transactions sélectionnées en UNE seule (ex : « Courses Leclerc »)
+async function mergeTxSelection() {
+  const ids = [...txSelectedIds];
+  if (ids.length < 2) { toast('Sélectionne au moins 2 transactions à fusionner', 'error'); return; }
+  const sel = transactions.filter(t => ids.includes(t.id));
+  const name = (prompt(`Nom de la transaction fusionnée ? (${ids.length} lignes)`, 'Courses ') || '').trim();
+  if (!name) return;
+  const total = sel.reduce((s, t) => s + Number(t.amount), 0);      // signé (garde le sens)
+  const type = sel[0].type;
+  const cnt = (arr, key) => { const c = {}; arr.forEach(t => { const v = (t[key] || '').trim(); if (v) c[v] = (c[v] || 0) + 1; }); return Object.keys(c).sort((a, b) => c[b] - c[a])[0] || null; };
+  const cat = cnt(sel, 'category') || 'Alimentation';
+  const sub = cnt(sel.filter(t => t.category === cat), 'sub_category');
+  const date = sel.map(t => t.date_op).sort()[0];
+  const ok = await confirmDialog('🔀 Fusionner ?', `<div style="font-size:14px;line-height:1.6">Fusionner <b>${ids.length} transactions</b> en une seule «&nbsp;<b>${esc(name)}</b>&nbsp;» de <b>${fmt(Math.abs(total))}</b> (${esc(cat)}) ?<br><br>Les ${ids.length} lignes d'origine seront <b>supprimées</b> (le détail reste dans ta liste de courses si tu l'y avais mis). Continuer ?</div>`);
+  if (!ok) return;
+  const merged = { user_id: currentUser.id, date_op: date, label: name, amount: total, type, category: cat, sub_category: sub, sub_sub_category: null, source: 'manual', payment_method: sel[0].payment_method || null, bank_source: sel[0].bank_source || null };
+  const { data, error } = await sb.from('transactions').insert(_sanitizeTx(merged)).select().single();
+  if (error) { toast('Erreur : ' + error.message, 'error'); console.error(error); return; }
+  for (let i = 0; i < ids.length; i += 200) { const { error: e2 } = await sb.from('transactions').delete().in('id', ids.slice(i, i + 200)); if (e2) { toast('Erreur suppression : ' + e2.message, 'error'); return; } }
+  transactions = transactions.filter(t => !ids.includes(t.id));
+  if (data) transactions.unshift(data);
+  txSelectedIds.clear();
+  toast(`✓ ${ids.length} transactions fusionnées en « ${name} »`, 'success', 5000);
+  renderTransactionsList();
+}
 async function deleteTxBulkSelection() {
   const n = txSelectedIds.size;
   if (!n) return;
@@ -4524,24 +4550,32 @@ async function saveTicket() {
   const listKey = ($('ticket-listkey').value || _todayISO().slice(0, 7) || '').trim();
   const dateOp = $('ticket-date').value || _todayISO();
 
-  // → Transactions
+  // → Transactions : UNE seule ligne groupée (ex "Courses Leclerc"), pas un article par ligne.
   if (dest === 'both' || dest === 'tx') {
     const withPrice = valid.filter(it => Number(it.price) > 0);
     if (!withPrice.length && dest === 'tx') { toast('Aucun prix renseigné : impossible de créer des transactions', 'error'); return; }
-    const txs = withPrice.map(it => ({
-      user_id: currentUser.id,
-      date_op: dateOp,
-      label: it.label.trim(),
-      amount: -Math.abs(Number(it.price) * (Number(it.qty) || 1)),
-      type: 'sortie',
-      category: it.category || 'Vie quotidienne',
-      sub_category: (it.sub_category || '').trim() || null,
-      sub_sub_category: (it.sub_sub_category || '').trim() || null,
-      source: 'import_csv',   // valeur autorisée par la contrainte source (import_photo est refusé)
-      account: 'Compte courant',
-      payment_method: detectPaymentMethod(it.label)
-    }));
-    if (txs.length) {
+    if (withPrice.length) {
+      const name = (prompt(`Comment appeler cette transaction ? (${withPrice.length} article(s) regroupés)`, 'Courses ') || '').trim() || 'Courses';
+      // Regroupe par catégorie pour garder le budget juste (souvent 1 seule ligne)
+      const groups = {};
+      withPrice.forEach(it => {
+        const cat = it.category || 'Alimentation';
+        if (!groups[cat]) groups[cat] = { cat, total: 0, subs: {} };
+        groups[cat].total += Number(it.price) * (Number(it.qty) || 1);
+        const s = (it.sub_category || '').trim(); if (s) groups[cat].subs[s] = (groups[cat].subs[s] || 0) + 1;
+      });
+      const gl = Object.values(groups);
+      const multi = gl.length > 1;
+      const txs = gl.map(g => {
+        const domSub = Object.keys(g.subs).sort((a, b) => g.subs[b] - g.subs[a])[0] || (g.cat === 'Alimentation' ? 'Courses' : null);
+        return {
+          user_id: currentUser.id, date_op: dateOp,
+          label: multi ? `${name} · ${g.cat}` : name,
+          amount: -Math.abs(Math.round(g.total * 100) / 100),
+          type: 'sortie', category: g.cat, sub_category: domSub, sub_sub_category: null,
+          source: 'import_csv', account: 'Compte courant', payment_method: 'carte'
+        };
+      });
       const { error } = await sb.from('transactions').insert(txs.map(_sanitizeTx));
       if (error) { toast('Erreur transactions : ' + error.message, 'error'); console.error(error); return; }
     }
