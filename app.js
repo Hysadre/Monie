@@ -6419,18 +6419,18 @@ function renderDettes() {
     el.innerHTML = autoBanner + '<div class="empty-sub">Ajoute un paiement en plusieurs fois (ou un prêt) avec « + Nouvelle » pour suivre total / payé / reste.</div>';
     return;
   }
-  // Résumé global (tous les plans)
+  // Résumé global — UNIQUEMENT s'il y a plusieurs plans (sinon c'est un doublon avec la seule ligne)
   const gTotal = dettesList.reduce((s, d) => s + Number(d.montant_total || 0), 0);
   const gPaid = dettesList.reduce((s, d) => s + Number(d.deja_paye || 0), 0);
   const gReste = Math.max(0, gTotal - gPaid);
-  const summary = `<div style="display:flex;align-items:center;gap:14px;background:var(--bg);border-radius:12px;padding:12px 14px;margin-bottom:14px">
+  const summary = dettesList.length > 1 ? `<div style="display:flex;align-items:center;gap:14px;background:var(--bg);border-radius:12px;padding:12px 14px;margin-bottom:14px">
       ${_donutSVG(gPaid, gTotal, 64, 'var(--plum)')}
       <div style="display:flex;gap:16px;flex-wrap:wrap;flex:1">
-        <div><div style="font-size:11px;color:var(--muted)">Déjà payé</div><div style="font-family:var(--fm);font-weight:800;color:var(--sage)">${fmt(Math.round(gPaid))}</div></div>
-        <div><div style="font-size:11px;color:var(--muted)">Reste à payer</div><div style="font-family:var(--fm);font-weight:800;color:var(--tender-rose)">${fmt(Math.round(gReste))}</div></div>
+        <div><div style="font-size:11px;color:var(--muted)">Total déjà payé</div><div style="font-family:var(--fm);font-weight:800;color:var(--sage)">${fmt(Math.round(gPaid))}</div></div>
+        <div><div style="font-size:11px;color:var(--muted)">Total reste à payer</div><div style="font-family:var(--fm);font-weight:800;color:var(--tender-rose)">${fmt(Math.round(gReste))}</div></div>
         <div><div style="font-size:11px;color:var(--muted)">Montant total</div><div style="font-family:var(--fm);font-weight:800">${fmt(Math.round(gTotal))}</div></div>
       </div>
-    </div>`;
+    </div>` : '';
   el.innerHTML = autoBanner + summary + dettesList.map(d => {
     const total = Number(d.montant_total) || 0;
     const paid = Number(d.deja_paye || 0);
