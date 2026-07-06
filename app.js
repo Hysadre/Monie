@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v99'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v100'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -2106,18 +2106,30 @@ function openBlockDetail(blockKey, monthKey, nav) {
   }
 
   const cats = Object.keys(status.spentByCat).filter(c => BUDGET_BLOCK[c] === blockKey && status.spentByCat[c] > 0);
-  cats.sort((a, b) => status.spentByCat[b] - status.spentByCat[a]);
+  const overOf = c => { const b = Math.round(status.budgetByCat[c] || 0); return b > 0 ? Math.round(status.spentByCat[c]) - b : 0; };
+  // Les postes EN DÉPASSEMENT d'abord (le plus dépassé en haut), puis le reste par montant
+  cats.sort((a, b) => (overOf(b) - overOf(a)) || (status.spentByCat[b] - status.spentByCat[a]));
   const total = cats.reduce((s, c) => s + status.spentByCat[c], 0);
+  const overCats = cats.filter(c => overOf(c) > 0);
+  const totalOver = overCats.reduce((s, c) => s + overOf(c), 0);
   set('kpi-modal-sub', `${mLbl} · ${cats.length} catégorie(s) · ${fmt(total)} dépensés`);
-  list.innerHTML = _backBtnHtml() + (cats.length ? cats.map(c => {
+  // Bandeau : où ça dépasse
+  const overBanner = overCats.length ? `<div style="background:rgba(229,57,53,0.10);border:1px solid #E53935;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;line-height:1.5">
+      ⚠ <b>Dépassement de ${fmt(totalOver)}</b> sur ce bloc — à cause de : ${overCats.map(c => `<b>${esc(c)}</b> (+${fmt(overOf(c))})`).join(', ')}. Touche un poste rouge pour voir/ajuster.
+    </div>` : '';
+  list.innerHTML = _backBtnHtml() + overBanner + (cats.length ? cats.map(c => {
     const sp = Math.round(status.spentByCat[c]);
     const bud = Math.round(status.budgetByCat[c] || 0);
+    const over = bud > 0 ? sp - bud : 0;
     const st = catStat(c);
     const cE = esc(c);
-    return `<div class="day-tx-item${st.done ? ' done' : ''}" style="cursor:pointer" onclick="openCatMonthList('${cE}','${monthKey}','push')" title="Voir les opérations ${cE}">
+    const info = bud === 0 ? '<span style="color:#B7791F">hors budget</span>'
+      : over > 0 ? `<span style="color:#E53935;font-weight:700">⚠ dépassé de ${fmt(over)}</span> · budget ${fmt(bud)}`
+      : `${fmt(sp)} / ${fmt(bud)} ✓`;
+    return `<div class="day-tx-item${st.done ? ' done' : ''}" style="cursor:pointer${over > 0 ? ';background:rgba(229,57,53,0.05)' : ''}" onclick="openCatMonthList('${cE}','${monthKey}','push')" title="Voir les opérations ${cE}">
       <div class="day-tx-icon" style="background:${catColor(c)}18;color:${catColor(c)}">${catIcon(c)}</div>
-      <div class="day-tx-info"><div class="tx-label">${cE} ›</div><div class="tx-cat">${bud > 0 ? 'budget ' + fmt(bud) : 'hors budget'}${st.note ? ` · 📝 ${esc(st.note)}` : ''}</div></div>
-      <div class="day-tx-amt amt-out">${fmt(sp)}</div>
+      <div class="day-tx-info"><div class="tx-label">${cE} ›</div><div class="tx-cat">${info}${st.note ? ` · 📝 ${esc(st.note)}` : ''}</div></div>
+      <div class="day-tx-amt amt-out"${over > 0 ? ' style="color:#E53935"' : ''}>${fmt(sp)}</div>
       <span onclick="event.stopPropagation();editCatNote('${cE}')" title="Ajouter / modifier une note" style="cursor:pointer;font-size:15px;margin-left:8px;opacity:.7">📝</span>
       <input type="checkbox" class="bud-sub-check" ${st.done ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleCatDone('${cE}')" title="C'est réglé ✓" aria-label="Marquer ${cE} comme réglé" style="margin-left:10px">
     </div>`;
