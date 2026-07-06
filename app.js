@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v94'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v95'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -502,12 +502,12 @@ function initHeaderAutoHide() {
 }
 
 // ═══ TOAST + MODAL ═════════════════════════════════════════════
-function toast(msg, type = '') {
+function toast(msg, type = '', dur = 3000) {
   const t = $('toast');
   t.textContent = msg;
   t.className = 'toast show' + (type ? ' toast-' + type : '');
   clearTimeout(t._t);
-  t._t = setTimeout(() => t.classList.remove('show'), 3000);
+  t._t = setTimeout(() => t.classList.remove('show'), dur);
 }
 
 // Garde générique pour les écritures Supabase : log console + toast rouge en cas d'échec.
@@ -3981,7 +3981,7 @@ async function confirmImport() {
   const fromTx = importPreviewTarget === 'tx-import-preview';
   await loadAllData();
   cancelImport();
-  toast(`✓ ${toAdd.length} transactions ajoutées`, 'success');
+  toast(`📥 ${toAdd.length} transaction(s) importée(s) ✓`, 'success', 5000);
   if (fromTx) { showTab('transactions'); if (typeof renderTransactionsList === 'function') renderTransactionsList(); }
   else showTab('calendar');
 }
