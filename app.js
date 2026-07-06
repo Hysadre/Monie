@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v96'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v97'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3916,8 +3916,56 @@ function renderImportBatches() {
     <div class="card-hd"><div class="card-title">🗂 Mes imports récents</div>
       <button class="btn-ghost" style="padding:5px 10px;font-size:12px" onclick="toggleImportBatches()">Fermer</button></div>
     ${todayBanner}
-    <p class="page-sub" style="margin:0 0 10px">Chaque ligne = un <b>lot ajouté</b> (regroupé par date d'ajout + source). Supprime un lot entier pour le ré-importer proprement.</p>
+    <div style="display:flex;align-items:center;gap:12px;background:var(--sage-soft);border-radius:10px;padding:12px 14px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:0"><b>🧹 Nettoyer l'historique</b><div style="font-size:12px;color:var(--muted)">Applique les dernières règles à TOUTES tes transactions : Livres → Vie quotidienne · Restaurant/Sorties → Restos · chouchane→Fast food · gelato/philomène→Restos. Rien n'est supprimé.</div></div>
+      <button class="btn-primary" style="padding:8px 14px;font-size:13px" onclick="cleanupHistory()">🧹 Nettoyer</button>
+    </div>
+    <p class="page-sub" style="margin:0 0 10px">Ci-dessous, chaque ligne = un <b>lot ajouté</b> (par date d'ajout + source). Supprime un lot entier pour le ré-importer proprement.</p>
     ${rows || '<div class="empty-sub">Aucune opération enregistrée.</div>'}`;
+}
+// 🧹 Ré-applique les nouvelles catégories à tout l'historique (sans Supabase)
+async function cleanupHistory() {
+  const ok = await confirmDialog('🧹 Nettoyer l\'historique ?', `<div style="font-size:14px;line-height:1.6">Je corrige tes anciennes transactions selon les nouvelles catégories :<ul style="margin:8px 0;padding-left:18px"><li>« Livres » → Vie quotidienne / Papeterie & fournitures</li><li>Alimentation : « Restaurant » et « Sorties » → « Restos »</li><li>chouchane/snack → Fast food · gelato/philomène → Restos</li></ul><b>Rien n'est supprimé</b>, juste re-classé. Continuer ?</div>`);
+  if (!ok) return;
+  const groups = {};   // clé cat|sub|ss → { cat, sub, ss, ids, local[] }
+  transactions.forEach(t => {
+    let cat = t.category, sub = t.sub_category, ss = t.sub_sub_category;
+    // Livres (catégorie supprimée)
+    if (cat === 'Livres') { cat = 'Vie quotidienne'; sub = 'Papeterie & fournitures'; ss = ss || 'Livres'; }
+    // Marchands précis (par libellé)
+    const L = (t.label || '').toLowerCase();
+    if (/chouchane|\bsnack\b/.test(L)) { cat = 'Alimentation'; sub = 'Fast food'; ss = null; }
+    else if (/gelato|philom/.test(L)) { cat = 'Alimentation'; sub = 'Restos'; ss = null; }
+    // Fusion Restaurant/Sorties + Fast-food dans Alimentation
+    if (cat === 'Alimentation') {
+      if (['Restaurant', 'Sorties', 'Sortie'].includes(sub)) sub = 'Restos';
+      if (/^fast[\s-]?food$/i.test(ss || '')) { sub = 'Fast food'; ss = null; }
+      if (sub === 'Restos' && ss === 'Restaurant') ss = null;
+    }
+    const changed = cat !== t.category || (sub || null) !== (t.sub_category || null) || (ss || null) !== (t.sub_sub_category || null);
+    if (!changed) return;
+    const key = `${cat}|${sub || ''}|${ss || ''}`;
+    if (!groups[key]) groups[key] = { cat, sub: sub || null, ss: ss || null, ids: [], local: [] };
+    groups[key].ids.push(t.id); groups[key].local.push(t);
+  });
+  const gList = Object.values(groups);
+  const totalN = gList.reduce((s, g) => s + g.ids.length, 0);
+  if (!totalN) { toast('✓ Rien à nettoyer, tout est déjà à jour', 'success'); return; }
+  toast(`Nettoyage de ${totalN} transaction(s)…`);
+  let done = 0;
+  for (const g of gList) {
+    for (let j = 0; j < g.ids.length; j += 200) {
+      const chunk = g.ids.slice(j, j + 200);
+      const payload = _sanitizeTx({ category: g.cat, sub_category: g.sub, sub_sub_category: g.ss });
+      const { error } = await sb.from('transactions').update(payload).in('id', chunk);
+      if (error) { toast('Erreur : ' + error.message, 'error'); console.error(error); renderTransactionsList(); return; }
+      done += chunk.length;
+    }
+    g.local.forEach(t => { t.category = g.cat; t.sub_category = g.sub; t.sub_sub_category = g.ss; });
+  }
+  toast(`✓ ${done} transaction(s) nettoyée(s) et reclassée(s)`, 'success', 5000);
+  renderImportBatches();
+  renderTransactionsList();
 }
 // Supprime TOUT ce qui a été ajouté aujourd'hui (toutes sources)
 async function deleteAllToday() {
