@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v100'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v101'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -2112,21 +2112,29 @@ function openBlockDetail(blockKey, monthKey, nav) {
   const total = cats.reduce((s, c) => s + status.spentByCat[c], 0);
   const overCats = cats.filter(c => overOf(c) > 0);
   const totalOver = overCats.reduce((s, c) => s + overOf(c), 0);
+  const noBudCats = cats.filter(c => Math.round(status.budgetByCat[c] || 0) === 0);   // dépensé mais sans ligne de budget
+  const totalNoBud = noBudCats.reduce((s, c) => s + Math.round(status.spentByCat[c]), 0);
   set('kpi-modal-sub', `${mLbl} · ${cats.length} catégorie(s) · ${fmt(total)} dépensés`);
   // Bandeau : où ça dépasse
   const overBanner = overCats.length ? `<div style="background:rgba(229,57,53,0.10);border:1px solid #E53935;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;line-height:1.5">
       ⚠ <b>Dépassement de ${fmt(totalOver)}</b> sur ce bloc — à cause de : ${overCats.map(c => `<b>${esc(c)}</b> (+${fmt(overOf(c))})`).join(', ')}. Touche un poste rouge pour voir/ajuster.
     </div>` : '';
-  list.innerHTML = _backBtnHtml() + overBanner + (cats.length ? cats.map(c => {
+  // Bandeau : postes HORS BUDGET (dépensé sans ligne prévue)
+  const noBudBanner = noBudCats.length ? `<div style="background:rgba(232,184,77,0.18);border:1px solid #E8B84D;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;line-height:1.5">
+      🟡 <b>Hors budget : ${fmt(totalNoBud)}</b> — pas de ligne prévue pour : ${noBudCats.map(c => `<b>${esc(c)}</b> (${fmt(Math.round(status.spentByCat[c]))})`).join(', ')}. Ajoute-leur une ligne dans « Ta répartition ».
+    </div>` : '';
+  list.innerHTML = _backBtnHtml() + overBanner + noBudBanner + (cats.length ? cats.map(c => {
     const sp = Math.round(status.spentByCat[c]);
     const bud = Math.round(status.budgetByCat[c] || 0);
     const over = bud > 0 ? sp - bud : 0;
+    const noBud = bud === 0;
     const st = catStat(c);
     const cE = esc(c);
-    const info = bud === 0 ? '<span style="color:#B7791F">hors budget</span>'
+    const info = noBud ? '<span style="background:#E8B84D;color:#fff;padding:1px 8px;border-radius:100px;font-weight:700;font-size:11px">🟡 HORS BUDGET</span>'
       : over > 0 ? `<span style="color:#E53935;font-weight:700">⚠ dépassé de ${fmt(over)}</span> · budget ${fmt(bud)}`
       : `${fmt(sp)} / ${fmt(bud)} ✓`;
-    return `<div class="day-tx-item${st.done ? ' done' : ''}" style="cursor:pointer${over > 0 ? ';background:rgba(229,57,53,0.05)' : ''}" onclick="openCatMonthList('${cE}','${monthKey}','push')" title="Voir les opérations ${cE}">
+    const bg = over > 0 ? ';background:rgba(229,57,53,0.05)' : (noBud ? ';background:rgba(232,184,77,0.08)' : '');
+    return `<div class="day-tx-item${st.done ? ' done' : ''}" style="cursor:pointer${bg}" onclick="openCatMonthList('${cE}','${monthKey}','push')" title="Voir les opérations ${cE}">
       <div class="day-tx-icon" style="background:${catColor(c)}18;color:${catColor(c)}">${catIcon(c)}</div>
       <div class="day-tx-info"><div class="tx-label">${cE} ›</div><div class="tx-cat">${info}${st.note ? ` · 📝 ${esc(st.note)}` : ''}</div></div>
       <div class="day-tx-amt amt-out"${over > 0 ? ' style="color:#E53935"' : ''}>${fmt(sp)}</div>
@@ -5451,6 +5459,8 @@ function txBudgetCat(t) {
   return t.category;
 }
 function txBlock(t) { return BUDGET_BLOCK[txBudgetCat(t)] || null; }
+// Un prêt (sous-catégorie « Prêt ») = argent qui revient → ne compte PAS dans le budget
+function isLoan(t) { const s = (t.sub_category || '').toLowerCase(); return s.includes('prêt') || s.includes('pret'); }
 // Familles budgétaires (pour regrouper les catégories)
 const FAMILY_LABEL = { charges: '🏠 Charges', plaisir: '🌸 Plaisir', epargne: '🌱 Épargne', imprevus: '⚡ Imprévus' };
 function catFamily(cat) { return BUDGET_BLOCK[cat] || null; }
@@ -5482,6 +5492,7 @@ function computeBudgetStatus(monthKey) {
     const a = Math.abs(Number(t.amount));
     if (t.type === 'epargne') { spent.epargne += a; return; } // l'épargne = un type à part
     if (t.type !== 'sortie') return;
+    if (isLoan(t)) return;                          // les prêts ne comptent pas (ils reviennent → suivi dans Remboursements)
     const bc = txBudgetCat(t);                     // Alimentation se scinde en Alimentation / Restos & sorties
     spentByCat[bc] = (spentByCat[bc] || 0) + a;
     const bl = BUDGET_BLOCK[bc];
