@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v87'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v88'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3125,8 +3125,8 @@ async function handleImportFile(file, target) {
   if (!file) return;
   importPreviewTarget = target || 'import-preview';
   const name = file.name.toLowerCase();
-  // Reset l'état de preview pour repartir propre
-  previewTab = 'todo';
+  // Reset l'état de preview pour repartir propre — on ouvre sur « Toutes » pour voir toutes les nouvelles
+  previewTab = 'all';
   previewPage = 1;
   previewFilterYear = 'all';
   previewFilterMonth = 'all';
@@ -3296,7 +3296,7 @@ function detectDuplicates() {
 let previewFilterYear = 'all';
 let previewFilterMonth = 'all';
 let previewFilterCat = 'all';
-let previewTab = 'todo'; // 'todo' | 'done' | 'auto'
+let previewTab = 'all'; // 'all' | 'todo' | 'done' | 'auto'
 let previewPage = 1;
 const PREVIEW_PAGE_SIZE = 50;
 let preservedScroll = 0;
@@ -3364,6 +3364,9 @@ function showImportPreview() {
   html += `
     <div style="margin-top:20px">
       <div class="import-tabs">
+        <button class="import-tab ${previewTab === 'all' ? 'active' : ''}" onclick="setPreviewTab('all')">
+          📋 Toutes <span class="import-tab-count">${active.length}</span>
+        </button>
         <button class="import-tab ${previewTab === 'todo' ? 'active' : ''}" onclick="setPreviewTab('todo')">
           🤔 À vérifier <span class="import-tab-count">${todo.length}</span>
         </button>
@@ -3376,7 +3379,7 @@ function showImportPreview() {
       </div>`;
 
   // Data selon l'onglet
-  let filtered = previewTab === 'todo' ? todo : previewTab === 'done' ? done : auto;
+  let filtered = previewTab === 'all' ? active : previewTab === 'todo' ? todo : previewTab === 'done' ? done : auto;
   const filteredCats = [...new Set(filtered.map(t => t.category))].sort();
 
   // Filtres date + catégorie
@@ -3408,6 +3411,7 @@ function showImportPreview() {
   const displayed = filtered.slice(startIdx, startIdx + PREVIEW_PAGE_SIZE);
 
   const tipMsg = {
+    'all': '👉 Voici TOUTES tes nouvelles transactions. Vérifie / corrige la catégorie de chacune, puis clique « ✓ Valider l\'import » en haut.',
     'todo': 'Tape sur une catégorie pour classer la transaction. Monie apprend et applique la règle aux transactions similaires 🌸',
     'done': 'Voici les transactions que tu as toi-même catégorisées.',
     'auto': 'Transactions catégorisées automatiquement par les règles Monie.'
