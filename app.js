@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v92'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v93'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3863,11 +3863,38 @@ function renderImportBatches() {
       <button class="btn-ghost" style="padding:6px 12px;font-size:12px;color:#E53935;border-color:#E53935" onclick="deleteImportBatch(${i})" title="Supprimer tout ce lot">🗑 Supprimer ce lot</button>
     </div>`;
   }).join('');
+  // Résumé « aujourd'hui » : tout ce qui a été ajouté aujourd'hui (toutes sources confondues)
+  const today = _todayISO();
+  const todayCount = transactions.filter(t => (t.created_at || '').slice(0, 10) === today).length;
+  const todayBanner = todayCount ? `<div style="display:flex;align-items:center;gap:12px;background:rgba(229,57,53,0.08);border:1px solid #E53935;border-radius:10px;padding:12px 14px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:0"><b>${todayCount} opération(s) ajoutée(s) aujourd'hui</b> (${today.split('-').reverse().join('/')}) <div style="font-size:12px;color:var(--muted)">toutes sources confondues (import, photo, saisie)</div></div>
+      <button class="btn-primary" style="padding:8px 14px;font-size:13px;background:#E53935" onclick="deleteAllToday()">🗑 Tout supprimer (aujourd'hui)</button>
+    </div>` : '';
   el.innerHTML = `
     <div class="card-hd"><div class="card-title">🗂 Mes imports récents</div>
       <button class="btn-ghost" style="padding:5px 10px;font-size:12px" onclick="toggleImportBatches()">Fermer</button></div>
-    <p class="page-sub" style="margin:0 0 10px">Chaque ligne = un <b>lot ajouté</b> (regroupé par date d'ajout). Supprime un lot entier pour le ré-importer proprement.</p>
+    ${todayBanner}
+    <p class="page-sub" style="margin:0 0 10px">Chaque ligne = un <b>lot ajouté</b> (regroupé par date d'ajout + source). Supprime un lot entier pour le ré-importer proprement.</p>
     ${rows || '<div class="empty-sub">Aucune opération enregistrée.</div>'}`;
+}
+// Supprime TOUT ce qui a été ajouté aujourd'hui (toutes sources)
+async function deleteAllToday() {
+  const today = _todayISO();
+  const ids = transactions.filter(t => (t.created_at || '').slice(0, 10) === today).map(t => t.id);
+  if (!ids.length) { toast('Rien n\'a été ajouté aujourd\'hui', 'error'); return; }
+  const ok = await confirmDialog('Tout supprimer (aujourd\'hui) ?', `<div style="font-size:14px;line-height:1.6">Tu vas supprimer les <b>${ids.length} opération(s)</b> ajoutées aujourd'hui (<b>${today.split('-').reverse().join('/')}</b>), toutes sources confondues.<br><br>C'est <b>irréversible</b>, mais tu pourras tout ré-importer proprement. Continuer ?</div>`);
+  if (!ok) return;
+  toast(`Suppression de ${ids.length} opération(s)…`);
+  for (let j = 0; j < ids.length; j += 200) {
+    const chunk = ids.slice(j, j + 200);
+    const { error } = await sb.from('transactions').delete().in('id', chunk);
+    if (error) { toast('Erreur : ' + error.message, 'error'); console.error(error); return; }
+  }
+  const gone = new Set(ids);
+  transactions = transactions.filter(t => !gone.has(t.id));
+  toast(`✓ ${ids.length} opération(s) d'aujourd'hui supprimée(s)`, 'success');
+  renderImportBatches();
+  renderTransactionsList();
 }
 async function deleteImportBatch(i) {
   const b = _importBatches[i]; if (!b || !b.ids.length) return;
