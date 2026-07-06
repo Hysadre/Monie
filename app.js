@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v97'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v98'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -246,8 +246,8 @@ const BANK_META = {
   'BoursoBank': { label: 'Bourso', color: '#E52A5A', bg: '#FCE4EC' },
   'Boursobank': { label: 'Bourso', color: '#E52A5A', bg: '#FCE4EC' }
 };
-const catIcon = c => CAT_META[c]?.emoji || '📌';
-const catColor = c => CAT_META[c]?.color || '#A0AEC0';
+const catIcon = c => (c === 'Restos & sorties' ? '🍽️' : (CAT_META[c]?.emoji || '📌'));
+const catColor = c => (c === 'Restos & sorties' ? '#E76F51' : (CAT_META[c]?.color || '#A0AEC0'));
 // Petite pastille pour indiquer la banque source (LCL / BoursoBank / autre)
 function bankBadge(bs) {
   if (!bs) return '';
@@ -732,10 +732,28 @@ async function loadBudgetPrep() {
   const { data } = await sb.from('budget_mensuel').select('*').eq('user_id', currentUser.id);
   budgetByMonth = {};
   (data || []).forEach(r => { budgetByMonth[r.month.slice(0, 7)] = r; });
+  // Migration : l'ancienne ligne plaisir « Alimentation » (restos) devient « Restos & sorties »
+  await _migratePlaisirAlim();
   // Positionne sur le mois en cours
   budgetMonth = new Date().getMonth();
   budgetYear = new Date().getFullYear();
   loadBudgetForMonth();
+}
+// Renomme la ligne budget « Alimentation » du bloc plaisir → « Restos & sorties » (une fois)
+async function _migratePlaisirAlim() {
+  if (budgetTemplate && budgetTemplate.sub_budget && Array.isArray(budgetTemplate.sub_budget.plaisir)) {
+    budgetTemplate.sub_budget.plaisir.forEach(it => { if (it.cat === 'Alimentation') { it.cat = 'Restos & sorties'; delete it.note; } });
+  }
+  for (const key of Object.keys(budgetByMonth)) {
+    const r = budgetByMonth[key];
+    const sub = r && r.sub_budget;
+    if (!sub || !Array.isArray(sub.plaisir)) continue;
+    let changed = false;
+    sub.plaisir.forEach(it => { if (it.cat === 'Alimentation') { it.cat = 'Restos & sorties'; if (it.note) delete it.note; changed = true; } });
+    if (changed) {
+      try { await sb.from('budget_mensuel').update({ sub_budget: sub }).eq('user_id', currentUser.id).eq('month', r.month); } catch (e) { console.error('migration budget', e); }
+    }
+  }
 }
 function budgetKey() { return `${budgetYear}-${String(budgetMonth + 1).padStart(2, '0')}`; }
 // Charge budgetData depuis le mois sélectionné (ou pré-remplit avec le modèle si vierge)
@@ -2264,7 +2282,7 @@ function renderDashboard() {
       const a = Math.abs(Number(t.amount));
       if (t.type === 'epargne') { blk.epargne += a; return; }
       if (t.type !== 'sortie') return;
-      const b = BUDGET_BLOCK[t.category];
+      const b = txBlock(t);
       if (b === 'charges') blk.charges += a;
       else if (b === 'plaisir') blk.plaisir += a;
       else if (b === 'imprevus') blk.imprevus += a;
@@ -2321,14 +2339,14 @@ function renderDashboard() {
     const cumBefore = {}; // cumul par catégorie AVANT chaque tx (dans l'ordre chrono)
     const cumAt = {};     // cumul incluant la tx, mémorisé par id
     chrono.forEach(t => {
-      const c = t.category;
+      const c = txBudgetCat(t);
       const before = cumBefore[c] || 0;
       const after = before + Math.abs(Number(t.amount));
       cumAt[t.id] = after;
       cumBefore[c] = after;
     });
     const rows = sortedTx.map(t => {
-      const bud = budgetByCat[t.category];
+      const bud = budgetByCat[txBudgetCat(t)];
       let flag = '<span style="color:var(--muted)">—</span>';
       if (bud && bud > 0) {
         const over = cumAt[t.id] > bud;
@@ -2522,7 +2540,7 @@ function renderAnalyse() {
   else { set('an-top', '—'); set('an-top-hint', 'aucune dépense'); }
   // 6 · Part « plaisir »
   let ch = 0, pl = 0;
-  exp.forEach(t => { const b = BUDGET_BLOCK[t.category]; if (b === 'charges') ch += Math.abs(Number(t.amount)); if (b === 'plaisir') pl += Math.abs(Number(t.amount)); });
+  exp.forEach(t => { const b = txBlock(t); if (b === 'charges') ch += Math.abs(Number(t.amount)); if (b === 'plaisir') pl += Math.abs(Number(t.amount)); });
   const plPct = (ch + pl) > 0 ? Math.round(pl / (ch + pl) * 100) : 0;
   set('an-ratio', plPct + '%');
   const abo = exp.filter(t => t.category === 'Abonnements').reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
@@ -2572,7 +2590,7 @@ function renderAnalyse() {
     const a = Math.abs(Number(t.amount));
     if (t.type === 'epargne') { famTot.epargne += a; return; }
     if (t.type !== 'sortie' || t.category === 'Transactions') return;
-    const b = BUDGET_BLOCK[t.category];
+    const b = txBlock(t);
     if (famTot[b] !== undefined) famTot[b] += a; else famTot.charges += a;
   });
   const famOrder = ['charges', 'plaisir', 'imprevus', 'epargne'].filter(k => famTot[k] > 0);
@@ -5410,8 +5428,17 @@ const BUDGET_BLOCK = {
   'Impôts': 'charges', 'Banque': 'charges', 'Éducation': 'charges', 'Aide au logement': 'charges',
   'Vie quotidienne': 'plaisir', 'Mode': 'plaisir', 'Cosmétique': 'plaisir', 'Dons': 'plaisir', 'Tech & Électronique': 'plaisir',
   'Amis & Famille': 'plaisir', 'Divertissement': 'plaisir', 'Voyages': 'plaisir',
-  'Dîme': 'charges', 'Investissements': 'epargne', 'Imprévus': 'imprevus'
+  'Dîme': 'charges', 'Investissements': 'epargne', 'Imprévus': 'imprevus',
+  'Restos & sorties': 'plaisir'   // catégorie budgétaire virtuelle (manger dehors = plaisir)
 };
+// Sous-catégories d'Alimentation qui comptent comme « Plaisir » (manger dehors)
+const ALIM_PLAISIR_SUBS = ['Restos', 'Café / Bar', 'Livraison', 'Sorties', 'Sortie', 'Restaurant'];
+// Catégorie BUDGÉTAIRE d'une transaction : Alimentation se scinde selon la sous-cat
+function txBudgetCat(t) {
+  if (t.category === 'Alimentation' && ALIM_PLAISIR_SUBS.includes((t.sub_category || '').trim())) return 'Restos & sorties';
+  return t.category;
+}
+function txBlock(t) { return BUDGET_BLOCK[txBudgetCat(t)] || null; }
 // Familles budgétaires (pour regrouper les catégories)
 const FAMILY_LABEL = { charges: '🏠 Charges', plaisir: '🌸 Plaisir', epargne: '🌱 Épargne', imprevus: '⚡ Imprévus' };
 function catFamily(cat) { return BUDGET_BLOCK[cat] || null; }
@@ -5443,8 +5470,9 @@ function computeBudgetStatus(monthKey) {
     const a = Math.abs(Number(t.amount));
     if (t.type === 'epargne') { spent.epargne += a; return; } // l'épargne = un type à part
     if (t.type !== 'sortie') return;
-    spentByCat[t.category] = (spentByCat[t.category] || 0) + a;
-    const bl = BUDGET_BLOCK[t.category];
+    const bc = txBudgetCat(t);                     // Alimentation se scinde en Alimentation / Restos & sorties
+    spentByCat[bc] = (spentByCat[bc] || 0) + a;
+    const bl = BUDGET_BLOCK[bc];
     if (bl) spent[bl] += a;
   });
   // Budget par poste (catégorie) = somme des % de cette catégorie sur les blocs dépenses
@@ -5745,7 +5773,7 @@ const DEFAULT_SUB_PCT = {
   ],
   plaisir: [
     { cat: 'Vie quotidienne', pct: 8 }, { cat: 'Mode', pct: 5 }, { cat: 'Cosmétique', pct: 5 },
-    { cat: 'Alimentation', pct: 5, note: '(restos)' }, { cat: 'Dons', pct: 2 }, { cat: 'Amis & Famille', pct: 3 }, { cat: 'Divertissement', pct: 2 }
+    { cat: 'Restos & sorties', pct: 5 }, { cat: 'Dons', pct: 2 }, { cat: 'Amis & Famille', pct: 3 }, { cat: 'Divertissement', pct: 2 }
   ],
   epargne: [
     { cat: 'Épargne', pct: 15 }, { cat: 'Investissements', pct: 5 }
@@ -6289,7 +6317,7 @@ function buildAIContext(opts = {}) {
 
   // Répartition par famille
   const famTot = { charges: 0, plaisir: 0, imprevus: 0 };
-  scope.filter(t => t.type === 'sortie').forEach(t => { const b = BUDGET_BLOCK[t.category]; if (famTot[b] !== undefined) famTot[b] += Math.abs(Number(t.amount)); else famTot.charges += Math.abs(Number(t.amount)); });
+  scope.filter(t => t.type === 'sortie').forEach(t => { const b = txBlock(t); if (famTot[b] !== undefined) famTot[b] += Math.abs(Number(t.amount)); else famTot.charges += Math.abs(Number(t.amount)); });
   L.push(`Répartition dépenses par famille : Charges ${Math.round(famTot.charges)}€, Plaisir ${Math.round(famTot.plaisir)}€, Imprévus ${Math.round(famTot.imprevus)}€ ; Épargne ${Math.round(tep)}€.`);
 
   // Ventilation temporelle selon la période
