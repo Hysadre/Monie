@@ -227,6 +227,21 @@
                 <select class="select" id="qa-paymethod"></select>
               </div>
 
+              <!-- Banque / compte -->
+              <div class="qa-field">
+                <label class="qa-label">Banque / compte <span style="font-weight:400;color:var(--muted);font-size:11px">(facultatif)</span></label>
+                <select class="select" id="qa-bank" onchange="onQaBankChange()">
+                  <option value="">— aucune —</option>
+                  <option value="LCL">LCL</option>
+                  <option value="BoursoBank">BoursoBank</option>
+                  <option value="Banque Postale">Banque Postale</option>
+                  <option value="Revolut">Revolut</option>
+                  <option value="N26">N26</option>
+                  <option value="Espèces">Espèces</option>
+                  <option value="__custom__">➕ Autre…</option>
+                </select>
+              </div>
+
               <!-- Étape 3 : Montant -->
               <div class="qa-field">
                 <label class="qa-label">Montant</label>

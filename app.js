@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v103'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v104'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -255,6 +255,16 @@ function bankBadge(bs) {
   if (m) return `<span class="bank-badge" style="color:${m.color};background:${m.bg}" title="Compte ${m.label}">${m.label}</span>`;
   // Banque non prédéfinie : pastille générique (pour qu'on voie TOUJOURS la banque)
   return `<span class="bank-badge" style="color:#5B6B7C;background:#EDF1F5" title="Compte ${esc(bs)}">${esc(bs)}</span>`;
+}
+// Pastille de provenance : saisi à la main / importé / photo / démo
+function sourceBadge(src) {
+  const s = src || '';
+  if (s === 'manual') return `<span class="src-badge" style="color:#7C3F58;background:#F3E8EE" title="Saisie manuelle">✍️ Saisi</span>`;
+  if (s === 'import_photo') return `<span class="src-badge" style="color:#C1553B;background:#FCE9E3" title="Ajouté depuis une photo">📸 Photo</span>`;
+  if (s === 'demo') return `<span class="src-badge" style="color:#7A5CB0;background:#EEE8F6" title="Donnée de démonstration">🎲 Démo</span>`;
+  if (s === 'reuse') return `<span class="src-badge" style="color:#4F8F72;background:#E8F3EE" title="Liste réutilisée">♻️ Réutilisé</span>`;
+  if (s.startsWith('import')) return `<span class="src-badge" style="color:#4A5568;background:#EDF1F5" title="Importé d'un relevé">📥 Importé</span>`;
+  return '';
 }
 
 // ─── STATE ────────────────────────────────────────────────────
@@ -1763,6 +1773,20 @@ function onQaSubcatChange() {
   }
   updateQaSubsubs();
 }
+function onQaBankChange() {
+  const sel = $('qa-bank'); if (!sel) return;
+  if (sel.value === '__custom__') {
+    const v = prompt('Nom de la banque / du compte :', '');
+    if (v && v.trim()) {
+      const val = v.trim();
+      if (![...sel.options].some(o => o.value === val)) {
+        const opt = document.createElement('option'); opt.value = val; opt.textContent = val;
+        sel.insertBefore(opt, sel.querySelector('option[value="__custom__"]'));
+      }
+      sel.value = val;
+    } else { sel.value = ''; }
+  }
+}
 function onQaSubsubChange() {
   const sel = $('qa-subsub'); if (!sel) return;
   if (sel.value === '__custom__') {
@@ -1809,7 +1833,8 @@ async function quickAddTx() {
     sub_sub_category: subsubcat,
     source: 'manual',
     merchant_key: merchantKey(label),
-    payment_method: payMethod || null
+    payment_method: payMethod || null,
+    bank_source: ($('qa-bank') && $('qa-bank').value) || null
   };
   const { data, error } = await sb.from('transactions').insert(_sanitizeTx(newTx)).select().single();
   if (error) { toast('Erreur : ' + error.message, 'error'); return; }
@@ -1823,6 +1848,7 @@ async function quickAddTx() {
   $('qa-amount').value = '';
   if ($('qa-subcat')) $('qa-subcat').value = '';
   if ($('qa-subsub')) $('qa-subsub').value = '';
+  if ($('qa-bank')) $('qa-bank').value = '';
   toast('✓ Ajouté dans le calendrier et les transactions', 'success');
   renderCalendar();
   selectDay(selectedDay);
@@ -2864,7 +2890,7 @@ function renderTransactionsList() {
         <tr class="${isSelected ? 'selected' : ''}">
           <td><input type="checkbox" class="tx-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleTxSelect('${t.id}', this.checked)"></td>
           <td style="white-space:nowrap;color:var(--muted)">${t.date_op.slice(8)}/${t.date_op.slice(5, 7)}/${t.date_op.slice(2, 4)}</td>
-          <td><div class="tx-cell-label">${esc(t.label)} ${bankBadge(t.bank_source)}</div></td>
+          <td><div class="tx-cell-label">${esc(t.label)} ${bankBadge(t.bank_source)}${sourceBadge(t.source)}</div></td>
           <td>
             <select class="select tx-cat-select" onchange="recategorizeTx('${t.id}', this.value)">${catsSel}</select>
             <div style="font-size:10px;color:var(--muted);margin-top:2px">${famT ? 'famille : ' + FAMILY_LABEL[famT] : ''}</div>
