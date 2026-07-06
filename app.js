@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v108'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v109'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -4356,16 +4356,17 @@ async function handleTicketPhoto(file) {
       status.innerHTML = `<div class="empty-sub" style="padding:10px 0">😕 Aucun produit détecté sur la photo. Réessaie avec une photo plus nette, bien à plat et bien éclairée.</div>`;
       return;
     }
-    // Pré-catégorisation automatique de chaque ligne
+    // Pré-catégorisation : on prend d'abord la catégorie de groupe suggérée par l'IA, sinon les règles locales
     _ticketDraft = items.map(it => {
       const g = categorize(it.label, -Math.abs(it.price || 0));
+      const aiCat = (it.category && CAT_META[it.category]) ? it.category : null;   // catégorie IA valide ?
       return {
         label: it.label || '',
         brand: it.brand || '',
         price: (it.price != null ? Number(it.price) : ''),
         qty: it.qty || 1,
-        category: g.category || 'Vie quotidienne',
-        sub_category: g.sub_category || '',
+        category: aiCat || (g.category !== 'Autres' ? g.category : 'Alimentation'),
+        sub_category: aiCat ? (it.sub_category || '') : (g.sub_category || ''),
         sub_sub_category: ''
       };
     });
@@ -4402,12 +4403,15 @@ function renderTicketReview() {
         <input class="inp" type="number" step="1" min="1" value="${it.qty}" onchange="ticketField(${k},'qty',this.value)" title="Quantité" style="padding:7px 5px;text-align:center;min-width:0">
         <button class="bud-sub-del" onclick="ticketDeleteLine(${k})" title="Retirer cette ligne">🗑</button>
       </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:13px;flex-shrink:0">🏷️</span>
+        <input class="inp" value="${esc(it.brand)}" onchange="ticketField(${k},'brand',this.value)" placeholder="Marque du produit (ex : Skyr, Alpro, Ariel, Eco+…)" style="padding:8px 10px;font-size:13px;font-weight:600;flex:1;min-width:0;box-sizing:border-box;border-color:var(--rose)">
+      </div>
       <div class="ticket-cat3">
         <select class="select" title="Catégorie" onchange="ticketCat(${k},this.value)">${_ticketCatSelect(k)}</select>
         <select class="select" title="Sous-catégorie" onchange="ticketSubSelect(${k},this.value)">${subcatOptions(it.category, it.sub_category)}</select>
-        <select class="select" title="Sous-sous-catégorie" onchange="ticketSubsubSelect(${k},this.value)">${subsubOptions(it.category, it.sub_category, it.sub_sub_category)}</select>
+        <select class="select" title="Sous-sous-catégorie (facultatif)" onchange="ticketSubsubSelect(${k},this.value)">${subsubOptions(it.category, it.sub_category, it.sub_sub_category)}</select>
       </div>
-      <input class="inp" value="${esc(it.brand)}" onchange="ticketField(${k},'brand',this.value)" placeholder="Marque (pour comparer les prix — ex: Ariel)" style="padding:6px 8px;font-size:12px;margin-top:6px;width:100%;box-sizing:border-box">
     </div>`).join('');
   const _bulkCatOpts = Object.keys(CAT_META).sort().map(c => `<option value="${esc(c)}" ${c === _ticketBulk.category ? 'selected' : ''}>${CAT_META[c].emoji} ${esc(c)}</option>`).join('');
   const bulkBar = _ticketSel.size ? `
