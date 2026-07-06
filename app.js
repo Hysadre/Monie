@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v98'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v99'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5714,17 +5714,22 @@ function addRecurringToPrevoir(i) {
   toast('✓ Ajouté à « à prévoir »', 'success');
 }
 
+// % de budget : accepte les décimales (virgule ou point), borne 0-100, arrondi à 1 décimale
+function _pctVal(v) {
+  const n = parseFloat(String(v == null ? '' : v).replace(',', '.')) || 0;
+  return Math.max(0, Math.min(100, Math.round(n * 10) / 10));
+}
 function normalizeBudgetPct(changed) {
-  const c = Math.max(0, Math.min(100, parseInt($('bud-pct-charges').value) || 0));
-  const p = Math.max(0, Math.min(100, parseInt($('bud-pct-plaisir').value) || 0));
-  const e = Math.max(0, Math.min(100, parseInt($('bud-pct-epargne').value) || 0));
-  const im = $('bud-pct-imprevus') ? Math.max(0, Math.min(100, parseInt($('bud-pct-imprevus').value) || 0)) : 0;
+  const c = _pctVal($('bud-pct-charges').value);
+  const p = _pctVal($('bud-pct-plaisir').value);
+  const e = _pctVal($('bud-pct-epargne').value);
+  const im = $('bud-pct-imprevus') ? _pctVal($('bud-pct-imprevus').value) : 0;
   budgetData.pct_charges = c;
   budgetData.pct_plaisir = p;
   budgetData.pct_epargne = e;
   budgetData.pct_imprevus = im;
   _ensureSubBudget()._pctImprevus = im; // persisté dans le jsonb (pas de colonne SQL à ajouter)
-  const total = c + p + e + im;
+  const total = Math.round((c + p + e + im) * 10) / 10;
   const totalEl = $('bud-total-pct');
   totalEl.textContent = total + '%';
   totalEl.style.color = total === 100 ? 'var(--sage)' : total > 100 ? 'var(--tender-rose)' : 'var(--peach)';
@@ -5736,10 +5741,10 @@ let budgetSaveTimer = null;
 // Lit les valeurs courantes des champs et enregistre en base
 function _doBudgetSave() {
   budgetData.revenu_mensuel = parseFloat($('bud-revenu').value) || 0;
-  budgetData.pct_charges = Math.max(0, Math.min(100, parseInt($('bud-pct-charges').value) || 0));
-  budgetData.pct_plaisir = Math.max(0, Math.min(100, parseInt($('bud-pct-plaisir').value) || 0));
-  budgetData.pct_epargne = Math.max(0, Math.min(100, parseInt($('bud-pct-epargne').value) || 0));
-  if ($('bud-pct-imprevus')) budgetData.pct_imprevus = Math.max(0, Math.min(100, parseInt($('bud-pct-imprevus').value) || 0));
+  budgetData.pct_charges = _pctVal($('bud-pct-charges').value);
+  budgetData.pct_plaisir = _pctVal($('bud-pct-plaisir').value);
+  budgetData.pct_epargne = _pctVal($('bud-pct-epargne').value);
+  if ($('bud-pct-imprevus')) budgetData.pct_imprevus = _pctVal($('bud-pct-imprevus').value);
   // L'Imprévus est stocké dans le jsonb sub_budget (pas de colonne SQL dédiée)
   _ensureSubBudget()._pctImprevus = budgetData.pct_imprevus || 0;
   const key = budgetKey();
