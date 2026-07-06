@@ -3925,6 +3925,29 @@ async function confirmImport() {
 
 // ═══ 📸 PHOTO → LISTE DE COURSES / TRANSACTIONS ════════════════════
 let _ticketDraft = [];  // lignes en cours de revue
+let _ticketSel = new Set();   // 🏷️ articles cochés pour catégorisation groupée
+let _ticketBulk = { category: 'Alimentation', sub_category: '', sub_sub_category: '' };
+function ticketToggleSel(k, checked) { if (checked) _ticketSel.add(k); else _ticketSel.delete(k); renderTicketReview(); }
+function ticketSelectAll(checked) { _ticketSel = checked ? new Set(_ticketDraft.map((_, i) => i)) : new Set(); renderTicketReview(); }
+function ticketBulkCat(val) { _ticketBulk.category = val; _ticketBulk.sub_category = ''; _ticketBulk.sub_sub_category = ''; renderTicketReview(); }
+function ticketBulkSub(val) {
+  if (val === '__custom__') { const v = prompt('Sous-catégorie :', _ticketBulk.sub_category || ''); if (v === null) { renderTicketReview(); return; } _ticketBulk.sub_category = (v || '').trim(); }
+  else _ticketBulk.sub_category = val;
+  _ticketBulk.sub_sub_category = ''; renderTicketReview();
+}
+function ticketBulkSubsub(val) {
+  if (val === '__custom__') { const v = prompt('Sous-sous-catégorie :', _ticketBulk.sub_sub_category || ''); if (v === null) { renderTicketReview(); return; } _ticketBulk.sub_sub_category = (v || '').trim(); }
+  else _ticketBulk.sub_sub_category = val;
+  renderTicketReview();
+}
+function ticketApplyBulk() {
+  if (!_ticketSel.size) return;
+  const n = _ticketSel.size;
+  _ticketSel.forEach(k => { const it = _ticketDraft[k]; if (it) { it.category = _ticketBulk.category; it.sub_category = _ticketBulk.sub_category; it.sub_sub_category = _ticketBulk.sub_sub_category; } });
+  _ticketSel = new Set();
+  renderTicketReview();
+  toast(`✓ ${n} article(s) → ${_ticketBulk.category}${_ticketBulk.sub_category ? ' · ' + _ticketBulk.sub_category : ''}`, 'success');
+}
 
 // Compresse une image (canvas) → { data: base64 sans préfixe, media_type }
 function _compressImage(file, maxDim = 1300, quality = 0.7) {
@@ -4041,8 +4064,9 @@ function renderTicketReview() {
   const review = $('ticket-review');
   const total = _ticketDraft.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 1), 0);
   const rows = _ticketDraft.map((it, k) => `
-    <div style="border:1px solid var(--border-soft);border-radius:12px;padding:12px;margin-bottom:10px;background:white">
-      <div style="display:grid;grid-template-columns:minmax(0,1fr) 70px 44px 30px;gap:8px;align-items:center;margin-bottom:8px">
+    <div style="border:1.5px solid ${_ticketSel.has(k) ? 'var(--rose)' : 'var(--border-soft)'};border-radius:12px;padding:12px;margin-bottom:10px;background:${_ticketSel.has(k) ? 'var(--rose-soft)' : 'white'}">
+      <div style="display:grid;grid-template-columns:24px minmax(0,1fr) 70px 44px 30px;gap:8px;align-items:center;margin-bottom:8px">
+        <input type="checkbox" class="bud-sub-check" ${_ticketSel.has(k) ? 'checked' : ''} onchange="ticketToggleSel(${k},this.checked)" title="Sélectionner pour catégoriser en lot">
         <input class="inp" value="${esc(it.label)}" onchange="ticketField(${k},'label',this.value)" placeholder="Produit" style="padding:7px 9px;font-size:13px;min-width:0">
         <div style="display:flex;align-items:center;gap:2px">
           <input class="inp" type="number" step="0.01" min="0" value="${it.price}" onchange="ticketField(${k},'price',this.value)" placeholder="€" style="padding:7px 6px;text-align:right;font-family:var(--fm);min-width:0">
@@ -4058,12 +4082,27 @@ function renderTicketReview() {
       </div>
       <input class="inp" value="${esc(it.brand)}" onchange="ticketField(${k},'brand',this.value)" placeholder="Marque (pour comparer les prix — ex: Ariel)" style="padding:6px 8px;font-size:12px;margin-top:6px;width:100%;box-sizing:border-box">
     </div>`).join('');
+  const _bulkCatOpts = Object.keys(CAT_META).sort().map(c => `<option value="${esc(c)}" ${c === _ticketBulk.category ? 'selected' : ''}>${CAT_META[c].emoji} ${esc(c)}</option>`).join('');
+  const bulkBar = _ticketSel.size ? `
+    <div style="background:var(--rose-soft);border:1.5px solid var(--rose);border-radius:12px;padding:12px;margin-bottom:12px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px">🏷️ ${_ticketSel.size} article(s) sélectionné(s) — catégoriser en lot :</div>
+      <div class="ticket-cat3" style="margin-bottom:8px">
+        <select class="select" title="Catégorie" onchange="ticketBulkCat(this.value)">${_bulkCatOpts}</select>
+        <select class="select" title="Sous-catégorie" onchange="ticketBulkSub(this.value)">${subcatOptions(_ticketBulk.category, _ticketBulk.sub_category)}</select>
+        <select class="select" title="Sous-sous-catégorie" onchange="ticketBulkSubsub(this.value)">${subsubOptions(_ticketBulk.category, _ticketBulk.sub_category, _ticketBulk.sub_sub_category)}</select>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-primary" style="padding:7px 14px;font-size:13px" onclick="ticketApplyBulk()">✓ Appliquer à la sélection</button>
+        <button class="btn-ghost" style="padding:7px 12px;font-size:13px" onclick="ticketSelectAll(false)">Tout désélectionner</button>
+      </div>
+    </div>` : `<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:10px;cursor:pointer;padding:8px 10px;background:var(--bg);border-radius:8px"><input type="checkbox" onchange="ticketSelectAll(this.checked)"> ✅ Coche plusieurs articles pour les catégoriser <b>en une fois</b> (ex : tous tes produits d'alimentation)</label>`;
   review.style.display = 'block';
   review.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div style="font-weight:800;font-size:15px">🧾 ${_ticketDraft.length} produit(s) lu(s)</div>
       <div style="font-family:var(--fm);font-weight:800;color:var(--rose)">${fmt(Math.round(total))}</div>
     </div>
+    ${bulkBar}
     ${rows}
     <button class="btn-ghost" style="padding:6px 12px;font-size:13px;margin-bottom:16px" onclick="ticketAddLine()">+ Ajouter une ligne</button>
 
@@ -4135,10 +4174,12 @@ function ticketAddLine() {
 }
 function ticketDeleteLine(k) {
   _ticketDraft.splice(k, 1);
+  _ticketSel = new Set();   // les index changent → on repart d'une sélection vide
   if (_ticketDraft.length) renderTicketReview(); else ticketClear();
 }
 function ticketClear() {
   _ticketDraft = [];
+  _ticketSel = new Set();
   $('ticket-review').style.display = 'none';
   $('ticket-review').innerHTML = '';
   $('ticket-status').style.display = 'none';
