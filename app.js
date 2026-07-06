@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v90'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v91'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -311,21 +311,17 @@ function closeSidebar() {
   ov.classList.remove('show');
   document.body.style.overflow = '';
 }
-// Replier / afficher la barre latérale sur desktop (rend la largeur au contenu)
+// Replier la barre latérale en rail d'icônes (desktop) — logo + icônes gardés, texte masqué
 function toggleDesktopSidebar() {
-  const collapsed = document.body.classList.toggle('sidebar-collapsed');
-  const btn = $('deskSidebarToggle');
-  if (btn) btn.textContent = collapsed ? '»' : '«';
-  try { localStorage.setItem('monie_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+  const mini = document.body.classList.toggle('sidebar-mini');
+  try { localStorage.setItem('monie_sidebar_mini', mini ? '1' : '0'); } catch (e) {}
 }
 // Restaure l'état au chargement
 (function initDesktopSidebar() {
   const apply = () => {
-    let collapsed = false;
-    try { collapsed = localStorage.getItem('monie_sidebar_collapsed') === '1'; } catch (e) {}
-    if (collapsed) document.body.classList.add('sidebar-collapsed');
-    const btn = $('deskSidebarToggle');
-    if (btn) btn.textContent = collapsed ? '»' : '«';
+    let mini = false;
+    try { mini = localStorage.getItem('monie_sidebar_mini') === '1'; } catch (e) {}
+    if (mini) document.body.classList.add('sidebar-mini');
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
   else apply();
@@ -3831,6 +3827,68 @@ function _setTxMainCardVisible(show) {
 function toggleTxList() {
   _setTxMainCardVisible(_txListHidden);   // inverse l'état courant
 }
+
+// ═══ 🗂 GESTION DES IMPORTS RÉCENTS (supprimer un lot ajouté) ═══
+let _importBatches = [];
+function toggleImportBatches() {
+  const el = $('import-batches'); if (!el) return;
+  const show = el.style.display === 'none' || !el.style.display;
+  el.style.display = show ? 'block' : 'none';
+  if (show) renderImportBatches();
+}
+function _batchSrcLabel(src) {
+  if (src === 'import_photo') return '📸 Photo (ticket/liste)';
+  if (src === 'manual') return '✍️ Saisie manuelle';
+  if ((src || '').startsWith('import_')) return '📥 Import ' + src.replace('import_', '').toUpperCase();
+  return src || 'autre';
+}
+function renderImportBatches() {
+  const el = $('import-batches'); if (!el) return;
+  // Regroupe par (jour d'AJOUT = created_at, source) → un lot = un import
+  const groups = {};
+  transactions.forEach(t => {
+    const added = (t.created_at || '').slice(0, 10) || '?';
+    const src = t.source || 'manual';
+    const key = added + '|' + src;
+    if (!groups[key]) groups[key] = { added, src, ids: [], total: 0 };
+    groups[key].ids.push(t.id);
+    groups[key].total += Math.abs(Number(t.amount) || 0);
+  });
+  _importBatches = Object.values(groups).sort((a, b) => (a.added < b.added ? 1 : -1)).slice(0, 30);
+  const rows = _importBatches.map((b, i) => {
+    const dd = b.added === '?' ? 'date inconnue' : b.added.split('-').reverse().join('/');
+    return `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border-soft)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700">${dd} <span style="font-size:12px;font-weight:500;color:var(--muted)">· ${_batchSrcLabel(b.src)}</span></div>
+        <div style="font-size:12px;color:var(--muted)">${b.ids.length} opération(s) · ${fmt(Math.round(b.total))}</div>
+      </div>
+      <button class="btn-ghost" style="padding:6px 12px;font-size:12px;color:#E53935;border-color:#E53935" onclick="deleteImportBatch(${i})" title="Supprimer tout ce lot">🗑 Supprimer ce lot</button>
+    </div>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="card-hd"><div class="card-title">🗂 Mes imports récents</div>
+      <button class="btn-ghost" style="padding:5px 10px;font-size:12px" onclick="toggleImportBatches()">Fermer</button></div>
+    <p class="page-sub" style="margin:0 0 10px">Chaque ligne = un <b>lot ajouté</b> (regroupé par date d'ajout). Supprime un lot entier pour le ré-importer proprement.</p>
+    ${rows || '<div class="empty-sub">Aucune opération enregistrée.</div>'}`;
+}
+async function deleteImportBatch(i) {
+  const b = _importBatches[i]; if (!b || !b.ids.length) return;
+  const dd = b.added === '?' ? 'date inconnue' : b.added.split('-').reverse().join('/');
+  const ok = await confirmDialog('Supprimer ce lot ?', `<div style="font-size:14px;line-height:1.6">Tu vas supprimer <b>${b.ids.length} opération(s)</b> ajoutées le <b>${dd}</b> (${esc(_batchSrcLabel(b.src))}).<br><br>C'est <b>irréversible</b>, mais tu pourras les ré-importer. Continuer ?</div>`);
+  if (!ok) return;
+  toast(`Suppression de ${b.ids.length} opération(s)…`);
+  for (let j = 0; j < b.ids.length; j += 200) {
+    const chunk = b.ids.slice(j, j + 200);
+    const { error } = await sb.from('transactions').delete().in('id', chunk);
+    if (error) { toast('Erreur : ' + error.message, 'error'); console.error(error); return; }
+  }
+  const gone = new Set(b.ids);
+  transactions = transactions.filter(t => !gone.has(t.id));
+  toast(`✓ ${b.ids.length} opération(s) supprimée(s)`, 'success');
+  renderImportBatches();
+  renderTransactionsList();
+}
+
 async function confirmImport() {
   const toAdd = importPreviewData.filter(t => !t._duplicate).map(t => ({
     user_id: currentUser.id,

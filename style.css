@@ -2853,32 +2853,45 @@ body::after {
   .import-cat3 select { font-size: 12px; padding: 7px 8px; }
 }
 
-/* ─── Barre latérale repliable (desktop uniquement) ─── */
-@media (min-width: 901px) {
-  .sidebar { transition: transform 0.25s ease; }
-  .main { transition: margin-left 0.25s ease; }
-  #deskSidebarToggle {
-    position: fixed;
-    top: 16px;
-    left: calc(var(--sidebar-w) - 15px);
-    z-index: 101;
-    width: 30px; height: 30px;
-    border-radius: 8px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    color: var(--muted);
-    font-size: 16px; font-weight: 800; line-height: 1;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 8px rgba(45,55,72,0.10);
-    transition: left 0.25s ease, color 0.15s, border-color 0.15s;
-  }
-  #deskSidebarToggle:hover { color: var(--rose); border-color: var(--rose); }
-  body.sidebar-collapsed .sidebar { transform: translateX(-100%); }
-  body.sidebar-collapsed .main { margin-left: 0; }
-  body.sidebar-collapsed #deskSidebarToggle { left: 12px; }
+/* ─── Barre latérale : bouton de repli dans le logo + mode rail d'icônes ─── */
+.sidebar-brand { position: relative; justify-content: space-between; }
+.brand-click { display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; min-width: 0; }
+.sidebar-toggle-btn {
+  background: transparent; border: none; color: var(--muted); cursor: pointer;
+  padding: 5px; border-radius: 7px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.15s, background 0.15s, color 0.15s;
 }
-/* Sur mobile, ce bouton n'existe pas (le menu ☰ gère déjà tout) */
+/* Le toggle apparaît au survol du logo / de la barre */
+.sidebar-brand:hover .sidebar-toggle-btn { opacity: 1; }
+.sidebar-toggle-btn:hover { color: var(--rose); background: var(--rose-soft); }
+
+@media (min-width: 901px) {
+  .sidebar { transition: width 0.22s ease; overflow: hidden; }
+  .main { transition: margin-left 0.22s ease; }
+  /* MODE RAIL D'ICÔNES : on garde le logo + les icônes, on masque le texte */
+  body.sidebar-mini .sidebar { width: 74px; padding-left: 10px; padding-right: 10px; }
+  body.sidebar-mini .main { margin-left: 74px; }
+  body.sidebar-mini .brand-name-sm { display: none; }
+  body.sidebar-mini .brand-click { flex: 0; justify-content: center; }
+  body.sidebar-mini .nav-btn { font-size: 0; gap: 0; justify-content: center; padding: 12px 0; }
+  body.sidebar-mini .nav-btn svg { width: 22px; height: 22px; }
+  body.sidebar-mini .logout-btn, body.sidebar-mini #app-version { display: none; }
+  body.sidebar-mini .user-pill { justify-content: center; padding: 8px 0; }
+  body.sidebar-mini .user-pill > div:not(.user-avatar), body.sidebar-mini .user-pill > span { display: none; }
+  /* En mode rail, le toggle apparaît centré sur le logo au survol */
+  body.sidebar-mini .sidebar-brand { justify-content: center; }
+  body.sidebar-mini .sidebar-toggle-btn { position: absolute; inset: 0; margin: auto; width: 30px; height: 30px; background: var(--card); box-shadow: 0 1px 6px rgba(45,55,72,0.14); }
+}
 @media (max-width: 900px) {
-  #deskSidebarToggle { display: none !important; }
+  .sidebar-toggle-btn { display: none; }   /* mobile : le menu ☰ gère déjà tout */
+}
+
+/* ─── Tableau transactions : tenir sur l'écran (colonnes plus compactes) ─── */
+@media (min-width: 901px) {
+  .main { padding-left: 24px; padding-right: 24px; }
+  .tx-table { min-width: 0; }
+  .tx-table th, .tx-table td { padding-left: 7px; padding-right: 7px; }
+  .tx-table select { min-width: 0; max-width: 100%; width: 100%; font-size: 12px; padding: 5px 6px; }
+  .tx-cat-select, .tx-subcat-select, .tx-subsub-select { min-width: 0 !important; }
 }
