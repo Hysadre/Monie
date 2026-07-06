@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v89'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v90'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -249,12 +249,13 @@ const BANK_META = {
 };
 const catIcon = c => CAT_META[c]?.emoji || '📌';
 const catColor = c => CAT_META[c]?.color || '#A0AEC0';
-// Petite pastille pour indiquer la banque source (LCL / BoursoBank)
+// Petite pastille pour indiquer la banque source (LCL / BoursoBank / autre)
 function bankBadge(bs) {
   if (!bs) return '';
   const m = BANK_META[bs];
-  if (!m) return '';
-  return `<span class="bank-badge" style="color:${m.color};background:${m.bg}" title="Compte ${m.label}">${m.label}</span>`;
+  if (m) return `<span class="bank-badge" style="color:${m.color};background:${m.bg}" title="Compte ${m.label}">${m.label}</span>`;
+  // Banque non prédéfinie : pastille générique (pour qu'on voie TOUJOURS la banque)
+  return `<span class="bank-badge" style="color:#5B6B7C;background:#EDF1F5" title="Compte ${esc(bs)}">${esc(bs)}</span>`;
 }
 
 // ─── STATE ────────────────────────────────────────────────────
@@ -310,6 +311,25 @@ function closeSidebar() {
   ov.classList.remove('show');
   document.body.style.overflow = '';
 }
+// Replier / afficher la barre latérale sur desktop (rend la largeur au contenu)
+function toggleDesktopSidebar() {
+  const collapsed = document.body.classList.toggle('sidebar-collapsed');
+  const btn = $('deskSidebarToggle');
+  if (btn) btn.textContent = collapsed ? '»' : '«';
+  try { localStorage.setItem('monie_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+}
+// Restaure l'état au chargement
+(function initDesktopSidebar() {
+  const apply = () => {
+    let collapsed = false;
+    try { collapsed = localStorage.getItem('monie_sidebar_collapsed') === '1'; } catch (e) {}
+    if (collapsed) document.body.classList.add('sidebar-collapsed');
+    const btn = $('deskSidebarToggle');
+    if (btn) btn.textContent = collapsed ? '»' : '«';
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+  else apply();
+})();
 
 // ═══ HELP BANNERS (accordéons) ═════════════════════════════════
 function closeHelp(id, ev) {
@@ -3153,6 +3173,9 @@ async function handleImportFile(file, target) {
         }
       }
     });
+    // 🏦 Détecte la banque depuis le nom du fichier (LCL / BoursoBank), sinon à préciser
+    importBank = /lcl/.test(name) ? 'LCL' : (/bourso/.test(name) ? 'BoursoBank' : null);
+    parsed.forEach(t => { if (importBank && !t.bank_source) t.bank_source = importBank; });
     // Recherche doublons
     importPreviewData = parsed;
     detectDuplicates();
@@ -3297,6 +3320,7 @@ let previewFilterYear = 'all';
 let previewFilterMonth = 'all';
 let previewFilterCat = 'all';
 let previewTab = 'all'; // 'all' | 'todo' | 'done' | 'auto'
+let importBank = null;  // 🏦 banque du relevé en cours d'import (détectée ou choisie)
 let previewPage = 1;
 const PREVIEW_PAGE_SIZE = 50;
 let preservedScroll = 0;
@@ -3343,6 +3367,20 @@ function showImportPreview() {
         <div class="kpi kpi-rose"><div class="kpi-label">🤔 À vérifier</div><div class="kpi-val kpi-val-rose">${todo.length}</div><div class="kpi-hint">non reconnues</div></div>
         <div class="kpi kpi-gold"><div class="kpi-label">✨ Auto-cat.</div><div class="kpi-val kpi-val-gold">${auto.length}</div><div class="kpi-hint">reconnues</div></div>
       </div>`;
+
+  // 🏦 Banque du relevé (détectée depuis le nom du fichier, ou à choisir)
+  const _banks = ['LCL', 'BoursoBank', 'Banque Postale', 'Revolut', 'N26'];
+  if (importBank && !_banks.includes(importBank)) _banks.unshift(importBank);
+  const _bankOpts = _banks.map(b => `<option value="${esc(b)}" ${importBank === b ? 'selected' : ''}>${b}</option>`).join('');
+  html += `<div style="display:flex;align-items:center;gap:10px;margin-top:14px;padding:11px 13px;border-radius:10px;flex-wrap:wrap;background:${importBank ? 'var(--sage-soft)' : 'rgba(232,184,77,0.18)'}">
+      <span style="font-size:13px;font-weight:700">🏦 Banque de ce relevé :</span>
+      <select class="select" style="width:auto" onchange="setImportBank(this.value)">
+        <option value="" ${!importBank ? 'selected' : ''}>— à préciser —</option>
+        ${_bankOpts}
+        <option value="__other__">➕ Autre banque…</option>
+      </select>
+      ${importBank ? `<span style="font-size:12px;color:var(--sage)">✓ appliquée à toutes ces opérations</span>` : `<span style="font-size:12px;color:#B7791F">Choisis la banque pour bien reconnaître tes comptes</span>`}
+    </div>`;
 
   if (nDup > 0) {
     html += `<div style="margin-top:16px"><div class="card-title" style="margin-bottom:10px">🔍 Doublons potentiels détectés</div>`;
@@ -3732,6 +3770,16 @@ async function recategorizeImportTx(idx, newCat) {
   showImportPreview();
 }
 // Sous-catégorie choisie sur une ligne d'import (gère « ➕ Autre… »)
+// 🏦 Applique la banque choisie à TOUTES les opérations de l'import
+function setImportBank(val) {
+  if (val === '__other__') {
+    const v = prompt('Nom de la banque :', importBank || '');
+    if (v === null) { showImportPreview(); return; }
+    importBank = (v || '').trim() || null;
+  } else importBank = val || null;
+  importPreviewData.forEach(t => { t.bank_source = importBank; });
+  showImportPreview();
+}
 function setImportSubcat(idx, val) {
   const t = importPreviewData[idx]; if (!t) return;
   if (val === '__custom__') {

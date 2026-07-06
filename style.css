@@ -2852,3 +2852,33 @@ body::after {
   .import-cat3 { grid-template-columns: 1fr; gap: 4px; }
   .import-cat3 select { font-size: 12px; padding: 7px 8px; }
 }
+
+/* ─── Barre latérale repliable (desktop uniquement) ─── */
+@media (min-width: 901px) {
+  .sidebar { transition: transform 0.25s ease; }
+  .main { transition: margin-left 0.25s ease; }
+  #deskSidebarToggle {
+    position: fixed;
+    top: 16px;
+    left: calc(var(--sidebar-w) - 15px);
+    z-index: 101;
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 16px; font-weight: 800; line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(45,55,72,0.10);
+    transition: left 0.25s ease, color 0.15s, border-color 0.15s;
+  }
+  #deskSidebarToggle:hover { color: var(--rose); border-color: var(--rose); }
+  body.sidebar-collapsed .sidebar { transform: translateX(-100%); }
+  body.sidebar-collapsed .main { margin-left: 0; }
+  body.sidebar-collapsed #deskSidebarToggle { left: 12px; }
+}
+/* Sur mobile, ce bouton n'existe pas (le menu ☰ gère déjà tout) */
+@media (max-width: 900px) {
+  #deskSidebarToggle { display: none !important; }
+}
