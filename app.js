@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v110'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v111'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -2198,7 +2198,7 @@ function openCatMonthList(cat, monthKey, nav) {
     if (it.cat === cat) { budLines.push(it); if (Array.isArray(it.subs)) postes = postes.concat(it.subs); }
   }));
   // Réel par sous-catégorie (ce que tu as vraiment dépensé, ventilé)
-  const norm = s => (s || '').trim().toLowerCase();
+  const norm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();  // ignore accents & casse (hygiène = hygiene)
   const realBySub = {}; let realNoSub = 0;
   scope.forEach(t => { const s = (t.sub_category || '').trim(); const a = Math.abs(Number(t.amount)); if (s) realBySub[norm(s)] = (realBySub[norm(s)] || 0) + a; else realNoSub += a; });
   let budHtml = '';
@@ -4468,14 +4468,25 @@ function renderTicketReview() {
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:13px"><input type="radio" name="ticket-dest" value="both" checked> 💸 Transactions <b>+</b> 🛒 liste de courses</label>
       <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:13px"><input type="radio" name="ticket-dest" value="tx"> 💸 Transactions seules</label>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="radio" name="ticket-dest" value="list"> 🛒 Liste de courses seule</label>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
-        <div>
-          <label class="qa-label" style="font-size:11px">Date (pour les transactions)</label>
+      <div class="ticket-form-grid" style="margin-top:12px">
+        <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+          <label class="qa-label" style="font-size:11px">Date (transactions)</label>
           <input class="inp" type="date" id="ticket-date" value="${_todayISO()}" style="width:100%;box-sizing:border-box">
         </div>
-        <div>
+        <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
           <label class="qa-label" style="font-size:11px">Nom de la liste</label>
-          <input class="inp" id="ticket-listkey" value="${_todayISO().slice(0, 7)}" placeholder="Ex: 2026-07, Ménage…" style="width:100%;box-sizing:border-box">
+          <input class="inp" id="ticket-listkey" value="${_todayISO().slice(0, 7)}" placeholder="Ex: Ménage…" style="width:100%;box-sizing:border-box">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+          <label class="qa-label" style="font-size:11px">Moyen de paiement</label>
+          <select class="select" id="ticket-pm" style="width:100%;box-sizing:border-box">
+            <option value="carte">💳 Carte</option>
+            <option value="especes">💵 Espèces</option>
+            <option value="ticket_resto">🎟️ Ticket resto</option>
+            <option value="virement">➡️ Virement</option>
+            <option value="prelevement">🔄 Prélèvement</option>
+            <option value="cheque">📝 Chèque</option>
+          </select>
         </div>
       </div>
     </div>
@@ -4549,6 +4560,7 @@ async function saveTicket() {
   const dest = (document.querySelector('input[name="ticket-dest"]:checked') || {}).value || 'both';
   const listKey = ($('ticket-listkey').value || _todayISO().slice(0, 7) || '').trim();
   const dateOp = $('ticket-date').value || _todayISO();
+  const ticketPm = ($('ticket-pm') && $('ticket-pm').value) || 'carte';
 
   // → Transactions : UNE seule ligne groupée (ex "Courses Leclerc"), pas un article par ligne.
   if (dest === 'both' || dest === 'tx') {
@@ -4573,7 +4585,7 @@ async function saveTicket() {
           label: multi ? `${name} · ${g.cat}` : name,
           amount: -Math.abs(Math.round(g.total * 100) / 100),
           type: 'sortie', category: g.cat, sub_category: domSub, sub_sub_category: null,
-          source: 'import_csv', account: 'Compte courant', payment_method: 'carte'
+          source: 'import_csv', account: 'Compte courant', payment_method: ticketPm
         };
       });
       const { error } = await sb.from('transactions').insert(txs.map(_sanitizeTx));
@@ -4651,14 +4663,19 @@ function _renderCoursesListes() {
     const doneAmt = items.filter(i => i.checked).reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 1), 0);
     const pct = items.length ? Math.round(done / items.length * 100) : 0;
     const rows = items.map(c => `
-      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border-soft)${c.checked ? ';opacity:.5' : ''}">
-        <input type="checkbox" class="bud-sub-check" ${c.checked ? 'checked' : ''} onchange="toggleCourseChecked('${c.id}')" title="Coche quand c'est dans le panier">
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:14px;${c.checked ? 'text-decoration:line-through' : ''}">${esc(c.label)}${c.qty > 1 ? ` <span style="color:var(--muted);font-size:12px">×${c.qty}</span>` : ''}${c.brand ? ` <span style="font-size:11px;color:var(--rose)">${esc(c.brand)}</span>` : ''}</div>
-          <div style="font-size:11px;color:var(--muted)">${_coursePath(c) || '—'}</div>
+      <div style="padding:10px 0;border-bottom:1px solid var(--border-soft)${c.checked ? ';opacity:.55' : ''}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <input type="checkbox" class="bud-sub-check" ${c.checked ? 'checked' : ''} onchange="toggleCourseChecked('${c.id}')" title="Coché = dans le panier">
+          <input class="inp" value="${esc(c.label)}" onchange="updateCourseField('${c.id}','label',this.value)" placeholder="Produit" style="flex:1;min-width:0;padding:6px 8px;font-size:13px${c.checked ? ';text-decoration:line-through' : ''}">
+          <div style="display:flex;align-items:center;gap:2px"><input class="inp" type="number" step="0.01" min="0" value="${c.price == null ? '' : c.price}" onchange="updateCourseField('${c.id}','price',this.value)" placeholder="€" style="width:66px;padding:6px 5px;text-align:right;font-family:var(--fm)"><span style="font-size:11px;color:var(--muted)">€</span></div>
+          <input class="inp" type="number" step="1" min="1" value="${c.qty || 1}" onchange="updateCourseField('${c.id}','qty',this.value)" title="Quantité" style="width:44px;padding:6px 4px;text-align:center">
+          <button class="bud-sub-del" onclick="deleteCourseItem('${c.id}')" title="Retirer">🗑</button>
         </div>
-        <div style="font-family:var(--fm);font-weight:700;white-space:nowrap">${c.price != null ? fmt(Math.round(Number(c.price) * (Number(c.qty) || 1))) : '—'}</div>
-        <button class="bud-sub-del" onclick="deleteCourseItem('${c.id}')" title="Retirer">🗑</button>
+        <div class="ticket-cat3" style="padding-left:26px">
+          <input class="inp" value="${esc(c.brand || '')}" onchange="updateCourseField('${c.id}','brand',this.value)" placeholder="🏷️ Marque" style="padding:5px 8px;font-size:12px;min-width:0">
+          <select class="select" title="Catégorie" onchange="courseCat('${c.id}',this.value)" style="font-size:12px;padding:5px;min-width:0">${_catOptions(c.category)}</select>
+          <select class="select" title="Sous-catégorie" onchange="updateCourseField('${c.id}','sub_category',this.value === '__custom__' ? (prompt('Sous-catégorie :','')||'') : this.value)" style="font-size:12px;padding:5px;min-width:0">${subcatOptions(c.category, c.sub_category)}</select>
+        </div>
       </div>`).join('');
     return `
       <div class="card" style="margin-bottom:16px">
@@ -4719,6 +4736,28 @@ function _renderCoursesPrix() {
 }
 function fmt2(n) { return (Math.round(Number(n) * 100) / 100).toFixed(2).replace('.', ',') + ' €'; }
 
+function _catOptions(cur) {
+  return Object.keys(CAT_META).sort().map(c => `<option value="${esc(c)}" ${c === cur ? 'selected' : ''}>${CAT_META[c].emoji} ${esc(c)}</option>`).join('');
+}
+// Modifie un champ d'un article de la liste de courses
+async function updateCourseField(id, field, val) {
+  const c = coursesList.find(x => x.id === id); if (!c) return;
+  let v;
+  if (field === 'price') v = (val === '' || val == null) ? null : Number(val);
+  else if (field === 'qty') v = Math.max(1, Number(val) || 1);
+  else v = (val || '').trim() || null;
+  c[field] = v;
+  const { error } = await sb.from('courses').update({ [field]: v }).eq('id', id);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  renderCourses();
+}
+async function courseCat(id, val) {
+  const c = coursesList.find(x => x.id === id); if (!c) return;
+  c.category = val; c.sub_category = null;   // changer de catégorie remet la sous-cat à zéro
+  const { error } = await sb.from('courses').update({ category: val, sub_category: null }).eq('id', id);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  renderCourses();
+}
 async function toggleCourseChecked(id) {
   const c = coursesList.find(x => x.id === id); if (!c) return;
   const nv = !c.checked;

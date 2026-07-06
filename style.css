@@ -2906,3 +2906,14 @@ body::after {
   .tx-table select { min-width: 0; max-width: 100%; width: 100%; font-size: 12px; padding: 5px 6px; }
   .tx-cat-select, .tx-subcat-select, .tx-subsub-select { min-width: 0 !important; }
 }
+
+/* 📸 Revue photo — grille date / nom / moyen de paiement */
+.ticket-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  align-items: end;
+}
+@media (max-width: 600px) {
+  .ticket-form-grid { grid-template-columns: 1fr; gap: 10px; }
+}
