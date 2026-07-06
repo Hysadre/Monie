@@ -2839,3 +2839,16 @@ body::after {
   .ticket-cat3 { grid-template-columns: 1fr; gap: 5px; }
   .ticket-cat3 select { font-size: 13px; padding: 9px 8px; }
 }
+
+/* 📥 Import — les 3 menus catégorie/sous-cat/sous-sous-cat sur une ligne de transaction */
+.import-cat3 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px;
+  margin-top: 4px;
+}
+.import-cat3 select { min-width: 0; width: 100%; padding: 4px 6px; font-size: 11px; }
+@media (max-width: 600px) {
+  .import-cat3 { grid-template-columns: 1fr; gap: 4px; }
+  .import-cat3 select { font-size: 12px; padding: 7px 8px; }
+}

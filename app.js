@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v88'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v89'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3477,9 +3477,11 @@ function showImportPreview() {
           <div class="tx-icon" style="background:${catColor(t.category)}15;color:${catColor(t.category)}">${catIcon(t.category)}</div>
           <div class="tx-info">
             <div class="tx-label">${esc(t.label)} ${bankBadge(t.bank_source)}</div>
-            <select class="select" style="margin-top:4px;padding:4px 8px;font-size:11px;width:auto;min-width:180px" onchange="recategorizeImportTx(${globalIdx}, this.value)">
-              ${catsToShow}
-            </select>
+            <div class="import-cat3">
+              <select class="select" title="Catégorie" onchange="recategorizeImportTx(${globalIdx}, this.value)">${catsToShow}</select>
+              <select class="select" title="Sous-catégorie" onchange="setImportSubcat(${globalIdx}, this.value)">${subcatOptions(t.category, t.sub_category)}</select>
+              <select class="select" title="Sous-sous-catégorie" onchange="setImportSubsub(${globalIdx}, this.value)">${subsubOptions(t.category, t.sub_category, t.sub_sub_category)}</select>
+            </div>
           </div>
           <div class="tx-amt ${t.type === 'entree' ? 'amt-in' : 'amt-out'}">${t.type === 'entree' ? '+' : '-'}${fmtD(Math.abs(t.amount))}</div>
           <button class="import-del-btn" onclick="deleteImportTx(${globalIdx})" title="Supprimer de l'import">✕</button>
@@ -3689,6 +3691,7 @@ async function recategorizeImportTx(idx, newCat) {
   const oldCat = t.category;
   t.category = newCat;
   t.sub_category = null;
+  t.sub_sub_category = null;
   t._userTaught = true;
   t._userCategorized = true;
   // Créer une règle perso pour ce marchand
@@ -3715,6 +3718,7 @@ async function recategorizeImportTx(idx, newCat) {
         if (other !== t && !other._userTaught && other.merchant_key && other.merchant_key.includes(pattern)) {
           other.category = newCat;
           other.sub_category = null;
+          other.sub_sub_category = null;
           other._userCategorized = true; // Elles passent aussi dans "Catégorisées"
           count++;
         }
@@ -3725,6 +3729,28 @@ async function recategorizeImportTx(idx, newCat) {
       toast('Règle sauvegardée localement', '');
     }
   }
+  showImportPreview();
+}
+// Sous-catégorie choisie sur une ligne d'import (gère « ➕ Autre… »)
+function setImportSubcat(idx, val) {
+  const t = importPreviewData[idx]; if (!t) return;
+  if (val === '__custom__') {
+    const v = prompt('Sous-catégorie :', t.sub_category || '');
+    if (v === null) { showImportPreview(); return; }
+    t.sub_category = (v || '').trim() || null;
+  } else t.sub_category = val || null;
+  t.sub_sub_category = null;   // reset niveau 3 quand la sous-cat change
+  t._userCategorized = true;
+  showImportPreview();
+}
+function setImportSubsub(idx, val) {
+  const t = importPreviewData[idx]; if (!t) return;
+  if (val === '__custom__') {
+    const v = prompt('Sous-sous-catégorie :', t.sub_sub_category || '');
+    if (v === null) { showImportPreview(); return; }
+    t.sub_sub_category = (v || '').trim() || null;
+  } else t.sub_sub_category = val || null;
+  t._userCategorized = true;
   showImportPreview();
 }
 function mergeMatch(i) {
@@ -3766,6 +3792,7 @@ async function confirmImport() {
     type: t.type,
     category: t.category,
     sub_category: t.sub_category,
+    sub_sub_category: t.sub_sub_category || null,
     source: 'import_' + (t._source || 'csv'),
     merchant_key: t.merchant_key,
     account: t.account || 'Compte courant',
@@ -3778,7 +3805,7 @@ async function confirmImport() {
   // Insert en batch
   const batchSize = 200;
   for (let i = 0; i < toAdd.length; i += batchSize) {
-    const batch = toAdd.slice(i, i + batchSize);
+    const batch = toAdd.slice(i, i + batchSize).map(_sanitizeTx);
     const { error } = await sb.from('transactions').insert(batch);
     if (error) { toast('Erreur : ' + error.message, 'error'); console.error(error); return; }
   }
