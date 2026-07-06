@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v102'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v103'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -3965,6 +3965,10 @@ function renderImportBatches() {
       <div style="flex:1;min-width:0"><b>🧹 Nettoyer l'historique</b><div style="font-size:12px;color:var(--muted)">Applique les dernières règles à TOUTES tes transactions : Livres → Vie quotidienne · Restaurant/Sorties → Restos · chouchane→Fast food · gelato/philomène→Restos. Rien n'est supprimé.</div></div>
       <button class="btn-primary" style="padding:8px 14px;font-size:13px" onclick="cleanupHistory()">🧹 Nettoyer</button>
     </div>
+    <div style="display:flex;align-items:center;gap:12px;background:rgba(155,127,192,0.14);border-radius:10px;padding:12px 14px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:0"><b>🎲 Données de démo (3 ans)</b><div style="font-size:12px;color:var(--muted)">Génère ~1 800 transactions fictives réalistes (2023-2025) pour tester/montrer l'app. Taguées « démo », supprimables ensuite.</div></div>
+      <button class="btn-ghost" style="padding:8px 14px;font-size:13px" onclick="generateDemoData()">🎲 Générer</button>
+    </div>
     <p class="page-sub" style="margin:0 0 10px">Ci-dessous, chaque ligne = un <b>lot ajouté</b> (par date d'ajout + source). Supprime un lot entier pour le ré-importer proprement.</p>
     ${rows || '<div class="empty-sub">Aucune opération enregistrée.</div>'}`;
 }
@@ -4009,6 +4013,66 @@ async function cleanupHistory() {
     g.local.forEach(t => { t.category = g.cat; t.sub_category = g.sub; t.sub_sub_category = g.ss; });
   }
   toast(`✓ ${done} transaction(s) nettoyée(s) et reclassée(s)`, 'success', 5000);
+  renderImportBatches();
+  renderTransactionsList();
+}
+
+// 🎲 Génère ~3 ans de transactions réalistes (démo / test), taguées source='demo'
+async function generateDemoData() {
+  const ok = await confirmDialog('🎲 Générer 3 ans de données démo ?', `<div style="font-size:14px;line-height:1.6">Je vais créer <b>~1 800 transactions fictives</b> réparties sur <b>2023, 2024 et 2025</b> (salaires, courses, restos, transport, abonnements, santé, voyages, épargne…).<br><br>Elles sont taguées <b>« démo »</b> et supprimables en un clic ensuite (bandeau ci-dessous). Continuer ?</div>`);
+  if (!ok) return;
+  const R = (a, b) => Math.round((a + Math.random() * (b - a)) * 100) / 100;
+  const P = a => a[Math.floor(Math.random() * a.length)];
+  const D = () => String(1 + Math.floor(Math.random() * 28)).padStart(2, '0');
+  const N = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
+  const rows = [];
+  const add = (date, label, amount, type, category, sub = null, ss = null, pm = 'carte') =>
+    rows.push({ user_id: currentUser.id, date_op: date, label, amount, type, category, sub_category: sub, sub_sub_category: ss, source: 'demo', account: 'Compte courant', payment_method: pm });
+  const SUP = ['CARREFOUR', 'LIDL', 'AUCHAN', 'FRANPRIX', 'MONOPRIX', 'E.LECLERC', 'INTERMARCHE', 'CASINO', 'BIOCOOP'];
+  const RESTO = ['LE BISTROT PARISIEN', 'SUSHI SHOP', 'PIZZA ROMA', 'LA TRATTORIA', 'WOK 88', 'LE COMPTOIR', 'CHEZ LEON'];
+  const FAST = ['MCDONALDS', 'BURGER KING', 'KFC', 'O TACOS', 'SUBWAY', 'SNACK CHOUCHANE', 'FIVE GUYS'];
+  const BOUL = ['BOULANGERIE PAUL', 'MARIE BLACHERE', 'LA MIE CALINE', 'BOULANGERIE DU COIN'];
+  const CAFE = ['STARBUCKS', 'CAFE DE LA GARE', 'COLUMBUS COFFEE', 'LE PETIT CAFE'];
+  const MODE = ['ZARA', 'H&M', 'UNIQLO', 'SHEIN', 'ASOS', 'KIABI', 'JULES'];
+  const COSM = ['SEPHORA', 'NOCIBE', 'MARIONNAUD', 'YVES ROCHER'];
+  const VQ = [['ACTION', 'Hygiène & entretien', 'Produits ménagers'], ['IKEA', 'Maison & déco', 'Décoration'], ['GIFI', 'Maison & déco', null], ['NORMAL', 'Hygiène & entretien', 'Lessive'], ['LEROY MERLIN', 'Bricolage & réparations', null]];
+  const TRANSP = [['SNCF', 'Train'], ['RATP NAVIGO', 'Bus / Métro'], ['TOTAL ENERGIES', 'Essence'], ['UBER', 'Uber / VTC'], ['BLABLACAR', 'Train']];
+  const ABO = [['NETFLIX', 'Streaming', 13.49], ['SPOTIFY', 'Streaming', 10.99], ['FREE MOBILE', 'Téléphone', 19.99], ['ORANGE FIBRE', 'Internet', 39.99], ['AMAZON PRIME', 'Streaming', 6.99], ['CANAL+', 'Streaming', 24.99], ['BASIC FIT', 'Salle de sport', 29.99]];
+  const SANTE = [['PHARMACIE CENTRALE', 'Pharmacie'], ['DR MARTIN', 'Médecin'], ['LABO ANALYSES', 'Analyses'], ['DENTISTE DUPONT', 'Dentiste']];
+  const DIV = [['UGC CINE CITE', 'Cinéma'], ['FNAC SPECTACLES', 'Concerts'], ['STEAM GAMES', 'Jeux']];
+  const NAMES = ['JULIE', 'MARC', 'SOPHIE', 'KEVIN', 'AMINA', 'DAVID'];
+  for (const y of [2023, 2024, 2025]) {
+    for (let m = 1; m <= 12; m++) {
+      const mk = `${y}-${String(m).padStart(2, '0')}`;
+      add(`${mk}-02`, 'VIREMENT SALAIRE ' + mk, R(1950, 2450), 'entree', 'Salaire', null, null, 'virement');
+      add(`${mk}-05`, 'LOYER APPARTEMENT', -490, 'sortie', 'Loyer', null, null, 'prelevement');
+      for (let i = 0; i < N(6, 9); i++) add(`${mk}-${D()}`, P(SUP) + ' ' + mk.slice(5), -R(12, 90), 'sortie', 'Alimentation', 'Courses', P(['Fruits & légumes', 'Viande', 'Épicerie salée', 'Boissons', 'Produits laitiers', 'Surgelés']));
+      for (let i = 0; i < N(2, 5); i++) add(`${mk}-${D()}`, P(RESTO), -R(15, 60), 'sortie', 'Alimentation', 'Restos');
+      for (let i = 0; i < N(1, 4); i++) add(`${mk}-${D()}`, P(FAST), -R(8, 24), 'sortie', 'Alimentation', 'Fast food');
+      for (let i = 0; i < N(2, 5); i++) add(`${mk}-${D()}`, P(BOUL), -R(2, 12), 'sortie', 'Alimentation', 'Boulangerie');
+      for (let i = 0; i < N(0, 3); i++) add(`${mk}-${D()}`, P(CAFE), -R(3, 10), 'sortie', 'Alimentation', 'Café / Bar');
+      for (let i = 0; i < N(2, 4); i++) { const [lab, sub] = P(TRANSP); add(`${mk}-${D()}`, lab, -R(10, 70), 'sortie', 'Transport', sub); }
+      ABO.slice().sort(() => Math.random() - 0.5).slice(0, N(2, 4)).forEach(([lab, sub, amt]) => add(`${mk}-${D()}`, lab, -amt, 'sortie', 'Abonnements', sub, null, 'prelevement'));
+      for (let i = 0; i < N(1, 3); i++) { const [lab, sub, sss] = P(VQ); add(`${mk}-${D()}`, lab, -R(8, 65), 'sortie', 'Vie quotidienne', sub, sss); }
+      if (Math.random() < 0.45) add(`${mk}-${D()}`, P(MODE), -R(20, 130), 'sortie', 'Mode', 'Vêtements');
+      if (Math.random() < 0.35) add(`${mk}-${D()}`, P(COSM), -R(12, 70), 'sortie', 'Cosmétique', 'Soins');
+      if (Math.random() < 0.4) { const [lab, sub] = P(SANTE); add(`${mk}-${D()}`, lab, -R(8, 55), 'sortie', 'Santé', sub); }
+      if (Math.random() < 0.5) { const [lab, sub] = P(DIV); add(`${mk}-${D()}`, lab, -R(8, 45), 'sortie', 'Divertissement', sub); }
+      if (Math.random() < 0.3) add(`${mk}-${D()}`, 'CADEAU ' + P(NAMES), -R(15, 80), 'sortie', 'Amis & Famille', 'Cadeaux', null, 'virement');
+      if (Math.random() < 0.25) add(`${mk}-${D()}`, 'REMBOURSEMENT ' + P(NAMES), R(10, 70), 'entree', 'Remboursements', 'Ami', null, 'virement');
+      if (Math.random() < 0.7) add(`${mk}-${D()}`, 'DIME EGLISE', -R(50, 200), 'sortie', 'Dîme', null, null, 'virement');
+      if (Math.random() < 0.12) add(`${mk}-${D()}`, P(['AIRBNB', 'BOOKING.COM', 'AIR FRANCE', 'SNCF VOYAGE']), -R(80, 420), 'sortie', 'Voyages', P(['Hébergement', 'Transport']));
+      add(`${mk}-${D()}`, 'VIREMENT EPARGNE', -R(100, 350), 'epargne', 'Épargne', null, null, 'virement');
+    }
+  }
+  toast(`Ajout de ${rows.length} transactions démo…`);
+  for (let i = 0; i < rows.length; i += 200) {
+    const batch = rows.slice(i, i + 200).map(_sanitizeTx);
+    const { error } = await sb.from('transactions').insert(batch);
+    if (error) { toast('Erreur : ' + error.message, 'error'); console.error(error); return; }
+  }
+  await loadAllData();
+  toast(`✓ ${rows.length} transactions démo générées (2023-2025)`, 'success', 6000);
   renderImportBatches();
   renderTransactionsList();
 }
