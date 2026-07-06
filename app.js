@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v95'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v96'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -70,7 +70,7 @@ const CAT_META = {
 };
 // Sous-catégories prédéfinies par catégorie (proposées en liste déroulante ; extensibles)
 const SUBCATS = {
-  'Alimentation': ['Courses', 'Restos', 'Livraison', 'Boulangerie', 'Café / Bar', 'Traiteur'],
+  'Alimentation': ['Courses', 'Restos', 'Fast food', 'Livraison', 'Boulangerie', 'Café / Bar', 'Traiteur'],
   'Transport': ['Train', 'Bus / Métro', 'Essence', 'Uber / VTC', 'Péage', 'Parking', 'Avion', 'Vélo / Trottinette'],
   'Banque': ['Frais bancaires', 'Agios', 'Cotisation carte', 'Assurance', 'Virement'],
   'Abonnements': ['Téléphone', 'Internet', 'Streaming', 'Salle de sport', 'IA', 'Logiciels', 'Presse', 'Cloud'],
@@ -99,7 +99,8 @@ const SUBCATS = {
 const SUBSUBCATS = {
   'Alimentation': {
     'Courses': ['Fruits & légumes', 'Viande', 'Poisson', 'Produits laitiers', 'Épicerie salée', 'Épicerie sucrée', 'Boissons', 'Surgelés', 'Pain & petit-déj', 'Bébé', 'Bio / Vrac'],
-    'Restos': ['Fast-food', 'Restaurant', 'Africain', 'Asiatique', 'Pizza', 'Brunch'],
+    'Restos': ['Africain', 'Asiatique', 'Chinois', 'Italien / Pizza', 'Brunch', 'Poké / Healthy', 'Autre'],
+    'Fast food': ['Burger', 'Tacos', 'Kebab', 'Sandwich', 'Poulet frit', 'Snack', 'Glaces / Desserts'],
     'Livraison': ['Uber Eats', 'Deliveroo', 'Autre'],
     'Boulangerie': ['Pain', 'Viennoiserie', 'Pâtisserie'],
     'Café / Bar': ['Café', 'Bar', 'Salon de thé']
@@ -1353,7 +1354,10 @@ function categorize(label, amount) {
   if (L.includes('sfr') || L.includes('bouygues telecom')) return { category: 'Abonnements', sub_category: 'Téléphone' };
   if (L.includes('claude') || L.includes('anthropic') || L.includes('perplexity') || L.includes('openai') || L.includes('chatgpt') || L.includes('midjourney')) return { category: 'Abonnements', sub_category: 'IA' };
   if (L.includes('amouan') || L.includes('gnagne') || L.includes('mame diouf') || L.includes('saffo')) return { category: 'Amis & Famille', sub_category: null };
-  if (L.includes('uber eats') || L.includes('deliveroo') || L.includes('franprix') || L.includes('distrifives') || L.includes('legrand primeur') || L.includes('delices exotic') || L.includes('delicesexotic') || L.includes('djam burger') || L.includes('ovalys') || L.includes('minimarket') || L.includes('boulange')) return { category: 'Alimentation', sub_category: null };
+  // Restos / Fast food (marchands connus de Twady)
+  if (L.includes('chouchane') || L.includes('snack') || L.includes('djam burger') || L.includes('otacos') || L.includes('burger')) return { category: 'Alimentation', sub_category: 'Fast food' };
+  if (L.includes('gelato') || L.includes('philom')) return { category: 'Alimentation', sub_category: 'Restos' };
+  if (L.includes('uber eats') || L.includes('deliveroo') || L.includes('franprix') || L.includes('distrifives') || L.includes('legrand primeur') || L.includes('delices exotic') || L.includes('delicesexotic') || L.includes('ovalys') || L.includes('minimarket') || L.includes('boulange')) return { category: 'Alimentation', sub_category: null };
   if (L.includes('flixbus') || L.includes('transpole') || L.includes('ubr') || L.includes('pending.ube')) return { category: 'Transport', sub_category: null };
   // Pass 1: rules spécifiques
   const specifics = rules.filter(r => !r.is_generic).sort((a, b) => b.priority - a.priority || b.pattern.length - a.pattern.length);
