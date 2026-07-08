@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v112'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v113'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5738,12 +5738,14 @@ function computeBudgetStatus(monthKey) {
   const pctImp = Number((b.sub_budget && b.sub_budget._pctImprevus) || 0); // % Imprévus (stocké dans le jsonb)
   const spent = { charges: 0, plaisir: 0, epargne: 0, imprevus: 0 };
   const spentByCat = {};
+  let outTotal = 0;   // TOUT ce qui sort du compte ce mois (dépenses + épargne + prêts), hors virements internes
   transactions.forEach(t => {
     if (!t.date_op.startsWith(key)) return;
     const a = Math.abs(Number(t.amount));
-    if (t.type === 'epargne') { spent.epargne += a; return; } // l'épargne = un type à part
+    if (t.type === 'epargne') { spent.epargne += a; outTotal += a; return; } // l'épargne = un type à part (mais elle SORT du compte)
     if (t.type !== 'sortie') return;
-    if (isLoan(t)) return;                          // les prêts ne comptent pas (ils reviennent → suivi dans Remboursements)
+    if (t.category !== 'Transactions') outTotal += a; // total sorti (prêts inclus) ; exclut les virements internes (doublons)
+    if (isLoan(t)) return;                          // MAIS un prêt ne compte PAS dans le budget par catégorie (il revient)
     const bc = txBudgetCat(t);                     // Alimentation se scinde en Alimentation / Restos & sorties
     spentByCat[bc] = (spentByCat[bc] || 0) + a;
     const bl = BUDGET_BLOCK[bc];
@@ -5768,18 +5770,18 @@ function computeBudgetStatus(monthKey) {
   };
   // Dépenses "à prévoir" du mois (loyer, factures que tu sais devoir payer) → à retirer du disponible
   const aPrevoir = (b.events || []).reduce((s, e) => s + Number(e.amount || 0), 0);
-  return { rev, key, spent, spentByCat, budgetByCat, budget, aPrevoir };
+  return { rev, key, spent, spentByCat, budgetByCat, budget, aPrevoir, outTotal };
 }
 // compact=true (dashboard) : n'affiche que les postes à surveiller. Sinon : tous les postes.
 function renderBudgetStatus(containerId, compact, monthKey) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  const { rev, spent, spentByCat, budgetByCat, budget, aPrevoir, key } = computeBudgetStatus(monthKey);
+  const { rev, spent, spentByCat, budgetByCat, budget, aPrevoir, key, outTotal } = computeBudgetStatus(monthKey);
   if (!rev) { el.innerHTML = '<div class="empty-sub">Renseigne ton revenu mensuel dans Gestion du budget pour activer le suivi du mois.</div>'; return; }
   const totalBudgetDep = budget.charges + budget.plaisir + (budget.imprevus || 0);
   const totalSpentDep = spent.charges + spent.plaisir + (spent.imprevus || 0);
-  // Reste à dépenser = REVENU TOTAL − ce qui est déjà dépensé. Le « à prévoir » n'est pas soustrait (pense-bête).
-  const reste = rev - totalSpentDep;
+  // Reste à dépenser = REVENU − TOUT ce qui est sorti du compte (dépenses + épargne + prêts). Le « à prévoir » n'est pas soustrait.
+  const reste = rev - outTotal;
   let rows = [...new Set([...Object.keys(budgetByCat), ...Object.keys(spentByCat).filter(c => ['charges', 'plaisir', 'imprevus'].includes(BUDGET_BLOCK[c]))])]
     .map(cat => {
       const bud = Math.round(budgetByCat[cat] || 0);
@@ -5861,7 +5863,7 @@ function renderBudgetStatus(containerId, compact, monthKey) {
     <div style="text-align:center;padding:12px;border-radius:12px;background:${reste >= 0 ? 'rgba(127,184,158,0.12)' : 'rgba(229,57,53,0.1)'};margin-bottom:14px">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Reste à dépenser · ${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}</div>
       <div style="font-size:26px;font-weight:900;color:${reste >= 0 ? 'var(--sage)' : '#E53935'};font-family:var(--fm)">${fmt(reste)}</div>
-      <div style="font-size:11px;color:var(--muted)">${fmt(rev)} de revenu − ${fmt(totalSpentDep)} déjà dépensés</div>
+      <div style="font-size:11px;color:var(--muted)">${fmt(rev)} de revenu − ${fmt(outTotal)} sortis du compte${spent.epargne > 0 ? ' (dépenses + épargne)' : ''}</div>
       ${aPrevoir > 0 ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">📌 Pense-bête : ${fmt(aPrevoir)} de dépenses à prévoir (non déduites)</div>` : ''}
     </div>
     ${dailyHtml}
