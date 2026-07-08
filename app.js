@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v111'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v112'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -6213,7 +6213,7 @@ function renderBudget() {
                 const sAmt = Math.round(rev * (sc.pct || 0) / 100);
                 const nItems = Array.isArray(sc.items) ? sc.items.length : 0;
                 return `<div style="display:grid;grid-template-columns:minmax(0,1fr) 52px auto 62px auto 20px 22px;gap:5px;align-items:center;margin-bottom:6px${sc.done ? ';opacity:.5' : ''}">
-                  <input class="inp" list="subdl-${blocKey}-${i}" value="${esc(sc.name || '')}" onchange="renameSubcatBudget('${blocKey}',${i},${j},this.value)" placeholder="Ex: Hygiène & entretien…" style="padding:5px 8px;font-size:12px;min-width:0">
+                  <input class="inp" list="subdl-${blocKey}-${i}" value="${esc(sc.name || '')}" onchange="renameSubcatBudget('${blocKey}',${i},${j},this.value)" placeholder="Ex: ${esc((SUBCATS[it.cat] || []).slice(0, 3).join(', ') || 'un poste')}…" style="padding:5px 8px;font-size:12px;min-width:0">
                   <input type="number" min="0" step="0.5" value="${sc.pct || 0}" class="bud-sub-inp" onchange="updateSubcatBudget('${blocKey}',${i},${j},this.value)" style="padding:5px 6px">
                   <span style="font-size:11px;color:var(--muted)">%</span>
                   <div style="display:flex;align-items:center;gap:2px">
