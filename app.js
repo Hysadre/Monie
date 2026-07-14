@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v116'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v117'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -6055,9 +6055,10 @@ function renderSalaryCTA() {
   const label = `${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
   if (rev <= 0 || _monthHasSalary(key)) { el.innerHTML = ''; return; }
   el.innerHTML = `<div class="card" style="border:1px solid var(--gold);background:rgba(232,163,23,0.08);margin-bottom:16px">
-    <div style="font-weight:800;margin-bottom:4px">💰 Ton salaire de ${label} n'est pas encore enregistré</div>
-    <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:10px">Le <b>${fmt(rev)}</b> de ton budget n'est qu'une <b>prévision</b>. Pour que ton dashboard, ton « reste à dépenser » et tes analyses soient justes, enregistre ton salaire comme une vraie entrée. 🌸</div>
-    <button class="btn-primary" onclick="addSalaryForMonth()" style="padding:10px 16px;font-size:14px">➕ Enregistrer mon salaire de ${label} (${fmt(rev)})</button>
+    <div style="font-weight:800;margin-bottom:4px">💰 Ton salaire reçu en ${label} n'est pas encore enregistré</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:8px">Le <b>${fmt(rev)}</b> de ton budget n'est qu'une <b>prévision</b>. Enregistre le salaire <b>réellement reçu ce mois</b> pour que ton « reste à dépenser » et tes analyses soient justes. 🌸</div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:10px">📅 On le date au mois où <b>l'argent arrive sur ton compte</b>, pas au mois du bulletin. Ex : bulletin de juin payé en juillet → à saisir en <b>juillet</b>.</div>
+    <button class="btn-primary" onclick="addSalaryForMonth()" style="padding:10px 16px;font-size:14px">➕ Enregistrer le salaire reçu en ${label} (${fmt(rev)})</button>
   </div>`;
 }
 async function addSalaryForMonth() {
