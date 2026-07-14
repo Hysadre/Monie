@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v115'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v116'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -6043,6 +6043,47 @@ function normalizeBudgetPct(changed) {
   saveBudgetPrep();
 }
 
+// ── 💰 Salaire du mois : détecte s'il manque comme transaction, propose de le saisir en 1 tap ──
+function _monthHasSalary(key) {
+  return transactions.some(t => t.type === 'entree' && (t.date_op || '').startsWith(key) &&
+    (t.category === 'Salaire' || /salaire|\bpaie\b|\bpaye\b/i.test(t.label || '')));
+}
+function renderSalaryCTA() {
+  const el = $('bud-salary-cta'); if (!el) return;
+  const key = budgetKey();
+  const rev = Number(budgetData.revenu_mensuel || 0);
+  const label = `${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
+  if (rev <= 0 || _monthHasSalary(key)) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="card" style="border:1px solid var(--gold);background:rgba(232,163,23,0.08);margin-bottom:16px">
+    <div style="font-weight:800;margin-bottom:4px">💰 Ton salaire de ${label} n'est pas encore enregistré</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:10px">Le <b>${fmt(rev)}</b> de ton budget n'est qu'une <b>prévision</b>. Pour que ton dashboard, ton « reste à dépenser » et tes analyses soient justes, enregistre ton salaire comme une vraie entrée. 🌸</div>
+    <button class="btn-primary" onclick="addSalaryForMonth()" style="padding:10px 16px;font-size:14px">➕ Enregistrer mon salaire de ${label} (${fmt(rev)})</button>
+  </div>`;
+}
+async function addSalaryForMonth() {
+  const key = budgetKey();
+  const label = `${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
+  const rev = Number(budgetData.revenu_mensuel || 0);
+  const raw = prompt(`Montant du salaire réellement reçu en ${label} ? (tu peux ajuster)`, String(rev || ''));
+  if (raw === null) return;
+  const amount = parseFloat(String(raw).replace(',', '.')) || 0;
+  if (amount <= 0) { toast('Montant invalide', 'error'); return; }
+  const newTx = {
+    user_id: currentUser.id, date_op: `${key}-02`, label: `Salaire ${label}`,
+    amount: amount, type: 'entree', category: 'Salaire', sub_category: 'Salaire', sub_sub_category: null,
+    source: 'manual', merchant_key: merchantKey('Salaire'), payment_method: 'virement', bank_source: null
+  };
+  const { data, error } = await sb.from('transactions').insert(_sanitizeTx(newTx)).select().single();
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  transactions.unshift(data);
+  toast(`✓ Salaire de ${label} enregistré (${fmt(amount)})`, 'success');
+  renderSalaryCTA();
+  renderBudgetStatus('budget-alert-page', false, key);
+  if (typeof renderRealBlocks === 'function') renderRealBlocks();
+  if (typeof renderDashboard === 'function') renderDashboard();
+  if (typeof renderTransactionsList === 'function') renderTransactionsList();
+}
+
 // 💵 Saisie de l'enveloppe espèces prévue → stockée dans le jsonb sub_budget._especes (pas de colonne SQL)
 function onEspecesInput() {
   const v = parseFloat(String($('bud-especes').value).replace(',', '.')) || 0;
@@ -6175,6 +6216,7 @@ function renderBudget() {
   `;
 
   renderRealBlocks();
+  renderSalaryCTA();
 
   // ─── BLOCAGE si total ≠ 100% ──────────────
   if (total !== 100) {
