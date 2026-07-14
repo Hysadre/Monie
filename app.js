@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v114'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v115'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -7009,16 +7009,20 @@ async function deleteDette(id) {
   });
 }
 // Petit graphique en cercle (donut) : part payée vs restante
-function _donutSVG(done, total, size = 60, color = 'var(--gold)') {
+// centerLabel : texte au centre (ex. "1/4" échéances). Si absent → pourcentage.
+function _donutSVG(done, total, size = 60, color = 'var(--gold)', centerLabel = null) {
   const r = size / 2 - 5, c = 2 * Math.PI * r;
   const pct = total > 0 ? Math.min(1, done / total) : 0;
   const off = c * (1 - pct);
   const cx = size / 2;
+  const txt = centerLabel != null ? String(centerLabel) : `${Math.round(pct * 100)}%`;
+  // Police plus petite pour "1/4" (2-3 caractères) que pour un % court
+  const fs = Math.round(size * (centerLabel != null ? 0.24 : 0.26));
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink:0">
     <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="var(--border-soft)" stroke-width="6"/>
     <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round"
       stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 ${cx} ${cx})"/>
-    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" font-size="${Math.round(size * 0.26)}" font-weight="800" fill="var(--ink)" font-family="var(--fm)">${Math.round(pct * 100)}%</text>
+    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-weight="800" fill="var(--ink)" font-family="var(--fm)">${txt}</text>
   </svg>`;
 }
 function renderDettes() {
@@ -7052,11 +7056,16 @@ function renderDettes() {
     const total = Number(d.montant_total) || 0;
     const paid = Number(d.deja_paye || 0);
     const reste = Math.max(0, total - paid);
-    const nbRest = d.mensualite > 0 ? Math.ceil(reste / d.mensualite) : null;
+    const mens = Number(d.mensualite) || 0;
+    // Nombre d'échéances : total ÷ mensualité (marche pour 3×, 4×, 10×…). Arrondi robuste pour éviter les 137/34 → 4,03.
+    const nbTotal = mens > 0 ? Math.max(1, Math.round(total / mens)) : null;
+    const nbPaid = mens > 0 ? Math.min(nbTotal, Math.round(paid / mens)) : null;
+    const nbRest = nbTotal != null ? Math.max(0, nbTotal - nbPaid) : null;
+    const centerLabel = nbTotal != null ? `${nbPaid}/${nbTotal}` : null; // ex. "1/4" affiché dans la pastille
     return `<div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border-soft)">
-      ${_donutSVG(paid, total, 58, reste === 0 ? 'var(--sage)' : 'var(--gold)')}
+      ${_donutSVG(paid, total, 58, reste === 0 ? 'var(--sage)' : 'var(--gold)', centerLabel)}
       <div style="flex:1;min-width:0">
-        <div style="font-weight:700;margin-bottom:2px">${esc(d.nom)} ${reste === 0 ? '<span style="font-size:11px;color:var(--sage)">soldé 🎉</span>' : (nbRest != null ? `<span style="font-size:11px;color:var(--muted)">· ${nbRest} × ${fmt(d.mensualite)}</span>` : '')}</div>
+        <div style="font-weight:700;margin-bottom:2px">${esc(d.nom)} ${reste === 0 ? '<span style="font-size:11px;color:var(--sage)">soldé 🎉</span>' : (nbRest != null ? `<span style="font-size:11px;color:var(--muted)">· ${nbRest} échéance${nbRest > 1 ? 's' : ''} restante${nbRest > 1 ? 's' : ''} de ${fmt(mens)}</span>` : '')}</div>
         <div style="font-size:12px;color:var(--muted)">Payé <b style="color:var(--sage)">${fmt(Math.round(paid))}</b> · Reste <b style="color:var(--tender-rose)">${fmt(Math.round(reste))}</b> · Total ${fmt(Math.round(total))}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
           ${reste > 0 && d.mensualite > 0 ? `<button class="goal-btn" onclick="payDette('${d.id}')">+ payer ${fmt(d.mensualite)}</button>` : ''}
