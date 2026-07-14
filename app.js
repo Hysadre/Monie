@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v113'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v114'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -2086,7 +2086,7 @@ function renderRealBlocks() {
   const el = $('bud-real-blocks');
   if (!el) return;
   const key = budgetKey();
-  const { spent, budget } = computeBudgetStatus(key);
+  const { spent, budget, especesPrevu, especesSpent } = computeBudgetStatus(key);
   const blocks = [
     { k: 'charges', emoji: '🏠', label: 'Charges & Nécessités', bg: 'var(--tender-rose-soft)', real: spent.charges, bud: budget.charges, isEp: false },
     { k: 'plaisir', emoji: '🌸', label: 'Plaisir & Envies', bg: 'var(--peach-soft)', real: spent.plaisir, bud: budget.plaisir, isEp: false },
@@ -2113,6 +2113,28 @@ function renderRealBlocks() {
       <div style="font-size:11px;color:var(--muted);margin-top:3px">${b.real === 0 ? 'Rien ' + verb + ' pour l\'instant' : cmp}</div>
     </div>`;
   }).join('');
+  // 💵 Poche espèces (liquide) — suivi à part, n'affecte pas le budget du compte
+  if (especesPrevu > 0 || especesSpent > 0) {
+    const resteC = especesPrevu - especesSpent;
+    const overC = especesPrevu > 0 && especesSpent > especesPrevu;
+    const pctC = especesPrevu > 0 ? Math.round(especesSpent / especesPrevu * 100) : (especesSpent > 0 ? 100 : 0);
+    const wC = Math.min(100, pctC);
+    const colC = overC ? '#E53935' : 'var(--sage)';
+    const noteC = especesPrevu > 0
+      ? (overC ? `⚠️ dépassé de ${fmt(especesSpent - especesPrevu)} de liquide` : `reste ${fmt(resteC)} en liquide`)
+      : `${fmt(especesSpent)} dépensés en liquide (aucune enveloppe prévue)`;
+    el.innerHTML += `<div style="padding:12px 14px;border-radius:12px;background:rgba(127,184,158,0.10);margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-weight:800;font-size:14px">💵 Poche espèces</span>
+        <span style="font-family:var(--fm);font-weight:800;color:${colC}">${fmt(especesSpent)} / ${fmt(especesPrevu)}</span>
+      </div>
+      <div style="height:7px;background:rgba(0,0,0,0.07);border-radius:100px;overflow:hidden">
+        <div style="height:100%;width:${wC}%;background:${colC};border-radius:100px"></div>
+      </div>
+      <div style="font-size:11px;color:${overC ? '#E53935' : 'var(--muted)'};margin-top:3px">${noteC}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">Suivi à part — ça ne touche pas ton reste à dépenser du compte.</div>
+    </div>`;
+  }
 }
 
 // Détail d'un poste : liste des catégories (charges/plaisir) ou des opérations d'épargne
@@ -5739,11 +5761,13 @@ function computeBudgetStatus(monthKey) {
   const spent = { charges: 0, plaisir: 0, epargne: 0, imprevus: 0 };
   const spentByCat = {};
   let outTotal = 0;   // TOUT ce qui sort du compte ce mois (dépenses + épargne + prêts), hors virements internes
+  let especesSpent = 0; // 💵 poche espèces : dépenses réglées en liquide ce mois (suivi à part)
   transactions.forEach(t => {
     if (!t.date_op.startsWith(key)) return;
     const a = Math.abs(Number(t.amount));
     if (t.type === 'epargne') { spent.epargne += a; outTotal += a; return; } // l'épargne = un type à part (mais elle SORT du compte)
     if (t.type !== 'sortie') return;
+    if (t.payment_method === 'especes') especesSpent += a; // 💵 réglé en liquide → alimente la poche espèces
     if (t.category !== 'Transactions') outTotal += a; // total sorti (prêts inclus) ; exclut les virements internes (doublons)
     if (isLoan(t)) return;                          // MAIS un prêt ne compte PAS dans le budget par catégorie (il revient)
     const bc = txBudgetCat(t);                     // Alimentation se scinde en Alimentation / Restos & sorties
@@ -5770,7 +5794,8 @@ function computeBudgetStatus(monthKey) {
   };
   // Dépenses "à prévoir" du mois (loyer, factures que tu sais devoir payer) → à retirer du disponible
   const aPrevoir = (b.events || []).reduce((s, e) => s + Number(e.amount || 0), 0);
-  return { rev, key, spent, spentByCat, budgetByCat, budget, aPrevoir, outTotal };
+  const especesPrevu = Number((b.sub_budget && b.sub_budget._especes) || 0); // 💵 enveloppe liquide prévue ce mois
+  return { rev, key, spent, spentByCat, budgetByCat, budget, aPrevoir, outTotal, especesPrevu, especesSpent };
 }
 // compact=true (dashboard) : n'affiche que les postes à surveiller. Sinon : tous les postes.
 function renderBudgetStatus(containerId, compact, monthKey) {
@@ -6018,6 +6043,15 @@ function normalizeBudgetPct(changed) {
   saveBudgetPrep();
 }
 
+// 💵 Saisie de l'enveloppe espèces prévue → stockée dans le jsonb sub_budget._especes (pas de colonne SQL)
+function onEspecesInput() {
+  const v = parseFloat(String($('bud-especes').value).replace(',', '.')) || 0;
+  _ensureSubBudget()._especes = v;
+  if (typeof renderRealBlocks === 'function') renderRealBlocks();
+  renderBudgetStatus('budget-alert-page', false, budgetKey());
+  saveBudgetPrep();
+}
+
 let budgetSaveTimer = null;
 // Lit les valeurs courantes des champs et enregistre en base
 function _doBudgetSave() {
@@ -6032,6 +6066,7 @@ function _doBudgetSave() {
   subB._pctCharges = budgetData.pct_charges;
   subB._pctPlaisir = budgetData.pct_plaisir;
   subB._pctEpargne = budgetData.pct_epargne;
+  if ($('bud-especes')) subB._especes = parseFloat(String($('bud-especes').value).replace(',', '.')) || 0; // 💵 enveloppe liquide
   const key = budgetKey();
   const payload = {
     user_id: currentUser.id, month: key + '-01',
@@ -6071,6 +6106,8 @@ const DEFAULT_SUB_PCT = {
 };
 function renderBudget() {
   if ($('bud-revenu').value === '' && budgetData.revenu_mensuel) $('bud-revenu').value = budgetData.revenu_mensuel;
+  if ($('bud-especes') && document.activeElement !== $('bud-especes'))
+    $('bud-especes').value = (budgetData.sub_budget && budgetData.sub_budget._especes) || ''; // 💵 poche espèces du mois
   if (budgetData.pct_charges) $('bud-pct-charges').value = budgetData.pct_charges;
   if (budgetData.pct_plaisir) $('bud-pct-plaisir').value = budgetData.pct_plaisir;
   if (budgetData.pct_epargne) $('bud-pct-epargne').value = budgetData.pct_epargne;
