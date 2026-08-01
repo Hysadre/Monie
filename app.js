@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v119'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v120'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5941,6 +5941,17 @@ function removeBudgetEvent(i) {
     renderBudgetEvents();
   });
 }
+// 🗑 Vider toutes les notes « à prévoir » du mois d'un coup
+function clearAllBudgetEvents() {
+  const list = budgetData.events || [];
+  if (!list.length) return;
+  confirmDelete(`Effacer TOUTES les notes à prévoir (${list.length}) ce mois ?`, () => {
+    budgetData.events = [];
+    saveBudgetPrepNow();
+    renderBudgetEvents();
+    toast('✓ Notes à prévoir effacées', 'success');
+  });
+}
 // Modifier une note « à prévoir » (libellé ou montant) directement
 function editBudgetEvent(i, field, val) {
   budgetData.events = budgetData.events || [];
@@ -5960,7 +5971,10 @@ function renderBudgetEvents() {
     return;
   }
   const total = list.reduce((s, e) => s + Number(e.amount), 0);
-  el.innerHTML = list.map((e, i) => `
+  const header = list.length > 1 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:2px">
+      <button onclick="clearAllBudgetEvents()" style="background:none;border:none;color:var(--tender-rose);cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px" title="Tout effacer">🗑 Tout effacer (${list.length})</button>
+    </div>` : '';
+  el.innerHTML = header + list.map((e, i) => `
     <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border-soft)">
       <input class="inp" value="${esc(e.label)}" onchange="editBudgetEvent(${i},'label',this.value)" title="Modifier la note" style="flex:1;font-size:14px;padding:6px 8px">
       <input class="inp" type="number" step="0.01" min="0" value="${e.amount}" onchange="editBudgetEvent(${i},'amount',this.value)" title="Modifier le montant" style="width:88px;text-align:right;font-family:var(--fm);font-weight:700;padding:6px 8px">
@@ -5996,6 +6010,8 @@ function detectRecurring() {
   });
   return rec.sort((a, b) => b.avg - a.avg).slice(0, 15);
 }
+let _recurringOpen = false; // liste récurrents repliée par défaut (trop longue sinon)
+function toggleRecurring() { _recurringOpen = !_recurringOpen; renderRecurring(); }
 function renderRecurring() {
   const card = $('recurring-card'); const list = $('recurring-list');
   if (!card || !list) return;
@@ -6004,7 +6020,13 @@ function renderRecurring() {
   card.style.display = '';
   const existing = new Set((budgetData.events || []).map(e => (e.label || '').toLowerCase()));
   const totalMonthly = _recurringCache.reduce((s, r) => s + r.avg, 0);
-  list.innerHTML = _recurringCache.map((r, i) => {
+  const n = _recurringCache.length;
+  const toggleHeader = `<div onclick="toggleRecurring()" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:6px 0" title="Afficher / masquer la liste">
+      <span style="font-size:13px;font-weight:700">${n} dépense${n > 1 ? 's' : ''} récurrente${n > 1 ? 's' : ''} · ~${fmt(totalMonthly)}/mois</span>
+      <span style="font-size:12px;color:var(--muted)">${_recurringOpen ? 'masquer ▾' : 'afficher ▸'}</span>
+    </div>`;
+  if (!_recurringOpen) { list.innerHTML = toggleHeader; return; }
+  list.innerHTML = toggleHeader + _recurringCache.map((r, i) => {
     const already = existing.has(r.label.toLowerCase());
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft)">
       <div class="day-tx-icon" style="background:${catColor(r.category)}18;color:${catColor(r.category)};width:34px;height:34px;flex-shrink:0">${catIcon(r.category)}</div>
@@ -6256,16 +6278,16 @@ function renderBudget() {
     const blocAmt = Math.round(rev * blocPct / 100);
     const totalBlocPct = items.reduce((s, it) => s + Number(it.pct || 0), 0);
     const totalBlocAmt = Math.round(rev * totalBlocPct / 100);
-    const blocOK = totalBlocPct === blocPct;
+    const blocOK = Math.abs(totalBlocPct - blocPct) < 0.1;
     return `
       <div class="bud-sub-bloc" style="border-left:4px solid ${blocColor};padding-left:14px;margin-bottom:20px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <div style="font-weight:800;color:${blocColor};font-size:14px">${blocLabel} — cible ${blocPct}% (${fmt(blocAmt)})</div>
           <div style="font-size:12px;font-weight:700;color:${blocOK ? 'var(--sage)' : '#E53935'}">
-            Alloué : ${totalBlocPct}% ${blocOK ? '✓' : '⚠'}
+            Alloué : ${_pctD(totalBlocPct)}% ${blocOK ? '✓' : '⚠'}
           </div>
         </div>
-        ${!blocOK ? `<div style="font-size:11px;color:#B7791F;background:rgba(232,184,77,0.16);padding:7px 10px;border-radius:8px;margin-bottom:10px;line-height:1.5">⚠ Ta répartition détaillée fait <b>${totalBlocPct}%</b> (${fmt(totalBlocAmt)}) alors que ta cible ${blocLabel.replace(/^[^ ]+ /, '').toLowerCase()} est <b>${blocPct}%</b> (${fmt(blocAmt)}). Ajuste les % ci-dessous pour retomber sur ${blocPct}%, ou modifie ta cible en haut de page.</div>` : ''}
+        ${!blocOK ? `<div style="font-size:11px;color:#B7791F;background:rgba(232,184,77,0.16);padding:7px 10px;border-radius:8px;margin-bottom:10px;line-height:1.5">⚠ Ta répartition détaillée fait <b>${_pctD(totalBlocPct)}%</b> (${fmt(totalBlocAmt)}) alors que ta cible ${blocLabel.replace(/^[^ ]+ /, '').toLowerCase()} est <b>${blocPct}%</b> (${fmt(blocAmt)}). Ajuste les % ci-dessous pour retomber sur ${blocPct}%, ou modifie ta cible en haut de page.</div>` : ''}
         ${items.map((it, i) => {
           const amt = Math.round(rev * it.pct / 100);
           const _done = catStat(it.cat).done;
@@ -6281,7 +6303,7 @@ function renderBudget() {
                 <span style="width:8px;height:8px;border-radius:50%;background:${catColor(it.cat)};display:inline-block"></span>
                 ${catIcon(it.cat)} ${esc(it.cat)} <span style="color:var(--muted);font-size:10px">${open ? '▾' : '▸'}</span>${subs.length ? ` <span style="font-size:10px;color:${subColor}">(${subs.length})</span>` : ''}${it.esp > 0 ? ` <span style="font-size:10px;color:var(--sage);font-weight:700">💵${it.esp}€</span>` : ''}${it.note ? ` <span style="color:var(--muted);font-size:11px">${esc(it.note)}</span>` : ''}
               </div>
-              <input type="number" step="0.5" min="0" max="100" class="bud-sub-inp" value="${it.pct}"
+              <input type="number" step="0.5" min="0" max="100" class="bud-sub-inp" value="${_pctD(it.pct)}"
                      onchange="updateSubBudget('${blocKey}',${i},this.value)">
               <span style="font-size:11px;color:var(--muted)">%</span>
               <div class="bud-sub-amt" style="display:flex;align-items:center;gap:4px;justify-content:flex-end">
@@ -6299,14 +6321,14 @@ function renderBudget() {
                 <input type="number" min="0" step="1" value="${it.esp || 0}" onchange="updateCatEspeces('${blocKey}',${i},this.value)" style="width:62px;padding:5px 7px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
                 <span style="font-size:11px;color:var(--muted)">€ &nbsp;·&nbsp; 💳 carte : <b style="font-family:var(--fm)">${fmt(Math.max(0, amt - (it.esp || 0)))}</b></span>
               </div>
-              <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Postes de « ${esc(it.cat)} » — la somme doit tenir dans <b>${it.pct}%</b> (${fmt(amt)})</div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Postes de « ${esc(it.cat)} » — la somme doit tenir dans <b>${_pctD(it.pct)}%</b> (${fmt(amt)})</div>
               <datalist id="subdl-${blocKey}-${i}">${subcatDatalist(it.cat)}</datalist>
               ${subs.map((sc, j) => {
                 const sAmt = Math.round(rev * (sc.pct || 0) / 100);
                 const nItems = Array.isArray(sc.items) ? sc.items.length : 0;
                 return `<div style="display:grid;grid-template-columns:minmax(0,1fr) 52px auto 62px auto 20px 22px;gap:5px;align-items:center;margin-bottom:6px${sc.done ? ';opacity:.5' : ''}">
                   <input class="inp" list="subdl-${blocKey}-${i}" value="${esc(sc.name || '')}" onchange="renameSubcatBudget('${blocKey}',${i},${j},this.value)" placeholder="Ex: ${esc((SUBCATS[it.cat] || []).slice(0, 3).join(', ') || 'un poste')}…" style="padding:5px 8px;font-size:12px;min-width:0">
-                  <input type="number" min="0" step="0.5" value="${sc.pct || 0}" class="bud-sub-inp" onchange="updateSubcatBudget('${blocKey}',${i},${j},this.value)" style="padding:5px 6px">
+                  <input type="number" min="0" step="0.5" value="${_pctD(sc.pct)}" class="bud-sub-inp" onchange="updateSubcatBudget('${blocKey}',${i},${j},this.value)" style="padding:5px 6px">
                   <span style="font-size:11px;color:var(--muted)">%</span>
                   <div style="display:flex;align-items:center;gap:2px">
                     <input type="number" min="0" step="1" value="${sAmt}" title="Montant en € — le % se calcule tout seul" onchange="updateSubcatBudgetAmount('${blocKey}',${i},${j},this.value)" style="width:44px;padding:5px 5px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
@@ -6320,13 +6342,13 @@ function renderBudget() {
               <button class="btn-ghost" style="padding:4px 10px;font-size:12px;margin-top:2px" onclick="addSubcatBudget('${blocKey}',${i})">+ Ajouter un poste</button>
               <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;font-weight:700;border-top:1px solid var(--border-soft);padding-top:6px">
                 <span>Total postes</span>
-                <span style="color:${subColor}">${subTotalPct}% / ${it.pct}%${subOver ? ' ⚠ dépasse !' : (subs.length && Math.abs(subTotalPct - Number(it.pct)) < 0.01 ? ' ✓' : '')}</span>
+                <span style="color:${subColor}">${_pctD(subTotalPct)}% / ${_pctD(it.pct)}%${subOver ? ' ⚠ dépasse !' : (subs.length && Math.abs(subTotalPct - Number(it.pct)) < 0.01 ? ' ✓' : '')}</span>
               </div>
             </div>`;
         }).join('')}
         <div class="bud-sub-total">
           <span>Total ${blocLabel}</span>
-          <b style="color:${blocOK ? 'var(--sage)' : '#E53935'}">${totalBlocPct}%</b>
+          <b style="color:${blocOK ? 'var(--sage)' : '#E53935'}">${_pctD(totalBlocPct)}%</b>
           <b>${fmt(totalBlocAmt)}</b>
         </div>
       </div>`;
@@ -6350,7 +6372,7 @@ function renderBudget() {
     ${renderBloc('epargne', '🌱 Épargne', e, '#7FB89E')}
     <div class="bud-grand-total">
       <span>TOTAL GÉNÉRAL</span>
-      <span style="color:${grandTotalPct === 100 ? 'var(--sage)' : '#E53935'};font-weight:900">${grandTotalPct}%</span>
+      <span style="color:${Math.abs(grandTotalPct - 100) < 0.1 ? 'var(--sage)' : '#E53935'};font-weight:900">${_pctD(grandTotalPct)}%</span>
       <span style="font-weight:900">${fmt(grandTotalAmt)}</span>
     </div>
     <button class="btn-primary" onmousedown="event.preventDefault()" onclick="saveSubBudgetManual()" style="width:100%;margin-top:16px;padding:12px;font-size:15px">💾 Sauvegarder ma répartition</button>`;
@@ -6363,6 +6385,8 @@ function saveSubBudgetManual() {
   saveBudgetPrepNow();
   toast('✓ Répartition enregistrée', 'success');
 }
+// Affichage propre d'un % (1 décimale, sans .0 inutile) — la valeur stockée reste précise
+function _pctD(x) { const v = Math.round((Number(x) || 0) * 10) / 10; return v; }
 function updateSubBudget(blocKey, index, newPct) {
   try {
     let subBudget = budgetData.sub_budget;
@@ -6416,9 +6440,11 @@ function updateSubcatBudget(blocKey, i, j, pct) {
 function updateSubcatBudgetAmount(blocKey, i, j, amount) {
   const rev = budgetData.revenu_mensuel || 0;
   if (!rev) { toast('Renseigne d\'abord ton revenu mensuel', 'error'); renderBudget(); return; }
-  const amt = Math.max(0, parseFloat(amount) || 0);
-  const pct = Math.round(amt / rev * 1000) / 10;
-  updateSubcatBudget(blocKey, i, j, pct);
+  const it = _budItem(blocKey, i); if (!it || !it.subs || !it.subs[j]) return;
+  const amt = Math.max(0, parseFloat(String(amount).replace(',', '.')) || 0);
+  it.subs[j].pct = amt / rev * 100; // % PRÉCIS → montant € exact
+  _openSubDetails.add(`${blocKey}-${i}`);
+  saveBudgetPrep(); renderBudget();
 }
 function renameSubcatBudget(blocKey, i, j, name) {
   const it = _budItem(blocKey, i); if (!it || !it.subs || !it.subs[j]) return;
@@ -6530,9 +6556,13 @@ function toggleSubBudgetDone(blocKey, index) {
 function updateSubBudgetAmount(blocKey, index, newAmount) {
   const rev = budgetData.revenu_mensuel || 0;
   if (!rev) { toast('Renseigne d\'abord ton revenu mensuel', 'error'); renderBudget(); return; }
-  const amt = Math.max(0, parseFloat(newAmount) || 0);
-  const pct = Math.round(amt / rev * 1000) / 10; // % avec 1 décimale
-  updateSubBudget(blocKey, index, pct);
+  const amt = Math.max(0, parseFloat(String(newAmount).replace(',', '.')) || 0);
+  let subBudget = budgetData.sub_budget || JSON.parse(JSON.stringify(DEFAULT_SUB_PCT));
+  if (subBudget[blocKey] && subBudget[blocKey][index]) {
+    subBudget[blocKey][index].pct = amt / rev * 100; // % PRÉCIS (non arrondi) → le montant € retapé reste EXACT
+    budgetData.sub_budget = subBudget;
+    saveBudgetPrep(); renderBudget();
+  }
 }
 
 // ═══ INVESTISSEMENTS ═══════════════════════════════════════════
