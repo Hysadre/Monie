@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v135'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v136'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5116,7 +5116,7 @@ function renderEpargne() {
         <div class="empty-sub">${_epargneTab === 'portefeuille' ? 'Crée une enveloppe (vacances, cadeau…) via <b>+ Nouvel objectif</b> puis choisis le type <b>👛 Portefeuille</b>' : 'Clique <b>+ Nouvel objectif</b> pour commencer à épargner intentionnellement'}</div>
       </div>`;
   } else {
-    activeList.innerHTML = tabBar + shown.map(renderGoalCard).join('');
+    activeList.innerHTML = tabBar + shown.map(g => renderGoalCard(g)).join(''); // ⚠️ surtout PAS .map(renderGoalCard) : map passe (g,index,array) → index/array pris pour isAchieved/isAbandoned
   }
 
   // Objectifs atteints
@@ -5534,27 +5534,14 @@ async function postponeGoal(id) {
 }
 
 async function reactivateGoal(id) {
-  const before = goalsList.find(x => x.id === id);
   const r = await dbGuard(sb.from('epargne_objectifs').update({ statut: 'en_cours' }).eq('id', id).select(), 'Réactivation impossible');
-  if (!r.ok) { alert('DIAG: la requête a échoué (r.ok=false).'); return; }
-  const updated = (r.data && r.data[0]) || null;
-  // Rechargement complet pour comparer ce que la base renvoie réellement
-  await loadGoals();
-  const after = goalsList.find(x => x.id === id);
-  const counts = {
-    en_cours: goalsList.filter(x => x.statut === 'en_cours').length,
-    atteint: goalsList.filter(x => x.statut === 'atteint').length,
-    abandonne: goalsList.filter(x => x.statut === 'abandonne').length
-  };
-  alert('🔍 DIAG réactivation\n\n' +
-    '• id ciblé : ' + id + '\n' +
-    '• statut AVANT : ' + (before ? before.statut : 'introuvable') + '\n' +
-    '• statut renvoyé par l\'UPDATE : ' + (updated ? updated.statut : 'aucune ligne renvoyée') + '\n' +
-    '• statut APRÈS rechargement : ' + (after ? after.statut : 'introuvable') + '\n' +
-    '• nb doublons même id : ' + goalsList.filter(x => x.id === id).length + '\n' +
-    '• totaux : ' + JSON.stringify(counts));
-  _epargneTab = after ? _goalType(id) : _epargneTab;
+  if (!r.ok) return;
+  if (!r.data || !r.data.length) { toast('Objectif introuvable (déjà supprimé ?)', 'error'); return; }
+  const idx = goalsList.findIndex(x => x.id === id);
+  if (idx >= 0) goalsList[idx] = { ...goalsList[idx], ...r.data[0] };
+  _epargneTab = _goalType(id);
   renderEpargne();
+  toast('✓ Objectif réactivé 🌱 — de retour dans « en cours »', 'success');
 }
 
 // 📈 Popup : évolution mois par mois de l'épargne d'un objectif (cumul + mois sans épargne)
