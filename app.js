@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v125'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v126'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -7288,6 +7288,8 @@ let _detteSelMonth = null;   // mois sélectionné dans l'échéancier (YYYY-MM)
 let _detteOpen = new Set();  // ids des lignes dépliées
 let _detteSelectMode = false; // mode sélection multiple pour suppression
 let _detteChecked = new Set(); // ids cochés en mode sélection
+let _detteProvFilter = '';     // filtre par fournisseur ('' = tous)
+function setDetteProvFilter(p) { _detteProvFilter = (_detteProvFilter === p) ? '' : p; _detteSelMonth = null; renderDettes(); }
 // Date de 1ère échéance : stockée EN LOCAL (localStorage) → aucune donnée touchée côté Supabase
 function _detteStart(id) { try { return localStorage.getItem('monie_dsched_' + id) || null; } catch (e) { return null; } }
 function _setDetteStart(id, iso) { try { if (iso) localStorage.setItem('monie_dsched_' + id, iso); else localStorage.removeItem('monie_dsched_' + id); } catch (e) {} }
@@ -7355,8 +7357,11 @@ function renderDettes() {
     return;
   }
 
-  const active = dettesList.filter(d => _detteCounts(d).reste > 0);
-  const soldes = dettesList.filter(d => _detteCounts(d).reste <= 0);
+  const provsUsed = [...new Set(dettesList.map(d => _detteProv(d.id)).filter(Boolean))];
+  if (_detteProvFilter && !provsUsed.includes(_detteProvFilter)) _detteProvFilter = ''; // filtre devenu vide → reset
+  const provFilter = d => !_detteProvFilter || _detteProv(d.id) === _detteProvFilter;
+  const active = dettesList.filter(d => _detteCounts(d).reste > 0 && provFilter(d));
+  const soldes = dettesList.filter(d => _detteCounts(d).reste <= 0 && provFilter(d));
   const MS = (typeof MONTHS_SHORT !== 'undefined') ? MONTHS_SHORT : MONTHS;
   const mLabel = mk => `${MS[parseInt(mk.slice(5, 7)) - 1]} ${mk.slice(0, 4)}`;
   const nowKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
@@ -7472,7 +7477,13 @@ function renderDettes() {
     </div>`;
   }).join('') : `<div class="empty-sub" style="padding:14px 0;text-align:center">${_detteTab === 'soldes' ? 'Aucun paiement soldé.' : (q ? 'Aucun paiement trouvé.' : 'Aucun paiement en cours 🎉')}</div>`;
 
-  el.innerHTML = autoBanner + summary + echeancierHtml + payerHtml + searchHtml + tabsHtml + toolbarHtml + rowsHtml;
+  // Filtre par fournisseur (Tous / PayPal / Klarna…) — s'applique à tout (échéancier + à payer + liste)
+  const provFilterHtml = provsUsed.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+    <span style="font-size:11px;color:var(--muted)">Fournisseur :</span>
+    <span onclick="setDetteProvFilter('')" style="cursor:pointer;font-size:11px;font-weight:700;padding:3px 11px;border-radius:100px;${!_detteProvFilter ? 'background:var(--plum);color:#fff' : 'border:1px solid var(--border-soft);color:var(--muted)'}">Tous</span>
+    ${provsUsed.map(p => { const dark = (p === 'Klarna' || p === 'Scalapay' || p === 'Oney'); const on = _detteProvFilter === p; return `<span onclick="setDetteProvFilter('${p}')" style="cursor:pointer;font-size:11px;font-weight:800;padding:3px 11px;border-radius:100px;${on ? `background:${_PROV_COLOR[p]};color:${dark ? '#222' : '#fff'}` : `border:1px solid ${_PROV_COLOR[p]};color:${_PROV_COLOR[p]}`}">${p}</span>`; }).join('')}
+  </div>` : '';
+  el.innerHTML = autoBanner + summary + provFilterHtml + echeancierHtml + payerHtml + searchHtml + tabsHtml + toolbarHtml + rowsHtml;
 }
 function toggleDetteSelectMode() { _detteSelectMode = !_detteSelectMode; _detteChecked.clear(); renderDettes(); }
 function toggleDetteCheck(id) { if (_detteChecked.has(id)) _detteChecked.delete(id); else _detteChecked.add(id); renderDettes(); }
