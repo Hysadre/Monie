@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v121'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v122'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -2086,7 +2086,7 @@ function renderRealBlocks() {
   const el = $('bud-real-blocks');
   if (!el) return;
   const key = budgetKey();
-  const { spent, budget, especesPrevu, especesSpent } = computeBudgetStatus(key);
+  const { spent, budget, especesPrevu, especesSpent, ticketPrevu, ticketSpent } = computeBudgetStatus(key);
   const blocks = [
     { k: 'charges', emoji: '🏠', label: 'Charges & Nécessités', bg: 'var(--tender-rose-soft)', real: spent.charges, bud: budget.charges, isEp: false },
     { k: 'plaisir', emoji: '🌸', label: 'Plaisir & Envies', bg: 'var(--peach-soft)', real: spent.plaisir, bud: budget.plaisir, isEp: false },
@@ -2132,6 +2132,28 @@ function renderRealBlocks() {
         <div style="height:100%;width:${wC}%;background:${colC};border-radius:100px"></div>
       </div>
       <div style="font-size:11px;color:${overC ? '#E53935' : 'var(--muted)'};margin-top:3px">${noteC}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">Suivi à part — ça ne touche pas ton reste à dépenser du compte.</div>
+    </div>`;
+  }
+  // 🎫 Poche titres resto — suivi à part (comme les espèces)
+  if (ticketPrevu > 0 || ticketSpent > 0) {
+    const resteT = ticketPrevu - ticketSpent;
+    const overT = ticketPrevu > 0 && ticketSpent > ticketPrevu;
+    const pctT = ticketPrevu > 0 ? Math.round(ticketSpent / ticketPrevu * 100) : (ticketSpent > 0 ? 100 : 0);
+    const wT = Math.min(100, pctT);
+    const colT = overT ? '#E53935' : '#E8A317';
+    const noteT = ticketPrevu > 0
+      ? (overT ? `⚠️ dépassé de ${fmt(ticketSpent - ticketPrevu)} de titres resto` : `reste ${fmt(resteT)} en titres resto`)
+      : `${fmt(ticketSpent)} dépensés en titres resto (aucune enveloppe prévue)`;
+    el.innerHTML += `<div style="padding:12px 14px;border-radius:12px;background:rgba(232,163,23,0.10);margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-weight:800;font-size:14px">🎫 Poche titres resto</span>
+        <span style="font-family:var(--fm);font-weight:800;color:${colT}">${fmt(ticketSpent)} / ${fmt(ticketPrevu)}</span>
+      </div>
+      <div style="height:7px;background:rgba(0,0,0,0.07);border-radius:100px;overflow:hidden">
+        <div style="height:100%;width:${wT}%;background:${colT};border-radius:100px"></div>
+      </div>
+      <div style="font-size:11px;color:${overT ? '#E53935' : 'var(--muted)'};margin-top:3px">${noteT}</div>
       <div style="font-size:10px;color:var(--muted);margin-top:2px">Suivi à part — ça ne touche pas ton reste à dépenser du compte.</div>
     </div>`;
   }
@@ -5812,12 +5834,14 @@ function computeBudgetStatus(monthKey) {
   const spentByCat = {};
   let outTotal = 0;   // TOUT ce qui sort du compte ce mois (dépenses + épargne + prêts), hors virements internes
   let especesSpent = 0; // 💵 poche espèces : dépenses réglées en liquide ce mois (suivi à part)
+  let ticketSpent = 0;  // 🎫 poche titres resto : dépenses réglées en titres restaurant ce mois
   transactions.forEach(t => {
     if (!t.date_op.startsWith(key)) return;
     const a = Math.abs(Number(t.amount));
     if (t.type === 'epargne') { spent.epargne += a; outTotal += a; return; } // l'épargne = un type à part (mais elle SORT du compte)
     if (t.type !== 'sortie') return;
     if (t.payment_method === 'especes') especesSpent += a; // 💵 réglé en liquide → alimente la poche espèces
+    if (t.payment_method === 'ticket_resto') ticketSpent += a; // 🎫 réglé en titres resto → poche titres resto
     if (t.category !== 'Transactions') outTotal += a; // total sorti (prêts inclus) ; exclut les virements internes (doublons)
     if (isLoan(t)) return;                          // MAIS un prêt ne compte PAS dans le budget par catégorie (il revient)
     const bc = txBudgetCat(t);                     // Alimentation se scinde en Alimentation / Restos & sorties
@@ -5846,11 +5870,13 @@ function computeBudgetStatus(monthKey) {
   const aPrevoir = (b.events || []).reduce((s, e) => s + Number(e.amount || 0), 0);
   // 💵 Enveloppe liquide prévue = somme des parts « espèces » réparties par poste (it.esp).
   // Repli sur l'ancien champ global _especes si aucun poste n'a de part espèces.
-  let _espPostes = 0;
+  let _espPostes = 0, _trPostes = 0;
   const _sbEsp = b.sub_budget;
-  if (_sbEsp) ['charges', 'plaisir', 'epargne'].forEach(bk => (_sbEsp[bk] || []).forEach(it => { _espPostes += Number(it.esp || 0); }));
+  if (_sbEsp) ['charges', 'plaisir', 'epargne'].forEach(bk => (_sbEsp[bk] || []).forEach(it => { _espPostes += Number(it.esp || 0); _trPostes += Number(it.tr || 0); }));
   const especesPrevu = _espPostes > 0 ? _espPostes : Number((_sbEsp && _sbEsp._especes) || 0);
-  return { rev, key, spent, spentByCat, budgetByCat, budget, aPrevoir, outTotal, especesPrevu, especesSpent };
+  // 🎫 Enveloppe titres resto prévue = somme des parts « titres resto » par poste (it.tr), sinon champ global _ticket
+  const ticketPrevu = _trPostes > 0 ? _trPostes : Number((_sbEsp && _sbEsp._ticket) || 0);
+  return { rev, key, spent, spentByCat, budgetByCat, budget, aPrevoir, outTotal, especesPrevu, especesSpent, ticketPrevu, ticketSpent };
 }
 // compact=true (dashboard) : n'affiche que les postes à surveiller. Sinon : tous les postes.
 function renderBudgetStatus(containerId, compact, monthKey) {
@@ -6170,6 +6196,14 @@ function onEspecesInput() {
   renderBudgetStatus('budget-alert-page', false, budgetKey());
   saveBudgetPrep();
 }
+// 🎫 Saisie de l'enveloppe titres resto prévue → jsonb sub_budget._ticket
+function onTicketInput() {
+  const v = parseFloat(String($('bud-ticket').value).replace(',', '.')) || 0;
+  _ensureSubBudget()._ticket = v;
+  if (typeof renderRealBlocks === 'function') renderRealBlocks();
+  renderBudgetStatus('budget-alert-page', false, budgetKey());
+  saveBudgetPrep();
+}
 
 let budgetSaveTimer = null;
 // Lit les valeurs courantes des champs et enregistre en base
@@ -6186,6 +6220,7 @@ function _doBudgetSave() {
   subB._pctPlaisir = budgetData.pct_plaisir;
   subB._pctEpargne = budgetData.pct_epargne;
   if ($('bud-especes')) subB._especes = parseFloat(String($('bud-especes').value).replace(',', '.')) || 0; // 💵 enveloppe liquide
+  if ($('bud-ticket')) subB._ticket = parseFloat(String($('bud-ticket').value).replace(',', '.')) || 0;   // 🎫 enveloppe titres resto
   const key = budgetKey();
   const payload = {
     user_id: currentUser.id, month: key + '-01',
@@ -6227,6 +6262,8 @@ function renderBudget() {
   if ($('bud-revenu').value === '' && budgetData.revenu_mensuel) $('bud-revenu').value = budgetData.revenu_mensuel;
   if ($('bud-especes') && document.activeElement !== $('bud-especes'))
     $('bud-especes').value = (budgetData.sub_budget && budgetData.sub_budget._especes) || ''; // 💵 poche espèces du mois
+  if ($('bud-ticket') && document.activeElement !== $('bud-ticket'))
+    $('bud-ticket').value = (budgetData.sub_budget && budgetData.sub_budget._ticket) || ''; // 🎫 poche titres resto du mois
   if (budgetData.pct_charges) $('bud-pct-charges').value = budgetData.pct_charges;
   if (budgetData.pct_plaisir) $('bud-pct-plaisir').value = budgetData.pct_plaisir;
   if (budgetData.pct_epargne) $('bud-pct-epargne').value = budgetData.pct_epargne;
@@ -6351,7 +6388,7 @@ function renderBudget() {
             <div class="bud-sub-row${_done ? ' done' : ''}">
               <div class="bud-sub-cat" onclick="toggleSubDetail('${blocKey}',${i})" style="cursor:pointer" title="Voir / remplir les postes de dépense">
                 <span style="width:8px;height:8px;border-radius:50%;background:${catColor(it.cat)};display:inline-block"></span>
-                ${catIcon(it.cat)} ${esc(it.cat)} <span style="color:var(--muted);font-size:10px">${open ? '▾' : '▸'}</span>${subs.length ? ` <span style="font-size:10px;color:${subColor}">(${subs.length})</span>` : ''}${it.esp > 0 ? ` <span style="font-size:10px;color:var(--sage);font-weight:700">💵${it.esp}€</span>` : ''}${it.note ? ` <span style="color:var(--muted);font-size:11px">${esc(it.note)}</span>` : ''}
+                ${catIcon(it.cat)} ${esc(it.cat)} <span style="color:var(--muted);font-size:10px">${open ? '▾' : '▸'}</span>${subs.length ? ` <span style="font-size:10px;color:${subColor}">(${subs.length})</span>` : ''}${it.esp > 0 ? ` <span style="font-size:10px;color:var(--sage);font-weight:700">💵${it.esp}€</span>` : ''}${it.tr > 0 ? ` <span style="font-size:10px;color:#B7791F;font-weight:700">🎫${it.tr}€</span>` : ''}${it.note ? ` <span style="color:var(--muted);font-size:11px">${esc(it.note)}</span>` : ''}
               </div>
               <input type="number" step="0.5" min="0" max="100" class="bud-sub-inp" value="${_pctD(it.pct)}"
                      onchange="updateSubBudget('${blocKey}',${i},this.value)">
@@ -6366,10 +6403,16 @@ function renderBudget() {
               <button class="bud-sub-del" onclick="deleteSubBudgetLine('${blocKey}',${i})" title="Supprimer cette ligne">🗑</button>
             </div>
             <div id="subdetail-${blocKey}-${i}" style="display:${open ? '' : 'none'};margin:2px 0 12px 22px;padding:10px 12px;background:var(--bg);border-radius:10px">
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding:8px 10px;background:rgba(127,184,158,0.12);border-radius:8px">
-                <span style="font-size:12px;font-weight:700">💵 Dont espèces :</span>
-                <input type="number" min="0" step="1" value="${it.esp || 0}" onchange="updateCatEspeces('${blocKey}',${i},this.value)" style="width:62px;padding:5px 7px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
-                <span style="font-size:11px;color:var(--muted)">€ &nbsp;·&nbsp; 💳 carte : <b style="font-family:var(--fm)">${fmt(Math.max(0, amt - (it.esp || 0)))}</b></span>
+              <div style="margin-bottom:10px;padding:8px 10px;background:rgba(127,184,158,0.12);border-radius:8px">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+                  <span style="font-size:12px;font-weight:700">💵 Dont espèces :</span>
+                  <input type="number" min="0" step="1" value="${it.esp || 0}" onchange="updateCatEspeces('${blocKey}',${i},this.value)" style="width:58px;padding:5px 7px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
+                  <span style="font-size:11px;color:var(--muted)">€</span>
+                  <span style="font-size:12px;font-weight:700;margin-left:6px">🎫 Titres resto :</span>
+                  <input type="number" min="0" step="1" value="${it.tr || 0}" onchange="updateCatTicket('${blocKey}',${i},this.value)" style="width:58px;padding:5px 7px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
+                  <span style="font-size:11px;color:var(--muted)">€</span>
+                </div>
+                <div style="font-size:11px;color:var(--muted)">💳 Reste par carte : <b style="font-family:var(--fm)">${fmt(Math.max(0, amt - (it.esp || 0) - (it.tr || 0)))}</b></div>
               </div>
               <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Postes de « ${esc(it.cat)} » — la somme doit tenir dans <b>${_pctD(it.pct)}%</b> (${fmt(amt)})</div>
               <datalist id="subdl-${blocKey}-${i}">${subcatDatalist(it.cat)}</datalist>
@@ -6468,8 +6511,21 @@ function updateCatEspeces(blocKey, i, val) {
   const rev = budgetData.revenu_mensuel || 0;
   const amt = Math.round(rev * (it.pct || 0) / 100); // budget € du poste
   let v = Math.max(0, parseFloat(String(val).replace(',', '.')) || 0);
-  if (amt > 0 && v > amt) v = amt;                   // pas plus que le budget du poste
+  const trOther = Number(it.tr || 0);
+  if (amt > 0 && v + trOther > amt) v = Math.max(0, amt - trOther); // espèces + titres resto ≤ budget du poste
   it.esp = Math.round(v);
+  _openSubDetails.add(`${blocKey}-${i}`);
+  saveBudgetPrep(); renderBudget();
+}
+// 🎫 Part d'un poste réglée en titres resto (en €) → alimente la poche Titres resto ; le reste passe en carte
+function updateCatTicket(blocKey, i, val) {
+  const it = _budItem(blocKey, i); if (!it) return;
+  const rev = budgetData.revenu_mensuel || 0;
+  const amt = Math.round(rev * (it.pct || 0) / 100);
+  let v = Math.max(0, parseFloat(String(val).replace(',', '.')) || 0);
+  const espOther = Number(it.esp || 0);
+  if (amt > 0 && v + espOther > amt) v = Math.max(0, amt - espOther);
+  it.tr = Math.round(v);
   _openSubDetails.add(`${blocKey}-${i}`);
   saveBudgetPrep(); renderBudget();
 }
