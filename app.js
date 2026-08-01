@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v139'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v140'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5063,6 +5063,58 @@ let _epargneTab = 'objectif';
 function _goalType(id) { try { return localStorage.getItem('monie_goaltype_' + id) || 'objectif'; } catch (e) { return 'objectif'; } }
 function _setGoalType(id, t) { try { localStorage.setItem('monie_goaltype_' + id, t === 'portefeuille' ? 'portefeuille' : 'objectif'); } catch (e) {} }
 function switchEpargneTab(t) { _epargneTab = (t === 'portefeuille') ? 'portefeuille' : 'objectif'; renderEpargne(); }
+// 💎 Épargne RÉELLE du mois, basée sur le tableau de patrimoine (Suivi mensuel) + ce qui est fléché via les contributions
+async function renderEpargneRealPanel() {
+  const el = $('ep-real-panel'); if (!el) return;
+  if (!Object.keys(suiviData).length) { try { await loadSuivi(); } catch (e) {} }
+  const key = `${epargneYear}-${String(epargneMonth + 1).padStart(2, '0')}`;
+  const pm = new Date(epargneYear, epargneMonth - 1, 1);
+  const prevKey = `${pm.getFullYear()}-${String(pm.getMonth() + 1).padStart(2, '0')}`;
+  const EPF = [
+    { f: 'livret_a', l: 'Livret A', bank: 'Boursorama', emoji: '🐷' },
+    { f: 'ldds', l: 'LDDS', bank: 'LCL', emoji: '💧' },
+    { f: 'assurance_vie', l: 'Assurance vie', bank: 'Banque Postale', emoji: '🛡️' },
+    { f: 'esalia', l: 'Esalia', bank: 'Société Générale', emoji: '🏢' },
+    { f: 'investissements', l: 'Investissements', bank: 'Revolut', emoji: '📈' }
+  ];
+  const cur = suiviData[key] || {}, prev = suiviData[prevKey] || {};
+  const monthLabel = `${MONTHS[epargneMonth]} ${epargneYear}`;
+  const hasCur = EPF.some(x => Number(cur[x.f] || 0) > 0);
+  if (!hasCur) {
+    el.innerHTML = `<div class="card" style="margin-bottom:16px;background:var(--sage-soft)">
+      <div style="font-weight:800;margin-bottom:4px">💎 Ton épargne réelle — ${monthLabel}</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">Renseigne tes soldes d'épargne du mois dans <b onclick="showTab('suivi')" style="cursor:pointer;color:var(--plum);text-decoration:underline">Suivi mensuel</b> (Livret A, Investissements…) → tu verras ici, concrètement, combien tu as <b>vraiment</b> mis de côté ce mois. 🌱</div>
+    </div>`;
+    return;
+  }
+  const hasPrev = EPF.some(x => Number(prev[x.f] || 0) > 0);
+  const totCur = EPF.reduce((s, x) => s + Number(cur[x.f] || 0), 0);
+  const totPrev = EPF.reduce((s, x) => s + Number(prev[x.f] || 0), 0);
+  const delta = totCur - totPrev;
+  const cM = (contribList || []).filter(c => c.date_contrib && String(c.date_contrib).startsWith(key));
+  let objC = 0, porteC = 0;
+  cM.forEach(c => { if (_goalType(c.objectif_id) === 'portefeuille') porteC += Number(c.montant || 0); else objC += Number(c.montant || 0); });
+  const rows = EPF.map(x => ({ ...x, d: Number(cur[x.f] || 0) - Number(prev[x.f] || 0), cur: Number(cur[x.f] || 0) })).filter(x => x.cur > 0 || x.d !== 0);
+  el.innerHTML = `<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+      <div style="font-weight:800">💎 Ton épargne réelle — ${monthLabel}</div>
+      <div style="font-size:11px;color:var(--muted)">d'après ton patrimoine</div>
+    </div>
+    ${hasPrev ? `<div style="text-align:center;padding:10px;border-radius:12px;background:${delta >= 0 ? 'rgba(127,184,158,0.12)' : 'rgba(229,57,53,0.1)'};margin-bottom:12px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Mis de côté ce mois (vs ${MONTHS_SHORT[pm.getMonth()]})</div>
+      <div style="font-size:26px;font-weight:900;color:${delta >= 0 ? 'var(--sage)' : '#E53935'};font-family:var(--fm)">${delta >= 0 ? '+' : ''}${fmt(Math.round(delta))}</div>
+    </div>` : `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Total épargne : <b>${fmt(Math.round(totCur))}</b> (renseigne le mois précédent dans Suivi pour voir l'évolution).</div>`}
+    <div style="font-size:12px;font-weight:700;margin-bottom:4px">Par support ${hasPrev ? '(solde · évolution)' : ''}</div>
+    ${rows.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-soft)">
+      <span style="font-size:13px">${x.emoji} ${x.l} <span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:100px;background:rgba(124,63,88,0.12);color:var(--plum)">${x.bank}</span></span>
+      <span style="font-family:var(--fm);font-size:13px"><b>${fmt(Math.round(x.cur))}</b>${hasPrev && x.d !== 0 ? ` <span style="font-size:11px;color:${x.d >= 0 ? 'var(--sage)' : '#E53935'}">${x.d >= 0 ? '+' : ''}${fmt(Math.round(x.d))}</span>` : ''}</span>
+    </div>`).join('')}
+    <div style="margin-top:10px;padding:8px 10px;border-radius:10px;background:var(--bg);font-size:12px;line-height:1.6">
+      <b>Fléché ce mois</b> (via tes contributions dans l'app) :<br>
+      🎯 Objectifs : <b>${fmt(Math.round(objC))}</b> &nbsp;·&nbsp; 👛 Portefeuilles : <b>${fmt(Math.round(porteC))}</b>
+    </div>
+  </div>`;
+}
 function renderEpargne() {
   renderRemboursements();
   renderDettes();
@@ -5100,6 +5152,7 @@ function renderEpargne() {
   const rate = monthIn > 0 ? Math.round(monthEpargneFlow / monthIn * 100) : 0;
   set('ep-rate', rate + '%');
   if ($('ep-rate-hint')) set('ep-rate-hint', monthIn > 0 ? `${fmt(monthEpargneFlow)} / ${fmt(monthIn)} de revenus` : 'aucun revenu ce mois');
+  renderEpargneRealPanel(); // 💎 panneau épargne réelle (patrimoine) — async, se met à jour tout seul
 
   // Objectifs actifs — avec onglets 🎯 Objectifs / 👛 Portefeuilles
   const activeList = $('goals-active-list');
