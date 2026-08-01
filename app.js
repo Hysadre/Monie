@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v126'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v127'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -7233,7 +7233,7 @@ function openDetteForm(existing) {
     if (!res.ok) return false;
     // Date de 1ère échéance + fournisseur : en local (localStorage), aucune colonne Supabase
     const savedId = d.id || (res.data && res.data[0] && res.data[0].id);
-    if (savedId) { _setDetteStart(savedId, startVal || null); _setDetteProv(savedId, ($('dette-prov') && $('dette-prov').value) || ''); }
+    if (savedId) { _setDetteStart(savedId, startVal || null); _setDetteProv(savedId, ($('dette-prov') && $('dette-prov').value) || ''); _setDetteFor(savedId, ($('dette-for') && $('dette-for').value.trim()) || ''); }
     await loadExtra(); renderDettes(); toast('✓ Enregistré', 'success');
   }, `<div style="display:flex;flex-direction:column;gap:10px">
     <div class="auth-field"><label>Nom</label><input class="inp" id="dette-nom" value="${esc(d.nom || '')}" placeholder="Ex: Klarna canapé, Prêt"></div>
@@ -7247,14 +7247,20 @@ function openDetteForm(existing) {
         ${DETTE_PROVIDERS.map(p => { const on = d.id && _detteProv(d.id) === p; const dark = (p === 'Klarna' || p === 'Scalapay' || p === 'Oney'); return `<button type="button" onclick="_detteFormProv(this,'${p}')" class="prov-choice" style="cursor:pointer;font-size:12px;padding:5px 12px;border-radius:100px;border:1.5px solid ${on ? _PROV_COLOR[p] : 'var(--border-soft)'};background:${on ? _PROV_COLOR[p] : 'var(--bg)'};color:${on ? (dark ? '#222' : '#fff') : 'var(--muted)'}">${p}</button>`; }).join('')}
       </div>
     </div>
+    <div class="auth-field"><label>👤 Pour quelqu'un d'autre ? <span style="font-weight:400;color:var(--muted);font-size:11px">(nom — laisse vide si c'est pour toi)</span></label>
+      <input class="inp" id="dette-for" value="${esc(d.id ? (_detteFor(d.id) === '1' ? '' : _detteFor(d.id)) : '')}" placeholder="Ex: Maman, Sarah…">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Si tu mets un nom, ce paiement est <b>exclu de tes totaux</b> (tu avances l'argent pour cette personne).</div>
+    </div>
   </div>`);
 }
-async function payDette(id) {
+async function payDette(id, silent) {
   const d = dettesList.find(x => x.id === id); if (!d) return;
   const nv = Math.min(Number(d.montant_total), Number(d.deja_paye || 0) + Number(d.mensualite || 0));
   const r = await dbGuard(sb.from('dettes').update({ deja_paye: nv }).eq('id', id), 'Maj impossible');
   if (!r.ok) return;
-  d.deja_paye = nv; renderDettes();
+  d.deja_paye = nv;
+  if (silent) return;                        // mode groupé : pas de rendu/toast par item
+  renderDettes();
   if (nv >= Number(d.montant_total)) { toast('🎉 Dette remboursée, bravo !', 'success'); _confettiBurst(); }
 }
 async function deleteDette(id) {
@@ -7298,6 +7304,25 @@ const DETTE_PROVIDERS = ['PayPal', 'Klarna', 'Scalapay', 'Alma', 'Oney', 'Floa',
 const _PROV_COLOR = { PayPal: '#003087', Klarna: '#FFB3C7', Scalapay: '#C4F135', Alma: '#FA5022', Oney: '#93D500', Floa: '#E5007D', Cofidis: '#E2001A', Autre: '#8A8A8A' };
 function _detteProv(id) { try { return localStorage.getItem('monie_dprov_' + id) || ''; } catch (e) { return ''; } }
 function _setDetteProv(id, v) { try { if (v) localStorage.setItem('monie_dprov_' + id, v); else localStorage.removeItem('monie_dprov_' + id); } catch (e) {} }
+// 👤 Paiement fait POUR quelqu'un d'autre (nom optionnel) → exclu de MES totaux. Stocké EN LOCAL.
+function _detteFor(id) { try { return localStorage.getItem('monie_dfor_' + id) || ''; } catch (e) { return ''; } }
+function _setDetteFor(id, v) { try { if (v) localStorage.setItem('monie_dfor_' + id, v); else localStorage.removeItem('monie_dfor_' + id); } catch (e) {} }
+function setDetteFor(id, v) { _setDetteFor(id, v || ''); renderDettes(); }
+function _forBadge(id) { const n = _detteFor(id); if (!n) return ''; return ` <span style="font-size:9px;font-weight:800;padding:1px 6px;border-radius:100px;background:#6B4E71;color:#fff;vertical-align:middle">👤 ${n === '1' ? 'pour un tiers' : esc(n)}</span>`; }
+// Sélection multiple pour PAYER dans « à payer ce mois »
+let _dettePayMode = false;
+let _dettePayChecked = new Set();
+function toggleDettePayMode() { _dettePayMode = !_dettePayMode; _dettePayChecked.clear(); renderDettes(); }
+function toggleDettePayCheck(id) { if (_dettePayChecked.has(id)) _dettePayChecked.delete(id); else _dettePayChecked.add(id); renderDettes(); }
+async function payCheckedDettes() {
+  const ids = [..._dettePayChecked]; if (!ids.length) return;
+  const total = ids.reduce((s, id) => { const d = dettesList.find(x => x.id === id); return s + (d ? Number(d.mensualite || 0) : 0); }, 0);
+  openModal('Payer ces échéances ?', `${ids.length} échéance(s) marquée(s) payée(s) — total ${fmt(Math.round(total))}.`, async () => {
+    for (const id of ids) { await payDette(id, true); }
+    _dettePayChecked.clear(); _dettePayMode = false;
+    renderDettes(); toast(`✓ ${ids.length} échéance(s) payée(s)`, 'success');
+  });
+}
 // Sélecteur de fournisseur dans le formulaire (toggle + restyle)
 function _detteFormProv(btn, p) {
   const i = document.getElementById('dette-prov'); if (!i) return;
@@ -7366,22 +7391,25 @@ function renderDettes() {
   const mLabel = mk => `${MS[parseInt(mk.slice(5, 7)) - 1]} ${mk.slice(0, 4)}`;
   const nowKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
 
-  // ── Résumé global (donut + totaux) ──
-  const gTotal = dettesList.reduce((s, d) => s + Number(d.montant_total || 0), 0);
-  const gPaid = dettesList.reduce((s, d) => s + Number(d.deja_paye || 0), 0);
+  // ── Résumé global (donut + totaux) — MES paiements seulement (hors « pour un tiers ») ──
+  const mine = dettesList.filter(d => !_detteFor(d.id));
+  const forOthers = dettesList.filter(d => _detteFor(d.id));
+  const gTotal = mine.reduce((s, d) => s + Number(d.montant_total || 0), 0);
+  const gPaid = mine.reduce((s, d) => s + Number(d.deja_paye || 0), 0);
   const gReste = Math.max(0, gTotal - gPaid);
-  const summary = `<div style="display:flex;align-items:center;gap:14px;background:var(--bg);border-radius:12px;padding:12px 14px;margin-bottom:16px">
+  const othersReste = forOthers.reduce((s, d) => s + Math.max(0, Number(d.montant_total || 0) - Number(d.deja_paye || 0)), 0);
+  const summary = `<div style="display:flex;align-items:center;gap:14px;background:var(--bg);border-radius:12px;padding:12px 14px;margin-bottom:${othersReste > 0 ? '8px' : '16px'}">
       ${_donutSVG(gPaid, gTotal, 60, 'var(--plum)')}
       <div style="display:flex;gap:14px;flex-wrap:wrap;flex:1">
         <div><div style="font-size:11px;color:var(--muted)">Déjà payé</div><div style="font-family:var(--fm);font-weight:800;color:var(--sage)">${fmt(Math.round(gPaid))}</div></div>
         <div><div style="font-size:11px;color:var(--muted)">Reste à payer</div><div style="font-family:var(--fm);font-weight:800;color:var(--tender-rose)">${fmt(Math.round(gReste))}</div></div>
         <div><div style="font-size:11px;color:var(--muted)">Total</div><div style="font-family:var(--fm);font-weight:800">${fmt(Math.round(gTotal))}</div></div>
       </div>
-    </div>`;
+    </div>${othersReste > 0 ? `<div style="font-size:11px;color:var(--muted);background:rgba(107,78,113,0.08);border-radius:8px;padding:7px 12px;margin-bottom:16px">👤 En plus, tu avances <b>${fmt(Math.round(othersReste))}</b> pour d'autres (non compté dans tes totaux ci-dessus).</div>` : ''}`;
 
-  // ── Échéancier mois par mois ──
+  // ── Échéancier mois par mois — hors paiements « pour un tiers » ──
   const sched = {};
-  active.forEach(d => _detteSchedule(d).forEach(e => {
+  active.filter(d => !_detteFor(d.id)).forEach(d => _detteSchedule(d).forEach(e => {
     if (!sched[e.mk]) sched[e.mk] = { total: 0, items: [] };
     sched[e.mk].total += e.amount;
     sched[e.mk].items.push({ nom: d.nom, amount: e.amount, id: d.id });
@@ -7403,18 +7431,28 @@ function renderDettes() {
       </div>`;
   }
 
-  // ── À payer sur le mois sélectionné ──
+  // ── À payer sur le mois sélectionné (avec sélection multiple pour payer d'un coup) ──
   let payerHtml = '';
   if (_detteSelMonth && sched[_detteSelMonth]) {
     const s = sched[_detteSelMonth], isCur = _detteSelMonth === nowKey;
+    if (!isCur) { _dettePayMode = false; _dettePayChecked.clear(); }
+    const checkedTotal = s.items.filter(it => _dettePayChecked.has(it.id)).reduce((a, it) => a + it.amount, 0);
     payerHtml = `<div style="background:rgba(124,63,88,0.06);border:1px solid var(--border-soft);border-radius:12px;padding:12px 14px;margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <span style="font-size:13px;font-weight:800">🎯 À payer ${isCur ? 'ce mois' : `en ${mLabel(_detteSelMonth)}`}</span>
         <span style="font-size:13px;font-weight:800;font-family:var(--fm);color:var(--plum)">${fmt(s.total)}</span>
       </div>
+      ${isCur ? `<div style="display:flex;justify-content:${_dettePayMode ? 'space-between' : 'flex-end'};align-items:center;margin-bottom:2px">
+        ${_dettePayMode ? `<span onclick="toggleDettePayMode()" style="cursor:pointer;font-size:12px;color:var(--muted)">✕ Annuler</span>
+           <button class="goal-btn" onclick="payCheckedDettes()" style="${_dettePayChecked.size ? '' : 'opacity:.45;pointer-events:none'}">✓ Payer la sélection (${_dettePayChecked.size}) · ${fmt(Math.round(checkedTotal))}</button>`
+          : `<span onclick="toggleDettePayMode()" style="cursor:pointer;font-size:12px;color:var(--plum);font-weight:700">☑︎ Sélectionner</span>`}
+      </div>` : ''}
       ${s.items.map(it => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border-soft)">
-        <span style="font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.nom)}${_provBadge(it.id)}</span>
-        ${isCur ? `<button class="goal-btn" onclick="payDette('${it.id}')" style="flex:0 0 auto">payer ${fmt(it.amount)}</button>` : `<span style="font-size:12px;color:var(--muted);font-family:var(--fm);flex:0 0 auto">${fmt(it.amount)}</span>`}
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          ${isCur && _dettePayMode ? `<input type="checkbox" ${_dettePayChecked.has(it.id) ? 'checked' : ''} onclick="toggleDettePayCheck('${it.id}')" style="width:18px;height:18px;flex:0 0 auto">` : ''}
+          <span style="font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.nom)}${_provBadge(it.id)}</span>
+        </div>
+        ${isCur && !_dettePayMode ? `<button class="goal-btn" onclick="payDette('${it.id}')" style="flex:0 0 auto">payer ${fmt(it.amount)}</button>` : `<span style="font-size:12px;color:var(--muted);font-family:var(--fm);flex:0 0 auto">${fmt(it.amount)}</span>`}
       </div>`).join('')}
     </div>`;
   }
@@ -7450,7 +7488,7 @@ function renderDettes() {
         <div onclick="${rowClick}" style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer">
           ${_donutSVG(c.paid, c.total, 38, c.reste === 0 ? 'var(--sage)' : 'var(--gold)', centerLabel)}
           <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.nom)}${_provBadge(d.id)}${c.reste === 0 ? ' <span style="font-size:10px;color:var(--sage)">soldé 🎉</span>' : ''}</div>
+            <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.nom)}${_provBadge(d.id)}${_forBadge(d.id)}${c.reste === 0 ? ' <span style="font-size:10px;color:var(--sage)">soldé 🎉</span>' : ''}</div>
             <div style="font-size:11px;color:var(--muted)">${c.reste > 0 ? `reste ${fmt(c.reste)} · ${fmt(c.mens)}/mois` : `${fmt(c.total)} remboursés`}</div>
           </div>
         </div>
@@ -7467,6 +7505,12 @@ function renderDettes() {
           <span style="font-size:11px;color:var(--muted)">1ʳᵉ échéance :</span>
           <input type="date" value="${startISO || ''}" onchange="setDetteStart('${d.id}',this.value)" style="padding:4px 6px;font-size:12px;border:1.5px solid var(--border);border-radius:6px;background:#fff;color:var(--ink)">
           ${startISO ? `<span onclick="setDetteStart('${d.id}','')" style="font-size:11px;color:var(--tender-rose);cursor:pointer">effacer</span>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--muted)">👤 Pour quelqu'un :</span>
+          <input type="text" value="${esc(_detteFor(d.id) === '1' ? '' : _detteFor(d.id))}" placeholder="nom (optionnel)" onchange="setDetteFor('${d.id}', this.value.trim())" style="padding:4px 8px;font-size:12px;border:1.5px solid var(--border);border-radius:6px;background:#fff;color:var(--ink);width:130px">
+          ${_detteFor(d.id) ? `<span onclick="setDetteFor('${d.id}','')" style="font-size:11px;color:var(--tender-rose);cursor:pointer">c'est pour moi</span>` : ''}
+          <span style="font-size:10px;color:var(--muted);width:100%">Un nom ici = exclu de tes totaux (tu avances juste l'argent).</span>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           ${c.reste > 0 && c.mens > 0 ? `<button class="goal-btn" onclick="payDette('${d.id}')">+ payer ${fmt(c.mens)}</button>` : ''}
