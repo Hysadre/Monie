@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v129'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v130'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -6209,6 +6209,51 @@ function renderSalaryCTA() {
     <button class="btn-primary" onclick="addSalaryForMonth()" style="padding:10px 16px;font-size:14px">➕ Enregistrer le salaire reçu en ${label} (${fmt(rev)})</button>
   </div>`;
 }
+// 💳 Paiements en plusieurs fois du mois en cours, groupés par catégorie taguée (hors « pour un tiers »)
+function _installmentsThisMonthByCat() {
+  const nowKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  const groups = {}; let total = 0;
+  (dettesList || []).filter(d => !_detteFor(d.id)).forEach(d => {
+    if (_detteCounts(d).reste <= 0) return;
+    const e = _detteSchedule(d).find(x => x.mk === nowKey);
+    if (!e) return;
+    const cat = _detteCat(d.id) || 'Divers';
+    groups[cat] = (groups[cat] || 0) + e.amount;
+    total += e.amount;
+  });
+  return { groups, total };
+}
+// Encart (comme le salaire) : remonte les échéances du mois dans la répartition, par catégorie
+function renderInstallmentCTA() {
+  const el = $('bud-installments-cta'); if (!el) return;
+  const nowKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  if (budgetKey() !== nowKey || !(budgetData.revenu_mensuel > 0)) { el.innerHTML = ''; return; }
+  const { groups, total } = _installmentsThisMonthByCat();
+  if (total <= 0) { el.innerHTML = ''; return; }
+  const chips = Object.entries(groups).sort((a, b) => b[1] - a[1]).map(([c, a]) =>
+    `<span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:100px;background:${(_CAT_COLOR[c] || '#8A8A8A')}22;color:${_CAT_COLOR[c] || '#8A8A8A'};margin:2px 3px 2px 0">${esc(c)} ${fmt(Math.round(a))}</span>`).join('');
+  el.innerHTML = `<div class="card" style="border:1px solid var(--plum);background:rgba(124,63,88,0.06);margin-bottom:16px">
+    <div style="font-weight:800;margin-bottom:4px">💳 Tes paiements en plusieurs fois ce mois : ${fmt(Math.round(total))}</div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:8px">Les intégrer à ta répartition en <b>Plaisir</b>, un poste par catégorie 👇 (tu ajusteras les % après).</div>
+    <div style="margin-bottom:10px">${chips}</div>
+    <button class="btn-primary" onclick="addInstallmentsToBudget()" style="padding:10px 16px;font-size:14px">➕ Ajouter à ma répartition (par catégorie)</button>
+  </div>`;
+}
+function addInstallmentsToBudget() {
+  const rev = budgetData.revenu_mensuel || 0;
+  if (!rev) { toast('Renseigne d\'abord ton revenu mensuel', 'error'); return; }
+  const { groups, total } = _installmentsThisMonthByCat();
+  if (total <= 0) return;
+  const sub = _ensureSubBudget();
+  sub.plaisir = sub.plaisir || []; sub.charges = sub.charges || [];
+  const notAuto = it => !(it.cat && String(it.cat).startsWith('🔁')); // retire les anciens postes auto (idempotent)
+  sub.plaisir = sub.plaisir.filter(notAuto);
+  sub.charges = sub.charges.filter(notAuto);
+  Object.entries(groups).forEach(([c, a]) => { sub.plaisir.push({ cat: '🔁 ' + c, pct: a / rev * 100 }); });
+  saveBudgetPrepNow();
+  renderBudget();
+  toast(`✓ ${Object.keys(groups).length} poste(s) « paiements 4x » ajouté(s) — ${fmt(Math.round(total))}. Ajuste tes % 🌸`, 'success');
+}
 async function addSalaryForMonth() {
   const key = budgetKey();
   const label = `${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
@@ -6377,6 +6422,7 @@ function renderBudget() {
 
   renderRealBlocks();
   renderSalaryCTA();
+  renderInstallmentCTA();
 
   // ─── BLOCAGE si total ≠ 100% ──────────────
   if (total !== 100) {
