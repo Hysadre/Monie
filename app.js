@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v131'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v132'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -6209,6 +6209,46 @@ function renderSalaryCTA() {
     <button class="btn-primary" onclick="addSalaryForMonth()" style="padding:10px 16px;font-size:14px">➕ Enregistrer le salaire reçu en ${label} (${fmt(rev)})</button>
   </div>`;
 }
+// 🎫 Titres resto : détecte s'ils sont enregistrés comme entrée ce mois, sinon propose de les saisir
+function _monthHasTicketResto(key) {
+  return transactions.some(t => t.type === 'entree' && (t.date_op || '').startsWith(key) &&
+    (t.category === 'Tickets restaurant' || /ticket.?resto|titre.?resto/i.test(t.label || '')));
+}
+function renderTicketCTA() {
+  const el = $('bud-ticket-cta'); if (!el) return;
+  const key = budgetKey();
+  const label = `${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
+  const planned = computeBudgetStatus(key).ticketPrevu;
+  if (!(planned > 0) || _monthHasTicketResto(key)) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="card" style="border:1px solid #E8A317;background:rgba(232,163,23,0.08);margin-bottom:16px">
+    <div style="font-weight:800;margin-bottom:4px">🎫 Tes titres resto de ${label} ne sont pas enregistrés</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:10px">Tu as prévu <b>${fmt(planned)}</b> de titres resto ce mois. Enregistre le montant <b>réellement reçu</b> pour qu'il compte comme une entrée. 🌸</div>
+    <button class="btn-primary" onclick="addTicketForMonth()" style="padding:10px 16px;font-size:14px">➕ Enregistrer mes titres resto de ${label} (${fmt(planned)})</button>
+  </div>`;
+}
+async function addTicketForMonth() {
+  const key = budgetKey();
+  const label = `${MONTHS[parseInt(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
+  const planned = Math.round(computeBudgetStatus(key).ticketPrevu);
+  const raw = prompt(`Montant des titres resto reçus en ${label} ? (tu peux ajuster)`, String(planned || ''));
+  if (raw === null) return;
+  const amount = parseFloat(String(raw).replace(',', '.')) || 0;
+  if (amount <= 0) { toast('Montant invalide', 'error'); return; }
+  const newTx = {
+    user_id: currentUser.id, date_op: `${key}-02`, label: `Titres resto ${label}`,
+    amount: amount, type: 'entree', category: 'Tickets restaurant', sub_category: null, sub_sub_category: null,
+    source: 'manual', merchant_key: merchantKey('Titres resto'), payment_method: 'ticket_resto', bank_source: null
+  };
+  const { data, error } = await sb.from('transactions').insert(_sanitizeTx(newTx)).select().single();
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  transactions.unshift(data);
+  toast(`✓ Titres resto de ${label} enregistrés (${fmt(amount)})`, 'success');
+  renderTicketCTA();
+  renderBudgetStatus('budget-alert-page', false, key);
+  if (typeof renderRealBlocks === 'function') renderRealBlocks();
+  if (typeof renderDashboard === 'function') renderDashboard();
+  if (typeof renderTransactionsList === 'function') renderTransactionsList();
+}
 // 💳 Paiements en plusieurs fois du mois en cours, groupés par catégorie taguée (hors « pour un tiers »)
 function _installmentsThisMonthByCat() {
   const nowKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
@@ -6422,6 +6462,7 @@ function renderBudget() {
 
   renderRealBlocks();
   renderSalaryCTA();
+  renderTicketCTA();
   renderInstallmentCTA();
 
   // ─── BLOCAGE si total ≠ 100% ──────────────
