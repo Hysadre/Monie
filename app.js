@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v127'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v128'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -7350,9 +7350,12 @@ function _detteSchedule(d) {
   if (!mens || !reste || !nbRest) return [];
   const startISO = _detteStart(d.id);
   const now = new Date();
+  const curFirst = new Date(now.getFullYear(), now.getMonth(), 1);
   let anchor;
   if (startISO) { const s = new Date(startISO + 'T00:00:00'); anchor = new Date(s.getFullYear(), s.getMonth() + nbPaid, 1); }
   else { anchor = new Date(now.getFullYear(), now.getMonth(), 1); }
+  // Jamais d'échéance dans le passé : une échéance en retard bascule sur le mois en cours
+  if (anchor < curFirst) anchor = curFirst;
   const out = []; let rem = reste;
   for (let k = 0; k < nbRest; k++) {
     const dt = new Date(anchor.getFullYear(), anchor.getMonth() + k, 1);
