@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v138'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v139'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5117,7 +5117,8 @@ function renderEpargne() {
         <button class="btn-primary" onclick="openGoalForm()" style="margin-top:12px;padding:10px 18px;font-size:14px">➕ ${_epargneTab === 'portefeuille' ? 'Créer un portefeuille' : 'Créer un objectif'}</button>
       </div>`;
   } else {
-    activeList.innerHTML = tabBar + shown.map(g => renderGoalCard(g)).join(''); // ⚠️ surtout PAS .map(renderGoalCard) : map passe (g,index,array) → index/array pris pour isAchieved/isAbandoned
+    const addBtn = `<div style="text-align:center;margin-top:14px"><button class="btn-primary" onclick="openGoalForm()" style="padding:10px 18px;font-size:14px">➕ ${_epargneTab === 'portefeuille' ? 'Nouveau portefeuille' : 'Nouvel objectif'}</button></div>`;
+    activeList.innerHTML = tabBar + shown.map(g => renderGoalCard(g)).join('') + addBtn; // ⚠️ surtout PAS .map(renderGoalCard) : map passe (g,index,array) → index/array pris pour isAchieved/isAbandoned
   }
 
   // Objectifs atteints
