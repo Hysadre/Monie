@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v117'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v118'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5794,7 +5794,12 @@ function computeBudgetStatus(monthKey) {
   };
   // Dépenses "à prévoir" du mois (loyer, factures que tu sais devoir payer) → à retirer du disponible
   const aPrevoir = (b.events || []).reduce((s, e) => s + Number(e.amount || 0), 0);
-  const especesPrevu = Number((b.sub_budget && b.sub_budget._especes) || 0); // 💵 enveloppe liquide prévue ce mois
+  // 💵 Enveloppe liquide prévue = somme des parts « espèces » réparties par poste (it.esp).
+  // Repli sur l'ancien champ global _especes si aucun poste n'a de part espèces.
+  let _espPostes = 0;
+  const _sbEsp = b.sub_budget;
+  if (_sbEsp) ['charges', 'plaisir', 'epargne'].forEach(bk => (_sbEsp[bk] || []).forEach(it => { _espPostes += Number(it.esp || 0); }));
+  const especesPrevu = _espPostes > 0 ? _espPostes : Number((_sbEsp && _sbEsp._especes) || 0);
   return { rev, key, spent, spentByCat, budgetByCat, budget, aPrevoir, outTotal, especesPrevu, especesSpent };
 }
 // compact=true (dashboard) : n'affiche que les postes à surveiller. Sinon : tous les postes.
@@ -6274,7 +6279,7 @@ function renderBudget() {
             <div class="bud-sub-row${_done ? ' done' : ''}">
               <div class="bud-sub-cat" onclick="toggleSubDetail('${blocKey}',${i})" style="cursor:pointer" title="Voir / remplir les postes de dépense">
                 <span style="width:8px;height:8px;border-radius:50%;background:${catColor(it.cat)};display:inline-block"></span>
-                ${catIcon(it.cat)} ${esc(it.cat)} <span style="color:var(--muted);font-size:10px">${open ? '▾' : '▸'}</span>${subs.length ? ` <span style="font-size:10px;color:${subColor}">(${subs.length})</span>` : ''}${it.note ? ` <span style="color:var(--muted);font-size:11px">${esc(it.note)}</span>` : ''}
+                ${catIcon(it.cat)} ${esc(it.cat)} <span style="color:var(--muted);font-size:10px">${open ? '▾' : '▸'}</span>${subs.length ? ` <span style="font-size:10px;color:${subColor}">(${subs.length})</span>` : ''}${it.esp > 0 ? ` <span style="font-size:10px;color:var(--sage);font-weight:700">💵${it.esp}€</span>` : ''}${it.note ? ` <span style="color:var(--muted);font-size:11px">${esc(it.note)}</span>` : ''}
               </div>
               <input type="number" step="0.5" min="0" max="100" class="bud-sub-inp" value="${it.pct}"
                      onchange="updateSubBudget('${blocKey}',${i},this.value)">
@@ -6289,6 +6294,11 @@ function renderBudget() {
               <button class="bud-sub-del" onclick="deleteSubBudgetLine('${blocKey}',${i})" title="Supprimer cette ligne">🗑</button>
             </div>
             <div id="subdetail-${blocKey}-${i}" style="display:${open ? '' : 'none'};margin:2px 0 12px 22px;padding:10px 12px;background:var(--bg);border-radius:10px">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding:8px 10px;background:rgba(127,184,158,0.12);border-radius:8px">
+                <span style="font-size:12px;font-weight:700">💵 Dont espèces :</span>
+                <input type="number" min="0" step="1" value="${it.esp || 0}" onchange="updateCatEspeces('${blocKey}',${i},this.value)" style="width:62px;padding:5px 7px;border:1.5px solid var(--border);border-radius:6px;text-align:right;font-weight:700;font-family:var(--fm);background:white;color:var(--ink)">
+                <span style="font-size:11px;color:var(--muted)">€ &nbsp;·&nbsp; 💳 carte : <b style="font-family:var(--fm)">${fmt(Math.max(0, amt - (it.esp || 0)))}</b></span>
+              </div>
               <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Postes de « ${esc(it.cat)} » — la somme doit tenir dans <b>${it.pct}%</b> (${fmt(amt)})</div>
               <datalist id="subdl-${blocKey}-${i}">${subcatDatalist(it.cat)}</datalist>
               ${subs.map((sc, j) => {
@@ -6377,6 +6387,17 @@ function toggleSubDetail(blocKey, i) {
   else { _openSubDetails.add(key); if (el) el.style.display = ''; }
   // maj de la flèche ▸/▾
   renderBudget();
+}
+// 💵 Part d'un poste réglée en espèces (en €) → alimente la poche Espèces ; le reste passe en carte
+function updateCatEspeces(blocKey, i, val) {
+  const it = _budItem(blocKey, i); if (!it) return;
+  const rev = budgetData.revenu_mensuel || 0;
+  const amt = Math.round(rev * (it.pct || 0) / 100); // budget € du poste
+  let v = Math.max(0, parseFloat(String(val).replace(',', '.')) || 0);
+  if (amt > 0 && v > amt) v = amt;                   // pas plus que le budget du poste
+  it.esp = Math.round(v);
+  _openSubDetails.add(`${blocKey}-${i}`);
+  saveBudgetPrep(); renderBudget();
 }
 function addSubcatBudget(blocKey, i) {
   const it = _budItem(blocKey, i); if (!it) return;
