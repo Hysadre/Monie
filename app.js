@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v128'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v129'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -7233,7 +7233,7 @@ function openDetteForm(existing) {
     if (!res.ok) return false;
     // Date de 1ère échéance + fournisseur : en local (localStorage), aucune colonne Supabase
     const savedId = d.id || (res.data && res.data[0] && res.data[0].id);
-    if (savedId) { _setDetteStart(savedId, startVal || null); _setDetteProv(savedId, ($('dette-prov') && $('dette-prov').value) || ''); _setDetteFor(savedId, ($('dette-for') && $('dette-for').value.trim()) || ''); }
+    if (savedId) { _setDetteStart(savedId, startVal || null); _setDetteProv(savedId, ($('dette-prov') && $('dette-prov').value) || ''); _setDetteFor(savedId, ($('dette-for') && $('dette-for').value.trim()) || ''); _setDetteCat(savedId, ($('dette-cat') && $('dette-cat').value) || ''); }
     await loadExtra(); renderDettes(); toast('✓ Enregistré', 'success');
   }, `<div style="display:flex;flex-direction:column;gap:10px">
     <div class="auth-field"><label>Nom</label><input class="inp" id="dette-nom" value="${esc(d.nom || '')}" placeholder="Ex: Klarna canapé, Prêt"></div>
@@ -7245,6 +7245,12 @@ function openDetteForm(existing) {
       <input type="hidden" id="dette-prov" value="${esc(d.id ? (_detteProv(d.id) || '') : '')}">
       <div style="display:flex;gap:5px;flex-wrap:wrap">
         ${DETTE_PROVIDERS.map(p => { const on = d.id && _detteProv(d.id) === p; const dark = (p === 'Klarna' || p === 'Scalapay' || p === 'Oney'); return `<button type="button" onclick="_detteFormProv(this,'${p}')" class="prov-choice" style="cursor:pointer;font-size:12px;padding:5px 12px;border-radius:100px;border:1.5px solid ${on ? _PROV_COLOR[p] : 'var(--border-soft)'};background:${on ? _PROV_COLOR[p] : 'var(--bg)'};color:${on ? (dark ? '#222' : '#fff') : 'var(--muted)'}">${p}</button>`; }).join('')}
+      </div>
+    </div>
+    <div class="auth-field"><label>Catégorie <span style="font-weight:400;color:var(--muted);font-size:11px">(optionnel)</span></label>
+      <input type="hidden" id="dette-cat" value="${esc(d.id ? (_detteCat(d.id) || '') : '')}">
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        ${DETTE_CATS.map(cc => { const on = d.id && _detteCat(d.id) === cc; return `<button type="button" onclick="_detteFormCat(this,'${cc}')" class="dcat-choice" style="cursor:pointer;font-size:12px;padding:5px 12px;border-radius:100px;border:1.5px solid ${on ? _CAT_COLOR[cc] : 'var(--border-soft)'};background:${on ? _CAT_COLOR[cc] : 'var(--bg)'};color:${on ? '#fff' : 'var(--muted)'}">${cc}</button>`; }).join('')}
       </div>
     </div>
     <div class="auth-field"><label>👤 Pour quelqu'un d'autre ? <span style="font-weight:400;color:var(--muted);font-size:11px">(nom — laisse vide si c'est pour toi)</span></label>
@@ -7304,6 +7310,21 @@ const DETTE_PROVIDERS = ['PayPal', 'Klarna', 'Scalapay', 'Alma', 'Oney', 'Floa',
 const _PROV_COLOR = { PayPal: '#003087', Klarna: '#FFB3C7', Scalapay: '#C4F135', Alma: '#FA5022', Oney: '#93D500', Floa: '#E5007D', Cofidis: '#E2001A', Autre: '#8A8A8A' };
 function _detteProv(id) { try { return localStorage.getItem('monie_dprov_' + id) || ''; } catch (e) { return ''; } }
 function _setDetteProv(id, v) { try { if (v) localStorage.setItem('monie_dprov_' + id, v); else localStorage.removeItem('monie_dprov_' + id); } catch (e) {} }
+// 🏷 Catégorie d'un paiement (Mode, Cosmétique, Voyage…) : stockée EN LOCAL
+const DETTE_CATS = ['Mode', 'Cosmétique', 'Beauté', 'Voyage', 'Maison', 'Tech', 'Santé', 'Loisirs', 'Autre'];
+const _CAT_COLOR = { Mode: '#E76F51', 'Cosmétique': '#C77DBB', 'Beauté': '#E5679B', Voyage: '#3E8EDE', Maison: '#7FB89E', Tech: '#6B7280', 'Santé': '#2BB673', Loisirs: '#E8A317', Autre: '#8A8A8A' };
+function _detteCat(id) { try { return localStorage.getItem('monie_dcat_' + id) || ''; } catch (e) { return ''; } }
+function _setDetteCat(id, v) { try { if (v) localStorage.setItem('monie_dcat_' + id, v); else localStorage.removeItem('monie_dcat_' + id); } catch (e) {} }
+function setDetteCat(id, v) { _setDetteCat(id, v === _detteCat(id) ? '' : v); renderDettes(); }
+function _catBadge(id) { const c = _detteCat(id); if (!c) return ''; const col = _CAT_COLOR[c] || '#8A8A8A'; return ` <span style="font-size:9px;font-weight:800;padding:1px 7px;border-radius:100px;background:${col}22;color:${col};vertical-align:middle">${esc(c)}</span>`; }
+function _detteFormCat(btn, c) {
+  const i = document.getElementById('dette-cat'); if (!i) return;
+  i.value = (i.value === c) ? '' : c;
+  document.querySelectorAll('.dcat-choice').forEach(b => { b.style.background = 'var(--bg)'; b.style.color = 'var(--muted)'; b.style.borderColor = 'var(--border-soft)'; });
+  if (i.value) { const col = _CAT_COLOR[c] || '#8A8A8A'; btn.style.background = col; btn.style.color = '#fff'; btn.style.borderColor = col; }
+}
+let _detteCatFilter = '';
+function setDetteCatFilter(c) { _detteCatFilter = (_detteCatFilter === c) ? '' : c; _detteSelMonth = null; renderDettes(); }
 // 👤 Paiement fait POUR quelqu'un d'autre (nom optionnel) → exclu de MES totaux. Stocké EN LOCAL.
 function _detteFor(id) { try { return localStorage.getItem('monie_dfor_' + id) || ''; } catch (e) { return ''; } }
 function _setDetteFor(id, v) { try { if (v) localStorage.setItem('monie_dfor_' + id, v); else localStorage.removeItem('monie_dfor_' + id); } catch (e) {} }
@@ -7336,12 +7357,28 @@ function _provBadge(id) {
   const textDark = (p === 'Klarna' || p === 'Scalapay' || p === 'Oney'); // fonds clairs → texte foncé
   return ` <span style="font-size:9px;font-weight:800;padding:1px 6px;border-radius:100px;background:${c};color:${textDark ? '#222' : '#fff'};vertical-align:middle">${esc(p)}</span>`;
 }
+// Override manuel de l'échéance actuelle ("cur/tot") en localStorage
+function _detteEch(id) { try { const v = localStorage.getItem('monie_dech_' + id); if (!v) return null; const parts = v.split('/').map(Number); const tot = parts[1]; if (!tot || tot < 1) return null; return { cur: Math.max(0, parts[0] || 0), tot: Math.max(1, tot) }; } catch (e) { return null; } }
+function _setDetteEchRaw(id, cur, tot) { try { if (tot > 0) localStorage.setItem('monie_dech_' + id, `${Math.max(0, cur)}/${Math.max(1, tot)}`); else localStorage.removeItem('monie_dech_' + id); } catch (e) {} }
+function setDetteEchPart(id, which, val) {
+  const c = _detteCounts(dettesList.find(x => x.id === id) || {});
+  const ov = _detteEch(id);
+  let cur = ov ? ov.cur : (c.nbPaid || 0), tot = ov ? ov.tot : (c.nbTotal || 1);
+  const n = Math.max(0, parseInt(val) || 0);
+  if (which === 'cur') cur = n; else tot = Math.max(1, n);
+  if (cur > tot) cur = tot;
+  _setDetteEchRaw(id, cur, tot); renderDettes();
+}
+function clearDetteEch(id) { _setDetteEchRaw(id, 0, 0); renderDettes(); }
 function _detteCounts(d) {
   const total = Number(d.montant_total) || 0, paid = Number(d.deja_paye || 0), mens = Number(d.mensualite) || 0;
-  const reste = Math.max(0, total - paid);
-  const nbTotal = mens > 0 ? Math.max(1, Math.round(total / mens)) : null;
-  const nbPaid = nbTotal != null ? Math.min(nbTotal, Math.round(paid / mens)) : null;
+  let nbTotal = mens > 0 ? Math.max(1, Math.round(total / mens)) : null;
+  let nbPaid = nbTotal != null ? Math.min(nbTotal, Math.round(paid / mens)) : null;
+  const ov = d && d.id ? _detteEch(d.id) : null; // override manuel prioritaire
+  if (ov) { nbTotal = ov.tot; nbPaid = Math.min(ov.tot, ov.cur); }
   const nbRest = nbTotal != null ? Math.max(0, nbTotal - nbPaid) : null;
+  // reste : si override d'échéances, on le déduit des échéances restantes × mensualité
+  const reste = ov ? Math.max(0, nbRest * mens) : Math.max(0, total - paid);
   return { total, paid, mens, reste, nbTotal, nbPaid, nbRest };
 }
 // Échéances FUTURES d'un paiement → [{mk:'YYYY-MM', amount}]. Si pas de date : à partir de ce mois-ci.
@@ -7388,8 +7425,11 @@ function renderDettes() {
   const provsUsed = [...new Set(dettesList.map(d => _detteProv(d.id)).filter(Boolean))];
   if (_detteProvFilter && !provsUsed.includes(_detteProvFilter)) _detteProvFilter = ''; // filtre devenu vide → reset
   const provFilter = d => !_detteProvFilter || _detteProv(d.id) === _detteProvFilter;
-  const active = dettesList.filter(d => _detteCounts(d).reste > 0 && provFilter(d));
-  const soldes = dettesList.filter(d => _detteCounts(d).reste <= 0 && provFilter(d));
+  const catsUsed = [...new Set(dettesList.map(d => _detteCat(d.id)).filter(Boolean))];
+  if (_detteCatFilter && !catsUsed.includes(_detteCatFilter)) _detteCatFilter = '';
+  const catFilter = d => !_detteCatFilter || _detteCat(d.id) === _detteCatFilter;
+  const active = dettesList.filter(d => _detteCounts(d).reste > 0 && provFilter(d) && catFilter(d));
+  const soldes = dettesList.filter(d => _detteCounts(d).reste <= 0 && provFilter(d) && catFilter(d));
   const MS = (typeof MONTHS_SHORT !== 'undefined') ? MONTHS_SHORT : MONTHS;
   const mLabel = mk => `${MS[parseInt(mk.slice(5, 7)) - 1]} ${mk.slice(0, 4)}`;
   const nowKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
@@ -7453,7 +7493,7 @@ function renderDettes() {
       ${s.items.map(it => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border-soft)">
         <div style="display:flex;align-items:center;gap:8px;min-width:0">
           ${isCur && _dettePayMode ? `<input type="checkbox" ${_dettePayChecked.has(it.id) ? 'checked' : ''} onclick="toggleDettePayCheck('${it.id}')" style="width:18px;height:18px;flex:0 0 auto">` : ''}
-          <span style="font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.nom)}${_provBadge(it.id)}</span>
+          <span style="font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.nom)}${_provBadge(it.id)}${_catBadge(it.id)}</span>
         </div>
         ${isCur && !_dettePayMode ? `<button class="goal-btn" onclick="payDette('${it.id}')" style="flex:0 0 auto">payer ${fmt(it.amount)}</button>` : `<span style="font-size:12px;color:var(--muted);font-family:var(--fm);flex:0 0 auto">${fmt(it.amount)}</span>`}
       </div>`).join('')}
@@ -7489,9 +7529,9 @@ function renderDettes() {
       <div style="display:flex;align-items:center;gap:8px;padding:9px 0">
         ${_detteSelectMode ? `<input type="checkbox" ${_detteChecked.has(d.id) ? 'checked' : ''} onclick="toggleDetteCheck('${d.id}')" style="width:19px;height:19px;flex:0 0 auto">` : ''}
         <div onclick="${rowClick}" style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer">
-          ${_donutSVG(c.paid, c.total, 38, c.reste === 0 ? 'var(--sage)' : 'var(--gold)', centerLabel)}
+          ${_donutSVG(c.nbTotal != null ? c.nbPaid : c.paid, c.nbTotal != null ? c.nbTotal : c.total, 38, c.reste === 0 ? 'var(--sage)' : 'var(--gold)', centerLabel)}
           <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.nom)}${_provBadge(d.id)}${_forBadge(d.id)}${c.reste === 0 ? ' <span style="font-size:10px;color:var(--sage)">soldé 🎉</span>' : ''}</div>
+            <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.nom)}${_provBadge(d.id)}${_catBadge(d.id)}${_forBadge(d.id)}${c.reste === 0 ? ' <span style="font-size:10px;color:var(--sage)">soldé 🎉</span>' : ''}</div>
             <div style="font-size:11px;color:var(--muted)">${c.reste > 0 ? `reste ${fmt(c.reste)} · ${fmt(c.mens)}/mois` : `${fmt(c.total)} remboursés`}</div>
           </div>
         </div>
@@ -7503,6 +7543,17 @@ function renderDettes() {
         <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:8px">
           <span style="font-size:11px;color:var(--muted)">Fournisseur :</span>
           ${DETTE_PROVIDERS.map(p => `<span onclick="setDetteProv('${d.id}','${p}')" style="cursor:pointer;font-size:11px;padding:2px 8px;border-radius:100px;${_detteProv(d.id) === p ? `background:${_PROV_COLOR[p]};color:${(p === 'Klarna' || p === 'Scalapay' || p === 'Oney') ? '#222' : '#fff'};font-weight:800` : 'border:1px solid var(--border-soft);color:var(--muted)'}">${p}</span>`).join('')}
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--muted)">Catégorie :</span>
+          ${DETTE_CATS.map(cc => `<span onclick="setDetteCat('${d.id}','${cc}')" style="cursor:pointer;font-size:11px;padding:2px 8px;border-radius:100px;${_detteCat(d.id) === cc ? `background:${_CAT_COLOR[cc]};color:#fff;font-weight:800` : 'border:1px solid var(--border-soft);color:var(--muted)'}">${cc}</span>`).join('')}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--muted)">Échéance actuelle :</span>
+          <input type="number" min="0" value="${c.nbPaid != null ? c.nbPaid : 0}" onchange="setDetteEchPart('${d.id}','cur',this.value)" style="width:46px;padding:4px 6px;font-size:12px;border:1.5px solid var(--border);border-radius:6px;text-align:center;font-weight:700;font-family:var(--fm);background:#fff;color:var(--ink)">
+          <span style="font-size:12px;color:var(--muted)">/</span>
+          <input type="number" min="1" value="${c.nbTotal != null ? c.nbTotal : 1}" onchange="setDetteEchPart('${d.id}','tot',this.value)" style="width:46px;padding:4px 6px;font-size:12px;border:1.5px solid var(--border);border-radius:6px;text-align:center;font-weight:700;font-family:var(--fm);background:#fff;color:var(--ink)">
+          ${_detteEch(d.id) ? `<span onclick="clearDetteEch('${d.id}')" style="font-size:11px;color:var(--tender-rose);cursor:pointer">auto</span>` : '<span style="font-size:10px;color:var(--muted)">(auto)</span>'}
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
           <span style="font-size:11px;color:var(--muted)">1ʳᵉ échéance :</span>
@@ -7530,7 +7581,13 @@ function renderDettes() {
     <span onclick="setDetteProvFilter('')" style="cursor:pointer;font-size:11px;font-weight:700;padding:3px 11px;border-radius:100px;${!_detteProvFilter ? 'background:var(--plum);color:#fff' : 'border:1px solid var(--border-soft);color:var(--muted)'}">Tous</span>
     ${provsUsed.map(p => { const dark = (p === 'Klarna' || p === 'Scalapay' || p === 'Oney'); const on = _detteProvFilter === p; return `<span onclick="setDetteProvFilter('${p}')" style="cursor:pointer;font-size:11px;font-weight:800;padding:3px 11px;border-radius:100px;${on ? `background:${_PROV_COLOR[p]};color:${dark ? '#222' : '#fff'}` : `border:1px solid ${_PROV_COLOR[p]};color:${_PROV_COLOR[p]}`}">${p}</span>`; }).join('')}
   </div>` : '';
-  el.innerHTML = autoBanner + summary + provFilterHtml + echeancierHtml + payerHtml + searchHtml + tabsHtml + toolbarHtml + rowsHtml;
+  // Filtre par catégorie (Tous / Mode / Voyage…)
+  const catFilterHtml = catsUsed.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+    <span style="font-size:11px;color:var(--muted)">Catégorie :</span>
+    <span onclick="setDetteCatFilter('')" style="cursor:pointer;font-size:11px;font-weight:700;padding:3px 11px;border-radius:100px;${!_detteCatFilter ? 'background:var(--plum);color:#fff' : 'border:1px solid var(--border-soft);color:var(--muted)'}">Toutes</span>
+    ${catsUsed.map(cc => { const on = _detteCatFilter === cc; return `<span onclick="setDetteCatFilter('${cc}')" style="cursor:pointer;font-size:11px;font-weight:800;padding:3px 11px;border-radius:100px;${on ? `background:${_CAT_COLOR[cc]};color:#fff` : `border:1px solid ${_CAT_COLOR[cc]};color:${_CAT_COLOR[cc]}`}">${cc}</span>`; }).join('')}
+  </div>` : '';
+  el.innerHTML = autoBanner + summary + provFilterHtml + catFilterHtml + echeancierHtml + payerHtml + searchHtml + tabsHtml + toolbarHtml + rowsHtml;
 }
 function toggleDetteSelectMode() { _detteSelectMode = !_detteSelectMode; _detteChecked.clear(); renderDettes(); }
 function toggleDetteCheck(id) { if (_detteChecked.has(id)) _detteChecked.delete(id); else _detteChecked.add(id); renderDettes(); }
