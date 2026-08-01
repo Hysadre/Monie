@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v134'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v135'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -4929,7 +4929,7 @@ async function renderSuivi() {
   let prevPatTot = null; // pour évolution vs N-1 (sur le solde de fin de mois)
   const chartLabels = [], chartData = [];
   for (let m = 0; m < 12; m++) {
-    if (new Date(year, m, 1) > new Date(now.getFullYear(), now.getMonth() + 1, 1)) break;
+    // On affiche TOUS les mois de l'année sélectionnée (les mois à venir restent vides à remplir)
     const key = `${year}-${String(m + 1).padStart(2, '0')}`;
     const r = suiviData[key] || {};
     // Épargne = Livret A + LDDS + Assurance vie + Esalia + Investissements
@@ -4962,7 +4962,7 @@ async function renderSuivi() {
     const inp = (col) => `<td><input class="suivi-inp" type="number" step="0.01" value="${r[col] > 0 ? r[col] : ''}" placeholder="0" oninput="saveSuivi('${key}','${col}',this.value)"></td>`;
     body.innerHTML += `<tr data-month="${key}">
       <td>${moisCell}</td>
-      ${inp('lcl')}${inp('bourso')}${inp('especes')}${inp('banque_postale')}${inp('autre')}
+      ${inp('lcl')}${inp('bourso')}${inp('especes')}${inp('banque_postale')}
       ${inp('livret_a')}${inp('ldds')}${inp('assurance_vie')}${inp('esalia')}${inp('investissements')}
       <td style="font-weight:700;color:var(--plum);background:var(--lavender-soft)" title="Livret A + LDDS + Assurance vie + Esalia + Investissements">${epargneTot > 0 ? fmt(epargneTot) : '—'}</td>
       <td style="font-weight:800;color:var(--ink);background:linear-gradient(135deg,#FFEDE5,#E7F3EC)" title="Comptes courants + épargne">${patTot > 0 ? fmt(patTot) : '—'}</td>
