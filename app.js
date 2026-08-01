@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v124'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v125'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5102,8 +5102,8 @@ function renderEpargne() {
   const activeList = $('goals-active-list');
   set('goals-active-count', active.length);
   const tabBar = `<div style="display:flex;gap:8px;margin-bottom:14px">
-    <span onclick="switchEpargneTab('objectif')" style="flex:1;text-align:center;cursor:pointer;font-size:13px;font-weight:700;padding:9px;border-radius:10px;${_epargneTab === 'objectif' ? 'background:var(--sage);color:#fff' : 'background:var(--bg);color:var(--muted);border:1px solid var(--border-soft)'}">🎯 Objectifs ${activeObj.length}</span>
-    <span onclick="switchEpargneTab('portefeuille')" style="flex:1;text-align:center;cursor:pointer;font-size:13px;font-weight:700;padding:9px;border-radius:10px;${_epargneTab === 'portefeuille' ? 'background:var(--plum);color:#fff' : 'background:var(--bg);color:var(--muted);border:1px solid var(--border-soft)'}">👛 Portefeuilles ${activePorte.length}</span>
+    <span onclick="switchEpargneTab('objectif')" style="flex:1;text-align:center;cursor:pointer;font-size:13px;font-weight:700;padding:9px;border-radius:10px;${_epargneTab === 'objectif' ? 'background:var(--sage);color:#fff' : 'background:var(--bg);color:var(--muted);border:1px solid var(--border-soft)'}">🎯 Objectifs (${activeObj.length})</span>
+    <span onclick="switchEpargneTab('portefeuille')" style="flex:1;text-align:center;cursor:pointer;font-size:13px;font-weight:700;padding:9px;border-radius:10px;${_epargneTab === 'portefeuille' ? 'background:var(--plum);color:#fff' : 'background:var(--bg);color:var(--muted);border:1px solid var(--border-soft)'}">👛 Portefeuilles (${activePorte.length})</span>
   </div>`;
   if (!shown.length) {
     activeList.innerHTML = tabBar + `
@@ -5531,15 +5531,18 @@ async function postponeGoal(id) {
 }
 
 async function reactivateGoal(id) {
-  const g = goalsList.find(x => x.id === id);
   const r = await dbGuard(sb.from('epargne_objectifs').update({ statut: 'en_cours' }).eq('id', id).select(), 'Réactivation impossible');
   if (!r.ok) return;
   if (!r.data || !r.data.length) { toast('Objectif introuvable (déjà supprimé ?)', 'error'); return; }
-  if (g) g.statut = 'en_cours';                 // maj optimiste locale → l'objectif bouge tout de suite
-  showAchieved = true; showAbandoned = true;    // on garde les tiroirs ouverts pour qu'elle voie le changement
-  await loadGoals();
+  const updated = r.data[0]; // ligne telle qu'enregistrée en base (reflète le vrai statut)
+  const idx = goalsList.findIndex(x => x.id === id);
+  if (idx >= 0) goalsList[idx] = { ...goalsList[idx], ...updated };
+  else goalsList.push(updated);
+  // Sécurité : si la base n'a pas appliqué le changement, on le dit clairement au lieu d'un faux succès
+  if (updated.statut !== 'en_cours') { renderEpargne(); toast('⚠️ La base n\'a pas accepté la réactivation (statut : ' + updated.statut + ')', 'error'); return; }
+  _epargneTab = _goalType(id); // bascule sur le bon onglet pour qu'elle voie l'objectif revenir
   renderEpargne();
-  toast('✓ Objectif réactivé 🌱 — il est de retour dans « en cours »', 'success');
+  toast('✓ Objectif réactivé 🌱 — de retour dans « en cours »', 'success');
 }
 
 // 📈 Popup : évolution mois par mois de l'épargne d'un objectif (cumul + mois sans épargne)
@@ -7405,7 +7408,7 @@ function renderDettes() {
         <span style="font-size:13px;font-weight:800;font-family:var(--fm);color:var(--plum)">${fmt(s.total)}</span>
       </div>
       ${s.items.map(it => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border-soft)">
-        <span style="font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.nom)}</span>
+        <span style="font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.nom)}${_provBadge(it.id)}</span>
         ${isCur ? `<button class="goal-btn" onclick="payDette('${it.id}')" style="flex:0 0 auto">payer ${fmt(it.amount)}</button>` : `<span style="font-size:12px;color:var(--muted);font-family:var(--fm);flex:0 0 auto">${fmt(it.amount)}</span>`}
       </div>`).join('')}
     </div>`;
@@ -7418,8 +7421,8 @@ function renderDettes() {
     ? `<div style="margin-bottom:10px"><input class="inp" placeholder="🔍 Rechercher un paiement…" value="${esc(_detteSearch)}" oninput="_detteSearch=this.value;renderDettes()" style="width:100%;padding:8px 10px;font-size:13px"></div>`
     : '';
   const tabsHtml = `<div style="display:flex;gap:6px;margin-bottom:8px">
-    <span onclick="_detteTab='encours';renderDettes()" style="cursor:pointer;font-size:12px;font-weight:700;padding:4px 12px;border-radius:100px;${_detteTab === 'encours' ? 'background:var(--plum);color:#fff' : 'border:1px solid var(--border-soft);color:var(--muted)'}">En cours ${active.length}</span>
-    <span onclick="_detteTab='soldes';renderDettes()" style="cursor:pointer;font-size:12px;font-weight:700;padding:4px 12px;border-radius:100px;${_detteTab === 'soldes' ? 'background:var(--sage);color:#fff' : 'border:1px solid var(--border-soft);color:var(--muted)'}">Soldés ${soldes.length}</span>
+    <span onclick="_detteTab='encours';renderDettes()" style="cursor:pointer;font-size:12px;font-weight:700;padding:4px 12px;border-radius:100px;${_detteTab === 'encours' ? 'background:var(--plum);color:#fff' : 'border:1px solid var(--border-soft);color:var(--muted)'}">En cours (${active.length})</span>
+    <span onclick="_detteTab='soldes';renderDettes()" style="cursor:pointer;font-size:12px;font-weight:700;padding:4px 12px;border-radius:100px;${_detteTab === 'soldes' ? 'background:var(--sage);color:#fff' : 'border:1px solid var(--border-soft);color:var(--muted)'}">Soldés (${soldes.length})</span>
   </div>`;
   // Barre : sélection multiple (supprimer plusieurs d'un coup)
   const toolbarHtml = list.length ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;min-height:26px">
