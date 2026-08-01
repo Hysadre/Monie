@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v122'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v123'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -7186,9 +7186,9 @@ function openDetteForm(existing) {
     if (d.id) res = await dbGuard(sb.from('dettes').update(payload).eq('id', d.id).select(), 'Maj impossible');
     else res = await dbGuard(sb.from('dettes').insert(payload).select(), 'Ajout impossible (SQL-V317 lancé ?)');
     if (!res.ok) return false;
-    // Date de 1ère échéance : en local (localStorage), aucune colonne Supabase
+    // Date de 1ère échéance + fournisseur : en local (localStorage), aucune colonne Supabase
     const savedId = d.id || (res.data && res.data[0] && res.data[0].id);
-    if (savedId) _setDetteStart(savedId, startVal || null);
+    if (savedId) { _setDetteStart(savedId, startVal || null); _setDetteProv(savedId, ($('dette-prov') && $('dette-prov').value) || ''); }
     await loadExtra(); renderDettes(); toast('✓ Enregistré', 'success');
   }, `<div style="display:flex;flex-direction:column;gap:10px">
     <div class="auth-field"><label>Nom</label><input class="inp" id="dette-nom" value="${esc(d.nom || '')}" placeholder="Ex: Klarna canapé, Prêt"></div>
@@ -7196,6 +7196,12 @@ function openDetteForm(existing) {
     <div class="auth-field"><label>Mensualité (€)</label><input class="inp" id="dette-mens" type="number" step="1" value="${d.mensualite || ''}"></div>
     <div class="auth-field"><label>Déjà payé (€)</label><input class="inp" id="dette-deja" type="number" step="1" value="${d.deja_paye || 0}"></div>
     <div class="auth-field"><label>1ʳᵉ échéance <span style="font-weight:400;color:var(--muted);font-size:11px">(optionnel — pour l'échéancier)</span></label><input class="inp" id="dette-start" type="date" value="${esc(d.id ? (_detteStart(d.id) || '') : '')}"></div>
+    <div class="auth-field"><label>Fournisseur <span style="font-weight:400;color:var(--muted);font-size:11px">(optionnel)</span></label>
+      <input type="hidden" id="dette-prov" value="${esc(d.id ? (_detteProv(d.id) || '') : '')}">
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        ${DETTE_PROVIDERS.map(p => { const on = d.id && _detteProv(d.id) === p; const dark = (p === 'Klarna' || p === 'Scalapay' || p === 'Oney'); return `<button type="button" onclick="_detteFormProv(this,'${p}')" class="prov-choice" style="cursor:pointer;font-size:12px;padding:5px 12px;border-radius:100px;border:1.5px solid ${on ? _PROV_COLOR[p] : 'var(--border-soft)'};background:${on ? _PROV_COLOR[p] : 'var(--bg)'};color:${on ? (dark ? '#222' : '#fff') : 'var(--muted)'}">${p}</button>`; }).join('')}
+      </div>
+    </div>
   </div>`);
 }
 async function payDette(id) {
@@ -7235,9 +7241,29 @@ let _detteSearch = '';
 let _detteTab = 'encours';   // 'encours' | 'soldes'
 let _detteSelMonth = null;   // mois sélectionné dans l'échéancier (YYYY-MM)
 let _detteOpen = new Set();  // ids des lignes dépliées
+let _detteSelectMode = false; // mode sélection multiple pour suppression
+let _detteChecked = new Set(); // ids cochés en mode sélection
 // Date de 1ère échéance : stockée EN LOCAL (localStorage) → aucune donnée touchée côté Supabase
 function _detteStart(id) { try { return localStorage.getItem('monie_dsched_' + id) || null; } catch (e) { return null; } }
 function _setDetteStart(id, iso) { try { if (iso) localStorage.setItem('monie_dsched_' + id, iso); else localStorage.removeItem('monie_dsched_' + id); } catch (e) {} }
+// 🏷 Fournisseur (PayPal, Klarna…) : stocké EN LOCAL, aucune colonne Supabase
+const DETTE_PROVIDERS = ['PayPal', 'Klarna', 'Scalapay', 'Alma', 'Oney', 'Floa', 'Cofidis', 'Autre'];
+const _PROV_COLOR = { PayPal: '#003087', Klarna: '#FFB3C7', Scalapay: '#C4F135', Alma: '#FA5022', Oney: '#93D500', Floa: '#E5007D', Cofidis: '#E2001A', Autre: '#8A8A8A' };
+function _detteProv(id) { try { return localStorage.getItem('monie_dprov_' + id) || ''; } catch (e) { return ''; } }
+function _setDetteProv(id, v) { try { if (v) localStorage.setItem('monie_dprov_' + id, v); else localStorage.removeItem('monie_dprov_' + id); } catch (e) {} }
+// Sélecteur de fournisseur dans le formulaire (toggle + restyle)
+function _detteFormProv(btn, p) {
+  const i = document.getElementById('dette-prov'); if (!i) return;
+  i.value = (i.value === p) ? '' : p;
+  document.querySelectorAll('.prov-choice').forEach(b => { b.style.background = 'var(--bg)'; b.style.color = 'var(--muted)'; b.style.borderColor = 'var(--border-soft)'; });
+  if (i.value) { const c = _PROV_COLOR[p] || '#8A8A8A'; btn.style.background = c; btn.style.color = (p === 'Klarna' || p === 'Scalapay' || p === 'Oney') ? '#222' : '#fff'; btn.style.borderColor = c; }
+}
+function _provBadge(id) {
+  const p = _detteProv(id); if (!p) return '';
+  const c = _PROV_COLOR[p] || '#8A8A8A';
+  const textDark = (p === 'Klarna' || p === 'Scalapay' || p === 'Oney'); // fonds clairs → texte foncé
+  return ` <span style="font-size:9px;font-weight:800;padding:1px 6px;border-radius:100px;background:${c};color:${textDark ? '#222' : '#fff'};vertical-align:middle">${esc(p)}</span>`;
+}
 function _detteCounts(d) {
   const total = Number(d.montant_total) || 0, paid = Number(d.deja_paye || 0), mens = Number(d.mensualite) || 0;
   const reste = Math.max(0, total - paid);
@@ -7353,24 +7379,40 @@ function renderDettes() {
     <span onclick="_detteTab='encours';renderDettes()" style="cursor:pointer;font-size:12px;font-weight:700;padding:4px 12px;border-radius:100px;${_detteTab === 'encours' ? 'background:var(--plum);color:#fff' : 'border:1px solid var(--border-soft);color:var(--muted)'}">En cours ${active.length}</span>
     <span onclick="_detteTab='soldes';renderDettes()" style="cursor:pointer;font-size:12px;font-weight:700;padding:4px 12px;border-radius:100px;${_detteTab === 'soldes' ? 'background:var(--sage);color:#fff' : 'border:1px solid var(--border-soft);color:var(--muted)'}">Soldés ${soldes.length}</span>
   </div>`;
+  // Barre : sélection multiple (supprimer plusieurs d'un coup)
+  const toolbarHtml = list.length ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;min-height:26px">
+    ${_detteSelectMode
+      ? `<span onclick="toggleDetteSelectMode()" style="cursor:pointer;font-size:12px;color:var(--muted)">✕ Annuler</span>
+         <button class="goal-btn danger" onclick="deleteSelectedDettes()" style="${_detteChecked.size ? '' : 'opacity:.45;pointer-events:none'}">🗑 Supprimer (${_detteChecked.size})</button>`
+      : `<span></span><span onclick="toggleDetteSelectMode()" style="cursor:pointer;font-size:12px;color:var(--plum);font-weight:700">☑︎ Sélectionner</span>`}
+  </div>` : '';
   const rowsHtml = list.length ? list.map(d => {
     const c = _detteCounts(d);
-    const open = _detteOpen.has(d.id);
+    const open = _detteOpen.has(d.id) && !_detteSelectMode;
     const centerLabel = c.nbTotal != null ? `${c.nbPaid}/${c.nbTotal}` : null;
     const startISO = _detteStart(d.id);
     const sc = _detteSchedule(d);
     const nextTxt = sc.length ? `prochaine échéance : ${mLabel(sc[0].mk)}` : '';
+    const rowClick = _detteSelectMode ? `toggleDetteCheck('${d.id}')` : `toggleDetteOpen('${d.id}')`;
     return `<div style="border-top:1px solid var(--border-soft)">
-      <div onclick="toggleDetteOpen('${d.id}')" style="display:flex;align-items:center;gap:10px;padding:9px 0;cursor:pointer">
-        ${_donutSVG(c.paid, c.total, 38, c.reste === 0 ? 'var(--sage)' : 'var(--gold)', centerLabel)}
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.nom)}${c.reste === 0 ? ' <span style="font-size:10px;color:var(--sage)">soldé 🎉</span>' : ''}</div>
-          <div style="font-size:11px;color:var(--muted)">${c.reste > 0 ? `reste ${fmt(c.reste)} · ${fmt(c.mens)}/mois` : `${fmt(c.total)} remboursés`}</div>
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 0">
+        ${_detteSelectMode ? `<input type="checkbox" ${_detteChecked.has(d.id) ? 'checked' : ''} onclick="toggleDetteCheck('${d.id}')" style="width:19px;height:19px;flex:0 0 auto">` : ''}
+        <div onclick="${rowClick}" style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer">
+          ${_donutSVG(c.paid, c.total, 38, c.reste === 0 ? 'var(--sage)' : 'var(--gold)', centerLabel)}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.nom)}${_provBadge(d.id)}${c.reste === 0 ? ' <span style="font-size:10px;color:var(--sage)">soldé 🎉</span>' : ''}</div>
+            <div style="font-size:11px;color:var(--muted)">${c.reste > 0 ? `reste ${fmt(c.reste)} · ${fmt(c.mens)}/mois` : `${fmt(c.total)} remboursés`}</div>
+          </div>
         </div>
-        <span style="font-size:14px;color:var(--muted);flex:0 0 auto">${open ? '▾' : '▸'}</span>
+        ${!_detteSelectMode ? `<button onclick="quickDeleteDette('${d.id}')" title="Supprimer ce paiement" style="background:none;border:none;color:var(--tender-rose);cursor:pointer;font-size:15px;flex:0 0 auto;padding:4px">🗑</button>
+        <span onclick="toggleDetteOpen('${d.id}')" style="font-size:14px;color:var(--muted);flex:0 0 auto;cursor:pointer;padding:2px">${open ? '▾' : '▸'}</span>` : ''}
       </div>
       ${open ? `<div style="padding:2px 0 12px 48px">
         ${nextTxt ? `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">🗓 ${nextTxt}</div>` : ''}
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--muted)">Fournisseur :</span>
+          ${DETTE_PROVIDERS.map(p => `<span onclick="setDetteProv('${d.id}','${p}')" style="cursor:pointer;font-size:11px;padding:2px 8px;border-radius:100px;${_detteProv(d.id) === p ? `background:${_PROV_COLOR[p]};color:${(p === 'Klarna' || p === 'Scalapay' || p === 'Oney') ? '#222' : '#fff'};font-weight:800` : 'border:1px solid var(--border-soft);color:var(--muted)'}">${p}</span>`).join('')}
+        </div>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px">
           <span style="font-size:11px;color:var(--muted)">1ʳᵉ échéance :</span>
           <input type="date" value="${startISO || ''}" onchange="setDetteStart('${d.id}',this.value)" style="padding:4px 6px;font-size:12px;border:1.5px solid var(--border);border-radius:6px;background:#fff;color:var(--ink)">
@@ -7385,7 +7427,31 @@ function renderDettes() {
     </div>`;
   }).join('') : `<div class="empty-sub" style="padding:14px 0;text-align:center">${_detteTab === 'soldes' ? 'Aucun paiement soldé.' : (q ? 'Aucun paiement trouvé.' : 'Aucun paiement en cours 🎉')}</div>`;
 
-  el.innerHTML = autoBanner + summary + echeancierHtml + payerHtml + searchHtml + tabsHtml + rowsHtml;
+  el.innerHTML = autoBanner + summary + echeancierHtml + payerHtml + searchHtml + tabsHtml + toolbarHtml + rowsHtml;
+}
+function toggleDetteSelectMode() { _detteSelectMode = !_detteSelectMode; _detteChecked.clear(); renderDettes(); }
+function toggleDetteCheck(id) { if (_detteChecked.has(id)) _detteChecked.delete(id); else _detteChecked.add(id); renderDettes(); }
+function setDetteProv(id, v) { _setDetteProv(id, v === _detteProv(id) ? '' : v); renderDettes(); }
+async function quickDeleteDette(id) {
+  const d = dettesList.find(x => x.id === id);
+  confirmDelete(`Supprimer « ${esc(d ? d.nom : 'ce paiement')} » ?`, async () => {
+    const r = await dbGuard(sb.from('dettes').delete().eq('id', id), 'Suppression impossible');
+    if (!r.ok) return;
+    _setDetteStart(id, ''); _setDetteProv(id, '');
+    dettesList = dettesList.filter(x => x.id !== id);
+    renderDettes(); toast('✓ Paiement supprimé', 'success');
+  });
+}
+async function deleteSelectedDettes() {
+  const ids = [..._detteChecked]; if (!ids.length) return;
+  confirmDelete(`Supprimer ${ids.length} paiement(s) sélectionné(s) ?`, async () => {
+    const r = await dbGuard(sb.from('dettes').delete().in('id', ids), 'Suppression impossible');
+    if (!r.ok) return;
+    ids.forEach(id => { _setDetteStart(id, ''); _setDetteProv(id, ''); });
+    dettesList = dettesList.filter(x => !_detteChecked.has(x.id));
+    _detteChecked.clear(); _detteSelectMode = false;
+    renderDettes(); toast(`✓ ${ids.length} paiement(s) supprimé(s)`, 'success');
+  });
 }
 
 // ═══ 🔥 GAMIFICATION (séries + badges) ═══
