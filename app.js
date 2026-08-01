@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v123'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v124'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5054,6 +5054,12 @@ async function resyncSuivi() {
 }
 
 // ═══ ÉPARGNE ═══════════════════════════════════════════════════
+// 🎯 Objectif (cible + date) vs 👛 Portefeuille (enveloppe sans cible obligatoire).
+// Type stocké EN LOCAL (localStorage), défaut = objectif. Aucune colonne Supabase.
+let _epargneTab = 'objectif';
+function _goalType(id) { try { return localStorage.getItem('monie_goaltype_' + id) || 'objectif'; } catch (e) { return 'objectif'; } }
+function _setGoalType(id, t) { try { localStorage.setItem('monie_goaltype_' + id, t === 'portefeuille' ? 'portefeuille' : 'objectif'); } catch (e) {} }
+function switchEpargneTab(t) { _epargneTab = (t === 'portefeuille') ? 'portefeuille' : 'objectif'; renderEpargne(); }
 function renderEpargne() {
   renderRemboursements();
   renderDettes();
@@ -5069,9 +5075,13 @@ function renderEpargne() {
   const active = goalsList.filter(g => g.statut === 'en_cours');
   const achieved = goalsList.filter(g => g.statut === 'atteint');
   const abandoned = goalsList.filter(g => g.statut === 'abandonne');
+  // Répartition Objectif / Portefeuille (onglets)
+  const activeObj = active.filter(g => _goalType(g.id) === 'objectif');
+  const activePorte = active.filter(g => _goalType(g.id) === 'portefeuille');
+  const shown = _epargneTab === 'portefeuille' ? activePorte : activeObj;
 
-  const totalCible = active.reduce((s, g) => s + Number(g.cible || 0), 0);
-  const totalEpargne = active.reduce((s, g) => s + Number(g.deja_epargne || 0), 0);
+  const totalCible = shown.reduce((s, g) => s + Number(g.cible || 0), 0);
+  const totalEpargne = shown.reduce((s, g) => s + Number(g.deja_epargne || 0), 0);
   const reste = Math.max(0, totalCible - totalEpargne);
 
   // KPI 1 : Épargné sur le mois sélectionné (flux type Épargne)
@@ -5079,7 +5089,7 @@ function renderEpargne() {
   set('ep-year-hint', `${MONTHS[epargneMonth]} ${epargneYear} · opérations type Épargne`);
   // KPI 2 : Cible active = somme des cibles de tous les objectifs en cours
   set('ep-cible', fmt(totalCible));
-  set('ep-cible-hint', `${active.length} objectif(s) en cours`);
+  set('ep-cible-hint', `${shown.length} ${_epargneTab === 'portefeuille' ? 'portefeuille(s)' : 'objectif(s)'} en cours`);
   // KPI 3 : Reste à épargner = cumul (toutes cibles − déjà épargné) des objectifs en cours
   set('ep-ecart', fmt(reste));
   set('ep-ecart-hint', totalCible > 0 ? `${Math.round(totalEpargne / totalCible * 100)}% des cibles atteint` : 'cumul de tes objectifs');
@@ -5088,18 +5098,22 @@ function renderEpargne() {
   set('ep-rate', rate + '%');
   if ($('ep-rate-hint')) set('ep-rate-hint', monthIn > 0 ? `${fmt(monthEpargneFlow)} / ${fmt(monthIn)} de revenus` : 'aucun revenu ce mois');
 
-  // Objectifs actifs
+  // Objectifs actifs — avec onglets 🎯 Objectifs / 👛 Portefeuilles
   const activeList = $('goals-active-list');
   set('goals-active-count', active.length);
-  if (!active.length) {
-    activeList.innerHTML = `
+  const tabBar = `<div style="display:flex;gap:8px;margin-bottom:14px">
+    <span onclick="switchEpargneTab('objectif')" style="flex:1;text-align:center;cursor:pointer;font-size:13px;font-weight:700;padding:9px;border-radius:10px;${_epargneTab === 'objectif' ? 'background:var(--sage);color:#fff' : 'background:var(--bg);color:var(--muted);border:1px solid var(--border-soft)'}">🎯 Objectifs ${activeObj.length}</span>
+    <span onclick="switchEpargneTab('portefeuille')" style="flex:1;text-align:center;cursor:pointer;font-size:13px;font-weight:700;padding:9px;border-radius:10px;${_epargneTab === 'portefeuille' ? 'background:var(--plum);color:#fff' : 'background:var(--bg);color:var(--muted);border:1px solid var(--border-soft)'}">👛 Portefeuilles ${activePorte.length}</span>
+  </div>`;
+  if (!shown.length) {
+    activeList.innerHTML = tabBar + `
       <div class="empty">
-        <div class="empty-emoji">🎯</div>
-        <div class="empty-title">Aucun objectif en cours</div>
-        <div class="empty-sub">Clique <b>+ Nouvel objectif</b> pour commencer à épargner intentionnellement</div>
+        <div class="empty-emoji">${_epargneTab === 'portefeuille' ? '👛' : '🎯'}</div>
+        <div class="empty-title">${_epargneTab === 'portefeuille' ? 'Aucun portefeuille' : 'Aucun objectif en cours'}</div>
+        <div class="empty-sub">${_epargneTab === 'portefeuille' ? 'Crée une enveloppe (vacances, cadeau…) via <b>+ Nouvel objectif</b> puis choisis le type <b>👛 Portefeuille</b>' : 'Clique <b>+ Nouvel objectif</b> pour commencer à épargner intentionnellement'}</div>
       </div>`;
   } else {
-    activeList.innerHTML = active.map(renderGoalCard).join('');
+    activeList.innerHTML = tabBar + shown.map(renderGoalCard).join('');
   }
 
   // Objectifs atteints
@@ -5126,6 +5140,8 @@ function renderEpargne() {
 function renderGoalCard(g, isAchieved = false, isAbandoned = false) {
   const pct = g.cible > 0 ? Math.min(100, Math.round(g.deja_epargne / g.cible * 100)) : 0;
   const reste = Math.max(0, Number(g.cible) - Number(g.deja_epargne));
+  // 👛 Portefeuille = enveloppe sans cible obligatoire (type stocké en local, ou pas de cible)
+  const isWallet = (typeof _goalType === 'function' && _goalType(g.id) === 'portefeuille') || !(Number(g.cible) > 0);
 
   // Contributions ce mois-ci sur ce goal
   const monthKey = `${epargneYear}-${String(epargneMonth + 1).padStart(2, '0')}`;
@@ -5218,6 +5234,11 @@ function renderGoalCard(g, isAchieved = false, isAbandoned = false) {
           <div class="goal-actions">${actions}</div>
         </div>
       </div>
+      ${isWallet ? `
+      <div class="goal-progress" style="display:flex;align-items:baseline;gap:8px;padding:6px 0 2px">
+        <div style="font-size:24px;font-weight:900;font-family:var(--fm);color:var(--plum)">${fmt(g.deja_epargne)}</div>
+        <div style="font-size:12px;color:var(--muted)">dans cette poche 👛${g.cible > 0 ? ` · objectif indicatif ${fmt(g.cible)}` : ''}</div>
+      </div>` : `
       <div class="goal-progress">
         <div class="goal-progress-bar">
           <div class="goal-progress-fill ${barClass}" style="width:${pct}%"></div>
@@ -5240,8 +5261,8 @@ function renderGoalCard(g, isAchieved = false, isAbandoned = false) {
           <div class="goal-meta-lbl">Rythme requis</div>
           <div class="goal-meta-val ${rythmeClass}">${rythmeInfo}</div>
         </div>
-      </div>
-      ${pct >= 100 && !isAchieved ? '<div class="goal-tip">🎉 Bravo ! Tu peux marquer cet objectif comme atteint</div>' : ''}
+      </div>`}
+      ${!isWallet && pct >= 100 && !isAchieved ? '<div class="goal-tip">🎉 Bravo ! Tu peux marquer cet objectif comme atteint</div>' : ''}
       ${!isAchieved && !isAbandoned && (monthTotal > 0 || cibleMensuelle > 0) ? `
         <div class="goal-tip" style="background:${monthAchieved ? 'var(--sage-soft)' : 'var(--peach-soft)'};color:${monthAchieved ? 'var(--sage)' : 'var(--peach)'}">
           ${monthAchieved ? '✅' : '⏳'} <b>${MONTHS[epargneMonth]} ${epargneYear}</b> · Contribué : <b>${fmt(monthTotal)}</b>${cibleMensuelle > 0 ? ` · Cible mensuelle : <b>${fmt(cibleMensuelle)}</b>` : ''}
@@ -5333,6 +5354,14 @@ function toggleAbandonedList() {
   $('toggle-abandoned-btn').textContent = showAbandoned ? 'Masquer' : 'Voir';
 }
 
+// Bascule le type dans le formulaire objectif/portefeuille
+function _pickGoalType(t) {
+  const i = document.getElementById('goal-form-type'); if (!i) return;
+  i.value = t;
+  const obj = document.getElementById('gtype-obj'), po = document.getElementById('gtype-porte');
+  if (obj) { const on = t === 'objectif'; obj.style.background = on ? 'var(--sage)' : 'var(--bg)'; obj.style.color = on ? '#fff' : 'var(--muted)'; obj.style.borderColor = on ? 'var(--sage)' : 'var(--border-soft)'; }
+  if (po) { const on = t === 'portefeuille'; po.style.background = on ? 'var(--plum)' : 'var(--bg)'; po.style.color = on ? '#fff' : 'var(--muted)'; po.style.borderColor = on ? 'var(--plum)' : 'var(--border-soft)'; }
+}
 function openGoalForm(existing) {
   const isEdit = !!existing;
   const emojisChoice = ['🎯','🌸','🏖️','💻','🚗','🏠','💍','🎓','👶','✈️','🎁','🚨','💐','📚','🌱','⛰️'];
@@ -5350,6 +5379,7 @@ function openGoalForm(existing) {
     'Définis ce vers quoi tu veux tendre',
     async () => {
       const nom = $('goal-form-nom').value.trim();
+      const type = ($('goal-form-type') && $('goal-form-type').value) || 'objectif';
       const cible = parseFloat($('goal-form-cible').value) || 0;
       const dejaEp = parseFloat($('goal-form-deja').value) || 0;
       const dateCible = $('goal-form-date').value || null;
@@ -5357,7 +5387,8 @@ function openGoalForm(existing) {
       const couleur = $('goal-form-color').value || '#7FB89E';
       const note = $('goal-form-note').value.trim();
       if (!nom) { toast('Nom requis', 'error'); return false; }
-      if (cible <= 0) { toast('Montant cible doit être > 0', 'error'); return false; }
+      // Objectif → cible obligatoire ; Portefeuille → cible optionnelle
+      if (type === 'objectif' && cible <= 0) { toast('Un objectif a besoin d\'un montant cible (ou choisis « Portefeuille »)', 'error'); return false; }
       const payload = {
         user_id: currentUser.id,
         nom, cible, deja_epargne: dejaEp,
@@ -5371,6 +5402,9 @@ function openGoalForm(existing) {
         payload.date_debut = new Date().toISOString().slice(0, 10);
         ({ data: result, error } = await sb.from('epargne_objectifs').insert(payload).select());
       }
+      const _savedId = isEdit ? existing.id : (result && result[0] && result[0].id);
+      if (_savedId) _setGoalType(_savedId, type);   // type en local
+      _epargneTab = type;                            // bascule sur l'onglet correspondant
       if (error) {
         console.error('epargne_objectifs', error);
         toast('Erreur : ' + error.message, 'error');
@@ -5381,8 +5415,16 @@ function openGoalForm(existing) {
       toast(isEdit ? 'Objectif mis à jour !' : 'Objectif créé !', 'success');
     },
     `<div style="display:flex;flex-direction:column;gap:14px">
-      <div class="auth-field"><label>Nom de l'objectif</label>
-        <input class="inp" id="goal-form-nom" value="${esc(existing?.nom)}" placeholder="Ex: Vacances Bali, Fonds urgence, Nouvel ordi"></div>
+      <div class="auth-field"><label>Type</label>
+        <input type="hidden" id="goal-form-type" value="${isEdit ? _goalType(existing.id) : _epargneTab}">
+        <div style="display:flex;gap:8px">
+          <button type="button" id="gtype-obj" onclick="_pickGoalType('objectif')" style="flex:1;cursor:pointer;font-size:13px;font-weight:700;padding:9px;border-radius:10px;border:1.5px solid ${(isEdit ? _goalType(existing.id) : _epargneTab) === 'objectif' ? 'var(--sage)' : 'var(--border-soft)'};background:${(isEdit ? _goalType(existing.id) : _epargneTab) === 'objectif' ? 'var(--sage)' : 'var(--bg)'};color:${(isEdit ? _goalType(existing.id) : _epargneTab) === 'objectif' ? '#fff' : 'var(--muted)'}">🎯 Objectif</button>
+          <button type="button" id="gtype-porte" onclick="_pickGoalType('portefeuille')" style="flex:1;cursor:pointer;font-size:13px;font-weight:700;padding:9px;border-radius:10px;border:1.5px solid ${(isEdit ? _goalType(existing.id) : _epargneTab) === 'portefeuille' ? 'var(--plum)' : 'var(--border-soft)'};background:${(isEdit ? _goalType(existing.id) : _epargneTab) === 'portefeuille' ? 'var(--plum)' : 'var(--bg)'};color:${(isEdit ? _goalType(existing.id) : _epargneTab) === 'portefeuille' ? '#fff' : 'var(--muted)'}">👛 Portefeuille</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:5px">🎯 = un but chiffré (cible + date). 👛 = une enveloppe qui vit (vacances, cadeau…), cible facultative.</div>
+      </div>
+      <div class="auth-field"><label>Nom</label>
+        <input class="inp" id="goal-form-nom" value="${esc(existing?.nom)}" placeholder="Ex: Vacances Bali, Portefeuille cadeau"></div>
       <div class="auth-field"><label>Emoji</label>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
           ${emojisChoice.map(e => `<button type="button" onclick="document.getElementById('goal-form-emoji').value='${e}';document.querySelectorAll('.emoji-choice').forEach(b=>b.style.background='var(--bg)');this.style.background='var(--rose-soft)'" class="emoji-choice" style="width:38px;height:38px;font-size:20px;border:1.5px solid var(--border);border-radius:10px;background:${existing?.emoji === e ? 'var(--rose-soft)' : 'var(--bg)'};cursor:pointer">${e}</button>`).join('')}
@@ -5394,7 +5436,7 @@ function openGoalForm(existing) {
         </div>
         <input type="hidden" id="goal-form-color" value="${existing?.couleur || '#7FB89E'}"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="auth-field"><label>Montant cible (€)</label>
+        <div class="auth-field"><label>Montant cible (€) <span style="font-weight:400;color:var(--muted);font-size:11px">— facultatif si portefeuille</span></label>
           <input class="inp" type="number" step="0.01" id="goal-form-cible" value="${existing?.cible || ''}" placeholder="Ex: 3000"></div>
         <div class="auth-field"><label>Déjà épargné (€)</label>
           <input class="inp" type="number" step="0.01" id="goal-form-deja" value="${existing?.deja_epargne || ''}" placeholder="Ex: 500"></div>
