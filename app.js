@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v120'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v121'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -5155,16 +5155,21 @@ function renderGoalCard(g, isAchieved = false, isAbandoned = false) {
   }
 
   // Boutons selon l'état — simple et clair
+  const graphBtn = `<button class="goal-btn" onclick="openGoalChart('${g.id}')" title="Voir l'évolution mois par mois">📈 Évolution</button>`;
   const actions = isAchieved
     ? `<button class="goal-btn" onclick="reactivateGoal('${g.id}')" title="Réactiver">🔄 Réactiver</button>
+       <button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier">✏️ Modifier</button>
+       ${graphBtn}
        <button class="goal-btn danger" onclick="deleteGoal('${g.id}')" title="Supprimer">🗑️</button>`
     : isAbandoned
       ? `<button class="goal-btn" onclick="reactivateGoal('${g.id}')" title="Réactiver">🔄 Réactiver</button>
-         <button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier">✏️</button>
+         <button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier">✏️ Modifier</button>
+         ${graphBtn}
          <button class="goal-btn danger" onclick="deleteGoal('${g.id}')" title="Supprimer">🗑️</button>`
       : `<button class="goal-btn primary" onclick="openContribForm('${g.id}')" title="Ajouter de l'argent">+ Ajouter</button>
          ${Number(g.deja_epargne) > 0 ? `<button class="goal-btn" onclick="withdrawFromGoal('${g.id}')" title="Utiliser / retirer de l'argent épargné">− Utiliser</button>` : ''}
          <button class="goal-btn" onclick="editGoal('${g.id}')" title="Modifier">✏️</button>
+         ${graphBtn}
          <button class="goal-btn" onclick="postponeGoal('${g.id}')" title="Reporter la date cible">📅 Reporter</button>
          ${pct >= 100 ? `<button class="goal-btn" onclick="markAchieved('${g.id}')" title="Marquer terminé" style="color:var(--gold);border-color:var(--gold)">🏆 Terminer</button>` : ''}
          <button class="goal-btn" onclick="abandonGoal('${g.id}')" title="Annuler cet objectif">✖️ Annuler</button>`;
@@ -5462,10 +5467,55 @@ async function postponeGoal(id) {
 }
 
 async function reactivateGoal(id) {
-  if (!(await dbGuard(sb.from('epargne_objectifs').update({ statut: 'en_cours' }).eq('id', id))).ok) return;
+  const g = goalsList.find(x => x.id === id);
+  const r = await dbGuard(sb.from('epargne_objectifs').update({ statut: 'en_cours' }).eq('id', id).select(), 'Réactivation impossible');
+  if (!r.ok) return;
+  if (!r.data || !r.data.length) { toast('Objectif introuvable (déjà supprimé ?)', 'error'); return; }
+  if (g) g.statut = 'en_cours';                 // maj optimiste locale → l'objectif bouge tout de suite
+  showAchieved = true; showAbandoned = true;    // on garde les tiroirs ouverts pour qu'elle voie le changement
   await loadGoals();
   renderEpargne();
-  toast('Objectif réactivé 🌱', 'success');
+  toast('✓ Objectif réactivé 🌱 — il est de retour dans « en cours »', 'success');
+}
+
+// 📈 Popup : évolution mois par mois de l'épargne d'un objectif (cumul + mois sans épargne)
+function openGoalChart(id) {
+  const g = goalsList.find(x => x.id === id); if (!g) return;
+  const contribs = (contribList || []).filter(c => c.objectif_id === id && c.date_contrib);
+  const monthly = {};
+  contribs.forEach(c => { const k = c.date_contrib.slice(0, 7); monthly[k] = (monthly[k] || 0) + Number(c.montant || 0); });
+  const keys = Object.keys(monthly).sort();
+  if (!keys.length) {
+    openModal('📈 ' + (g.nom || 'Objectif'), 'Aucune contribution enregistrée pour l\'instant — ajoute de l\'argent et la courbe grandira 🌱', null, '');
+    return;
+  }
+  const now = new Date();
+  const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const endKey = nowKey >= keys[0] ? nowKey : keys[keys.length - 1];
+  let [cy, cm] = keys[0].split('-').map(Number);
+  const labels = [], data = [], perMonth = [];
+  let cum = 0, guard = 0;
+  while (guard++ < 360) {
+    const k = `${cy}-${String(cm).padStart(2, '0')}`;
+    const m = monthly[k] || 0; cum += m;
+    labels.push(`${MONTHS_SHORT[cm - 1]} ${String(cy).slice(2)}`);
+    data.push(Math.round(cum)); perMonth.push(Math.round(m));
+    if (k === endKey) break;
+    cm++; if (cm > 12) { cm = 1; cy++; }
+  }
+  const noSave = perMonth.filter(v => v === 0).length;
+  const body = `<div style="margin-bottom:8px;font-size:13px;color:var(--muted)">Cumul épargné pour « ${esc(g.nom)} »${g.cible ? ` · cible ${fmt(g.cible)}` : ''}</div>
+    <div style="height:210px"><canvas id="goal-chart-cv"></canvas></div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px">
+      <span>💰 Total : <b style="color:var(--sage)">${fmt(Math.round(cum))}</b></span>
+      <span>📅 ${labels.length} mois suivis</span>
+      <span>${noSave > 0 ? `🔴 <b style="color:#E53935">${noSave} mois sans épargne</b>` : '✅ épargne chaque mois 🌱'}</span>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">Les points rouges = mois où tu n'as rien mis de côté (courbe plate).</div>`;
+  openModal('📈 Évolution — ' + (g.nom || ''), '', null, body);
+  const ds = [{ label: 'Cumul', data, borderColor: '#7FB89E', backgroundColor: 'rgba(127,184,158,0.15)', borderWidth: 2, tension: 0.3, fill: true, pointRadius: 4, pointBackgroundColor: perMonth.map(v => v === 0 ? '#E53935' : '#7FB89E') }];
+  if (g.cible > 0) ds.push({ label: 'Cible', data: labels.map(() => Math.round(g.cible)), borderColor: '#DD7B85', borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, fill: false });
+  updateChart('goal-chart-cv', 'line', { labels, datasets: ds }, { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } });
 }
 
 async function deleteGoal(id) {
