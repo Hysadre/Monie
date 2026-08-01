@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // 🌸 MONIE V3 — App logic
 // ═══════════════════════════════════════════════════════════════
-const APP_VERSION = 'v132'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
+const APP_VERSION = 'v133'; // ← doit correspondre à la version du service worker (sw.js). Sert de témoin de déploiement.
 const SUPABASE_URL = 'https://clcurpkixduhggefsilk.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsY3VycGtpeGR1aGdnZWZzaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4ODk1NDcsImV4cCI6MjA5ODQ2NTU0N30.ngTHdm87bpFn2N1jMHw2sEwJuelLM3woO1EM1skwk6k';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -4691,6 +4691,8 @@ function renderCourses() {
 function _coursePath(c) {
   return [c.category, c.sub_category, c.sub_sub_category].filter(Boolean).map(esc).join(' · ');
 }
+let _coursesCollapsed = new Set(); // list_key des listes repliées (ingrédients masqués)
+function toggleCourseCollapse(k) { if (_coursesCollapsed.has(k)) _coursesCollapsed.delete(k); else _coursesCollapsed.add(k); renderCourses(); }
 function _renderCoursesListes() {
   // Regroupe par list_key (ordre : liste la plus récente en premier)
   const groups = {};
@@ -4702,6 +4704,7 @@ function _renderCoursesListes() {
   });
   return order.map(k => {
     const items = groups[k];
+    const collapsed = _coursesCollapsed.has(k);
     const done = items.filter(i => i.checked).length;
     const total = items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 1), 0);
     const doneAmt = items.filter(i => i.checked).reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 1), 0);
@@ -4724,8 +4727,8 @@ function _renderCoursesListes() {
     return `
       <div class="card" style="margin-bottom:16px">
         <div class="card-hd" style="align-items:flex-start">
-          <div>
-            <div class="card-title">🛒 ${esc(k)}</div>
+          <div onclick="toggleCourseCollapse('${esc(k)}')" style="cursor:pointer" title="Masquer / afficher les ingrédients">
+            <div class="card-title">${collapsed ? '▸' : '▾'} 🛒 ${esc(k)} <span style="font-size:11px;color:var(--muted);font-weight:500">(${items.length})</span></div>
             <div style="font-size:12px;color:var(--muted);margin-top:2px">${done}/${items.length} coché(s) · ${fmt(Math.round(doneAmt))} / ${fmt(Math.round(total))}</div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
@@ -4736,7 +4739,7 @@ function _renderCoursesListes() {
         <div style="height:6px;background:var(--border-soft);border-radius:99px;overflow:hidden;margin:4px 0 10px">
           <div style="height:100%;width:${pct}%;background:var(--sage);border-radius:99px"></div>
         </div>
-        ${rows}
+        ${collapsed ? `<div onclick="toggleCourseCollapse('${esc(k)}')" style="cursor:pointer;text-align:center;font-size:12px;color:var(--muted);padding:4px">▸ ${items.length} ingrédient(s) masqué(s) — toucher pour afficher</div>` : rows}
       </div>`;
   }).join('');
 }
@@ -6270,6 +6273,12 @@ function renderInstallmentCTA() {
   if (budgetKey() !== nowKey || !(budgetData.revenu_mensuel > 0)) { el.innerHTML = ''; return; }
   const { groups, total } = _installmentsThisMonthByCat();
   if (total <= 0) { el.innerHTML = ''; return; }
+  // Déjà intégré ? Si les postes auto « 🔁 » présents totalisent déjà ce montant → on masque l'encart
+  const rev0 = budgetData.revenu_mensuel || 0;
+  let autoTotal = 0;
+  const _sb = budgetData.sub_budget;
+  if (_sb) ['plaisir', 'charges'].forEach(bk => (_sb[bk] || []).forEach(it => { if (it.cat && String(it.cat).startsWith('🔁')) autoTotal += rev0 * (Number(it.pct) || 0) / 100; }));
+  if (autoTotal > 0 && Math.abs(autoTotal - total) < 1) { el.innerHTML = ''; return; }
   const chips = Object.entries(groups).sort((a, b) => b[1] - a[1]).map(([c, a]) =>
     `<span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:100px;background:${(_CAT_COLOR[c] || '#8A8A8A')}22;color:${_CAT_COLOR[c] || '#8A8A8A'};margin:2px 3px 2px 0">${esc(c)} ${fmt(Math.round(a))}</span>`).join('');
   el.innerHTML = `<div class="card" style="border:1px solid var(--plum);background:rgba(124,63,88,0.06);margin-bottom:16px">
